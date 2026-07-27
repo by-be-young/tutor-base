@@ -6,14 +6,21 @@
             <h1 class="detail-title">{{ blogTitle }}</h1>
         </div>
 
-        <!-- 正文内容 -->
-        <div class="detail-body" ref="detailBodyRef" v-html="renderedContent"></div>
+        <!-- 双栏内容区（保持每个section独立的双栏结构） -->
+        <div class="detail-layout-wrapper" :class="'layout-' + layoutMode">
+            <div class="detail-body" ref="detailBodyRef" v-html="renderedContent"></div>
+        </div>
 
         <!-- 悬浮提交按钮 -->
         <div v-if="showFab" class="fab-container">
             <button class="fab-btn" :class="fabStatusClass" :disabled="isSubmitting" @click="handleFabClick"
                 v-html="fabButtonHtml"></button>
         </div>
+
+        <!-- 布局切换悬浮球 -->
+        <button v-if="hasSidebar" class="layout-toggle-fab" @click="cycleLayoutMode" :title="layoutToggleTitle">
+            <i class="fas" :class="layoutToggleIcon"></i>
+        </button>
     </div>
 </template>
 
@@ -48,6 +55,8 @@ const currentMode = ref('study') // study, review, answer
 const isSubmitting = ref(false)
 const fabStatusClass = ref('')
 const contentVersion = ref(0)
+const layoutMode = ref('both') // both, left, right
+const hasSidebar = ref(false)
 
 // 题目相关状态
 const questionCount = ref(0)
@@ -95,6 +104,18 @@ const studentId = computed(() => {
         }
     }
     return null
+})
+
+const layoutToggleIcon = computed(() => {
+    if (layoutMode.value === 'both') return 'fa-columns'
+    if (layoutMode.value === 'left') return 'fa-file-lines'
+    return 'fa-pencil'
+})
+
+const layoutToggleTitle = computed(() => {
+    if (layoutMode.value === 'both') return '点击切换为仅显示正文'
+    if (layoutMode.value === 'left') return '点击切换为仅显示答题区'
+    return '点击切换为双栏显示'
 })
 
 // ========== 工具函数 ==========
@@ -201,12 +222,8 @@ function parseMarkdownWithSidebar(markdown) {
     return sections
 }
 
-function renderMarkdownWithSidebar(markdown, isDesktop) {
-    if (!isDesktop) {
-        const cleaned = markdown.replace(/^---\s*$/gm, '')
-        return renderMarkdown(cleaned)
-    }
-
+// 以每个h1 section为单位的双栏渲染（保持左右列一一对应）
+function renderMarkdownWithSidebar(markdown) {
     const sections = parseMarkdownWithSidebar(markdown)
     if (sections.length === 0) return renderMarkdown(markdown)
 
@@ -724,7 +741,7 @@ async function refreshSubmissionStatus() {
     })
 }
 
-// ========== 初始化题目槽位 ==========
+// ========== 初始化题目槽位（扫描所有列，包括侧栏） ==========
 function initializeQuestionSlots() {
     if (!detailBodyRef.value) return
 
@@ -760,6 +777,9 @@ function resetDetailState() {
     contentVersion.value++
     isSubmitting.value = false
     fabStatusClass.value = ''
+    renderedContent.value = ''
+    layoutMode.value = 'both'
+    hasSidebar.value = false
 }
 
 // ========== 加载内容 ==========
@@ -815,9 +835,10 @@ async function loadContent() {
         questionCount.value = slotResult.questionCount
         questionIdList.value = slotResult.questionIdList
 
-        // 3. 渲染 Markdown
-        const isDesktop = window.innerWidth >= 1024
-        renderedContent.value = renderMarkdownWithSidebar(slotResult.markdown, isDesktop)
+        // 3. 检测是否有侧栏内容，并渲染 Markdown
+        const sections = parseMarkdownWithSidebar(slotResult.markdown)
+        hasSidebar.value = sections.some(s => s.sidebarContent.join('').trim().length > 0)
+        renderedContent.value = renderMarkdownWithSidebar(slotResult.markdown)
         blogTitle.value = blog.title
         document.title = `${blog.title}${currentMode.value === 'study' ? '' : ` · ${currentMode.value === 'review' ? '批阅' : '答案设置'}`}`
 
@@ -838,7 +859,7 @@ async function loadContent() {
             }
         }
 
-        // 7. 初始化题目槽位
+        // 7. 初始化题目槽位（扫描主栏和侧栏中的全部题目）
         await nextTick()
         initializeQuestionSlots()
 
@@ -853,6 +874,13 @@ async function loadContent() {
     } finally {
         isRendering = false
     }
+}
+
+// ========== 布局切换 ==========
+function cycleLayoutMode() {
+    const states = ['both', 'left', 'right']
+    const idx = states.indexOf(layoutMode.value)
+    layoutMode.value = states[(idx + 1) % states.length]
 }
 
 // ========== FAB 按钮处理 ==========
@@ -932,6 +960,58 @@ onUnmounted(() => {
     font-weight: 700;
     color: #2d4a3a;
     margin-bottom: 6px;
+}
+
+/* 每个section的双栏布局 */
+.detail-body :deep(.detail-section-two-column) {
+    display: flex;
+    gap: 40px;
+    align-items: flex-start;
+    margin-bottom: 40px;
+    border-bottom: 2px dashed rgba(120, 170, 155, 0.15);
+    padding-bottom: 32px;
+}
+
+.detail-body :deep(.detail-section-two-column:last-child) {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.detail-body :deep(.detail-main-column) {
+    flex: 2;
+    min-width: 0;
+    overflow: visible !important;
+}
+
+.detail-body :deep(.detail-sidebar-column) {
+    flex: 1;
+    min-width: 0;
+    position: sticky;
+    top: 20px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 16px;
+    padding: 16px 20px;
+    border: 1px solid rgba(120, 170, 155, 0.15);
+}
+
+/* 单栏模式：隐藏对侧列，可见列占满 */
+.detail-layout-wrapper.layout-left :deep(.detail-sidebar-column) {
+    display: none;
+}
+.detail-layout-wrapper.layout-left :deep(.detail-main-column) {
+    flex: 1;
+    max-width: 100%;
+}
+
+.detail-layout-wrapper.layout-right :deep(.detail-main-column) {
+    display: none;
+}
+.detail-layout-wrapper.layout-right :deep(.detail-sidebar-column) {
+    flex: 1;
+    max-width: none;
 }
 
 /* 正文样式 */
@@ -1050,43 +1130,6 @@ onUnmounted(() => {
 .detail-body :deep(strong),
 .detail-body :deep(b) {
     color: #d57587;
-}
-
-/* 双栏布局 */
-.detail-body :deep(.detail-section-two-column) {
-    display: flex;
-    gap: 40px;
-    align-items: flex-start;
-    margin-bottom: 40px;
-    border-bottom: 2px dashed rgba(120, 170, 155, 0.15);
-    padding-bottom: 32px;
-}
-
-.detail-body :deep(.detail-section-two-column:last-child) {
-    border-bottom: none;
-    margin-bottom: 0;
-    padding-bottom: 0;
-}
-
-.detail-body :deep(.detail-main-column) {
-    flex: 2;
-    min-width: 0;
-    overflow: visible !important;
-    position: relative;
-}
-
-.detail-body :deep(.detail-sidebar-column) {
-    flex: 1;
-    min-width: 0;
-    max-width: 320px;
-    position: sticky;
-    top: 20px;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 16px;
-    padding: 16px 20px;
-    border: 1px solid rgba(120, 170, 155, 0.15);
-    max-height: calc(100vh - 40px);
-    overflow-y: auto;
 }
 
 /* 题目卡片样式 */
@@ -1361,6 +1404,36 @@ onUnmounted(() => {
     color: white !important;
 }
 
+/* 布局切换悬浮球 */
+.layout-toggle-fab {
+    position: fixed;
+    bottom: 100px;
+    right: 30px;
+    z-index: 998;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, var(--teal), var(--teal-dark));
+    color: white;
+    font-size: 1.1rem;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(123, 200, 196, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s ease;
+}
+
+.layout-toggle-fab:hover {
+    transform: scale(1.12) translateY(-2px);
+    box-shadow: 0 8px 28px rgba(123, 200, 196, 0.55);
+}
+
+.layout-toggle-fab:active {
+    transform: scale(0.92);
+}
+
 /* Toast 弹窗 */
 :global(.custom-toast) {
     position: fixed;
@@ -1423,6 +1496,23 @@ onUnmounted(() => {
         width: 100%;
         padding: 30px 28px 70px;
     }
+
+    .detail-body :deep(.detail-section-two-column) {
+        flex-direction: column;
+        gap: 10px;
+        padding-bottom: 16px;
+        margin-bottom: 16px;
+    }
+
+    .detail-body :deep(.detail-sidebar-column) {
+        max-width: 100%;
+        max-height: none;
+        overflow-y: visible;
+        position: static;
+        padding: 10px 0 0 0;
+        border: none;
+        background: transparent;
+    }
 }
 
 @media (max-width: 640px) {
@@ -1467,6 +1557,14 @@ onUnmounted(() => {
         width: 120px;
         height: 44px;
         font-size: 1.1rem;
+    }
+
+    .layout-toggle-fab {
+        bottom: 72px;
+        right: 16px;
+        width: 42px;
+        height: 42px;
+        font-size: 1rem;
     }
 }
 </style>
