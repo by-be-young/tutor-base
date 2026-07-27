@@ -12,7 +12,8 @@
 
         <div v-else class="blog-list">
             <template v-for="node in treeData" :key="node.name">
-                <FolderNode v-if="!node.isFile" :node="node" :depth="0" :status-map="submissionStatusMap" />
+                <FolderNode v-if="!node.isFile" :node="node" :depth="0" :status-map="submissionStatusMap"
+                    @file-click="navigateToDetail" />
                 <FileNode v-else :node="node" :depth="0" :status-map="submissionStatusMap"
                     @click="navigateToDetail(node.blogId)" />
             </template>

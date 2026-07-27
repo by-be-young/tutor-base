@@ -13,5 +13,7 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true
-  }
+  },
+  // GitHub Pages 部署时通过 --base 参数覆盖
+  base: process.env.BASE_URL || '/'
 })

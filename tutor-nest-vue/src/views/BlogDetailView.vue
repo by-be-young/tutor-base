@@ -1,12 +1,6 @@
 <!-- src/views/BlogDetailView.vue -->
 <template>
     <div class="detail-container">
-        <!-- 绘制状态指示器 -->
-        <div v-if="isDrawingActive" class="drawing-indicator">
-            <i class="fas fa-pen"></i>
-            <span>触控笔绘制已激活</span>
-        </div>
-
         <!-- 标题区 -->
         <div class="detail-title-area">
             <h1 class="detail-title">{{ blogTitle }}</h1>
@@ -40,7 +34,7 @@ const authStore = useAuthStore()
 const blogStore = useBlogStore()
 const { renderMath } = useKatex()
 const { processMarkdown, observe, disconnect } = useImageEmbed()
-const { isActive: isDrawingActive, isDrawing } = useDrawingInDetail()
+useDrawingInDetail()
 
 // 配置图片基础路径
 const { setBasePath } = useImageEmbed()
@@ -938,41 +932,6 @@ onUnmounted(() => {
     font-weight: 700;
     color: #2d4a3a;
     margin-bottom: 6px;
-}
-
-/* 绘制状态指示器 */
-.drawing-indicator {
-    position: fixed;
-    top: 80px;
-    right: 20px;
-    background: rgba(255, 0, 127, 0.1);
-    border: 1px solid rgba(255, 0, 127, 0.3);
-    border-radius: 20px;
-    padding: 8px 16px;
-    font-size: 0.85rem;
-    color: #FF007F;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    z-index: 9998;
-    backdrop-filter: blur(8px);
-    animation: fadeInDown 0.3s ease;
-}
-
-@keyframes fadeInDown {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.drawing-indicator i {
-    font-size: 1rem;
 }
 
 /* 正文样式 */
