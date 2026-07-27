@@ -1,8 +1,62 @@
+// src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router'
 
+const routes = [
+  {
+    path: '/',
+    name: 'Home',
+    component: () => import('@/views/HomeView.vue')
+  },
+  {
+    path: '/category',
+    name: 'Category',
+    component: () => import('@/views/CategoryView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/blog/:id',
+    name: 'BlogDetail',
+    component: () => import('@/views/BlogDetailView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/admin',
+    name: 'Admin',
+    component: () => import('@/views/AdminView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/chemistry',
+    name: 'Chemistry',
+    redirect: '/category?subject=化学'
+  },
+  {
+    path: '/english',
+    name: 'English',
+    redirect: '/category?subject=英语'
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('@/views/NotFoundView.vue')
+  }
+]
+
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
-  routes: [],
+  history: createWebHistory(),
+  routes
+})
+
+// 路由守卫
+router.beforeEach((to, from, next) => {
+  // 这里可以添加认证检查
+  // const authStore = useAuthStore()
+  // if (to.meta.requiresAuth && !authStore.isLoggedIn) {
+  //   next('/')
+  // } else {
+  //   next()
+  // }
+  next()
 })
 
 export default router
