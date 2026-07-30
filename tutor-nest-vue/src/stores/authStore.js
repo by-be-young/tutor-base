@@ -18,7 +18,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     async function loadAllBlogIds() {
         try {
-            const res = await fetch('/data/blogs.json')
+            const res = await fetch(`${import.meta.env.BASE_URL}data/blogs.json`)
             if (!res.ok) throw new Error('加载文章数据失败')
             const blogs = await res.json()
             if (!Array.isArray(blogs)) return []

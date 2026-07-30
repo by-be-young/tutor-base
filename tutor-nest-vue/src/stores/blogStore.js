@@ -12,8 +12,8 @@ export const useBlogStore = defineStore('blog', () => {
         error.value = null
 
         try {
-            // 从 data/blogs.json 加载
-            const response = await fetch('/data/blogs.json')
+            // 从 data/blogs.json 加载（使用 BASE_URL 适配 GitHub Pages 子路径）
+            const response = await fetch(`${import.meta.env.BASE_URL}data/blogs.json`)
             if (!response.ok) throw new Error('加载失败')
 
             const data = await response.json()
