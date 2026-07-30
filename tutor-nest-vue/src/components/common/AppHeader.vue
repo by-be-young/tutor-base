@@ -4,9 +4,9 @@
         <div class="nav-inner">
             <!-- 左侧 -->
             <div class="nav-left">
-                <router-link v-if="showBackButton" to="/" class="nav-logo">
-                    <i class="fas fa-arrow-left"></i> 学习资料仓库
-                </router-link>
+                <router-link v-if="showBackButton" :to="backLink" class="nav-logo">
+                <i class="fas fa-arrow-left"></i> {{ backText }}
+            </router-link>
                 <span v-else class="nav-logo">学习资料仓库</span>
             </div>
 
@@ -89,6 +89,14 @@ const currentSubject = computed(() => {
 const availableSubjects = computed(() => {
     // 这里可以从 store 获取所有可用学科
     return ['化学', '英语']
+})
+
+const backLink = computed(() => {
+    return route.query.from === 'admin' ? '/admin' : '/'
+})
+
+const backText = computed(() => {
+    return route.query.from === 'admin' ? '管理员' : '学习资料仓库'
 })
 
 function handleLogout() {

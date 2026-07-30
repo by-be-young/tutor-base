@@ -5,7 +5,7 @@
         <span class="file-icon"><i class="fas fa-file-alt"></i></span>
         <span class="file-name">{{ node.name }}</span>
         <span v-if="badgeCount > 0" class="tree-badge is-warning">
-            待批阅 {{ badgeCount }}
+            {{ badgeCount }}题待批阅
         </span>
         <span class="file-arrow"><i class="fas fa-chevron-right"></i></span>
     </div>

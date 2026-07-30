@@ -4,10 +4,8 @@
         <span class="file-icon"><i class="fas fa-file-alt"></i></span>
         <span class="file-name">
             {{ node.name }}
-            <span v-if="hasUnsubmitted" class="file-warning">
-                <i class="fas fa-circle-exclamation"></i>
-            </span>
         </span>
+        <span v-if="pendingCount > 0" class="file-pending-badge">{{ pendingCount }}题待提交</span>
         <span class="file-arrow"><i class="fas fa-chevron-right"></i></span>
     </div>
 </template>
@@ -32,8 +30,8 @@ const props = defineProps({
 
 defineEmits(['click'])
 
-const hasUnsubmitted = computed(() => {
-    return props.statusMap.get(Number(props.node.blogId)) || false
+const pendingCount = computed(() => {
+    return props.statusMap.get(Number(props.node.blogId)) || 0
 })
 
 const paddingStyle = computed(() => ({
@@ -86,22 +84,16 @@ const paddingStyle = computed(() => ({
     transform: translateX(4px);
 }
 
-.file-warning {
-    color: #d57587;
-    font-size: 1.1rem;
-    animation: pulse-warning 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse-warning {
-
-    0%,
-    100% {
-        opacity: 1;
-    }
-
-    50% {
-        opacity: 0.4;
-    }
+.file-pending-badge {
+    background: #f6c445;
+    color: #5a4300;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 30px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    border: 1px solid rgba(200, 160, 50, 0.3);
 }
 
 @media (min-width: 1024px) {
@@ -119,6 +111,11 @@ const paddingStyle = computed(() => ({
 
     .tree-file {
         padding-left: 24px !important;
+    }
+
+    .file-pending-badge {
+        font-size: 0.6rem;
+        padding: 1px 6px;
     }
 }
 </style>

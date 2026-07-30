@@ -87,6 +87,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useBlogStore } from '@/stores/blogStore'
+import { supabase } from '@/utils/supabase'
 
 // 子组件：目录文件夹节点
 import FolderNode from '@/components/blogs/FolderNode.vue'
@@ -287,12 +288,20 @@ onMounted(async () => {
 /**
  * 监听路由 query 参数 subject 的变化
  * 当用户从首页切换科目时，更新当前科目并触发数据重新计算
- * 
+ *
  * @param {string} newSubject - 新的科目值
  */
-watch(() => route.query.subject, (newSubject) => {
+watch(() => route.query.subject, async (newSubject) => {
     if (newSubject) {
         currentSubject.value = newSubject
+        // 重新加载提交状态
+        if (authStore.isLoggedIn) {
+            await blogStore.loadBlogData()
+            const blogIds = filteredBlogs.value.map(b => b.id)
+            if (blogIds.length > 0) {
+                submissionStatusMap.value = await loadSubmissionStatus(blogIds)
+            }
+        }
     }
 })
 
@@ -300,22 +309,68 @@ watch(() => route.query.subject, (newSubject) => {
 
 /**
  * 批量加载博客提交状态
- * 
- * 说明：
- * 该函数为占位实现，实际项目中需要调用后端 API 获取提交状态
- * 
- * @param {Array<number|string>} blogIds - 需要查询提交状态的博客 ID 列表
- * @returns {Promise<Map<number, object>>} 返回提交状态映射表
+ *
+ * 加载该学生有答案但未提交的题目数（待提交数量）
+ *
+ * @param {Array<number|string>} blogIds - 需要查询的博客 ID 列表
+ * @returns {Promise<Map<number, number>>} 返回 blogId → 待提交题数 的映射
  */
 async function loadSubmissionStatus(blogIds) {
-    // TODO: 实现原有的 loadSubmissionStatusForUsers 逻辑
-    // 预期实现：
-    //   1. 调用 API 接口，传入 blogIds 数组
-    //   2. 解析返回的提交状态数据
-    //   3. 构建并返回 Map<blogId, statusObject>
+    if (!blogIds.length) return new Map()
 
-    // 当前返回空 Map 作为占位
-    return new Map()
+    // 1. 从答案表获取有题目的文章
+    const { data: keys, error: keyErr } = await supabase
+        .from('article_answer_keys')
+        .select('blog_id, question_id')
+        .in('blog_id', blogIds)
+
+    if (keyErr) {
+        console.error('加载答案数据失败:', keyErr)
+        return new Map()
+    }
+
+    // 按 blog_id 统计题目数量
+    const totalQuestionMap = new Map()
+    ;(keys || []).forEach(item => {
+        const bid = Number(item.blog_id)
+        totalQuestionMap.set(bid, (totalQuestionMap.get(bid) || 0) + 1)
+    })
+
+    // 2. 从提交表获取该学生已提交的题目数
+    if (!authStore.currentUser?.id) return new Map()
+
+    const studentId = Number(authStore.currentUser.id)
+    if (!Number.isFinite(studentId)) return new Map()
+
+    const { data: subs, error: subErr } = await supabase
+        .from('article_question_submissions')
+        .select('blog_id')
+        .eq('student_id', studentId)
+        .in('blog_id', blogIds)
+
+    if (subErr) {
+        console.error('加载提交记录失败:', subErr)
+        return new Map()
+    }
+
+    // 按 blog_id 统计已提交题数
+    const submittedCountMap = new Map()
+    ;(subs || []).forEach(item => {
+        const bid = Number(item.blog_id)
+        submittedCountMap.set(bid, (submittedCountMap.get(bid) || 0) + 1)
+    })
+
+    // 3. 结果：待提交 = 总题目数 - 已提交题数（仅当有题目且待提交 > 0）
+    const result = new Map()
+    for (const [bid, total] of totalQuestionMap) {
+        const submitted = submittedCountMap.get(bid) || 0
+        const pending = total - submitted
+        if (pending > 0) {
+            result.set(bid, pending)
+        }
+    }
+
+    return result
 }
 </script>
 

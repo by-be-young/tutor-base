@@ -34,7 +34,7 @@
             <template v-else>
                 <ClickableTreeNode v-for="node in treeData" :key="node.name + (node.isFile ? node.blogId : '')"
                     :node="node" :depth="0" :badge-map="pendingCountMap"
-                    :initially-expanded="activeFilter === 'pending' || activeFilter === 'unsubmitted'"
+                    :initially-expanded="activeFilter === 'pending'"
                     @file-click="handleFileClick" />
             </template>
         </div>
@@ -181,7 +181,7 @@ function buildTree(blogs) {
 
 function handleFileClick(blogId) {
     if (props.selectedStudentId) {
-        router.push(`/blog/${blogId}?mode=review&studentId=${props.selectedStudentId}`)
+        router.push(`/blog/${blogId}?mode=review&studentId=${props.selectedStudentId}&from=admin`)
     }
 }
 
@@ -199,14 +199,24 @@ async function loadSubmissionStatus() {
     }
 
     const statusMap = new Map()
-        ; (data || []).forEach(item => {
-            const blogId = Number(item.blog_id)
-            if (!statusMap.has(blogId) || item.review_status === 'pending') {
-                statusMap.set(blogId, item.review_status)
-            }
-        })
+    const countMap = new Map()
+
+    ;(data || []).forEach(item => {
+        const blogId = Number(item.blog_id)
+
+        if (item.review_status === 'pending') {
+            // 有任何 pending 的题目 → blog 状态为待批阅
+            statusMap.set(blogId, 'pending')
+            // 累计待批阅题数
+            countMap.set(blogId, (countMap.get(blogId) || 0) + 1)
+        } else if (!statusMap.has(blogId)) {
+            // 还没有 pending 的标记 → 已批阅
+            statusMap.set(blogId, 'reviewed')
+        }
+    })
 
     studentSubmissionStatus.value = statusMap
+    pendingCountMap.value = countMap
 }
 
 // 监听学生切换

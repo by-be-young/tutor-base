@@ -20,7 +20,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import FileNode from './FileNode.vue'
 
 const props = defineProps({
@@ -44,23 +44,35 @@ const fileCount = computed(() => {
     return props.node.children?.filter(c => c.isFile).length || 0
 })
 
-const hasUnsubmittedChild = computed(() => {
+const hasPendingChild = computed(() => {
     function checkNode(n) {
         if (n.isFile) {
-            return props.statusMap.get(Number(n.blogId)) || false
+            return (props.statusMap.get(Number(n.blogId)) || 0) > 0
         }
         return n.children?.some(checkNode) || false
     }
     return props.node.children?.some(checkNode) || false
 })
 
-const isExpanded = ref(hasUnsubmittedChild.value)
+// 初始展开状态：有待提交则展开。之后用户可手动切换，不再被 watch 覆盖。
+const isExpanded = ref(hasPendingChild.value)
+let autoExpanded = hasPendingChild.value // 标记本次是否是自动展开的
+
+watch(hasPendingChild, (now) => {
+    // 数据到达后，只有当从未手动操作过时才自动展开
+    if (now && isExpanded.value === false && !autoExpanded) {
+        isExpanded.value = true
+        autoExpanded = true
+    }
+})
+
 const paddingStyle = computed(() => ({
     paddingLeft: `${props.depth * 20 + 8}px`
 }))
 
 function toggleExpand() {
     isExpanded.value = !isExpanded.value
+    autoExpanded = false // 手动操作后，不再自动展开
 }
 </script>
 
