@@ -33,7 +33,9 @@
             </p>
             <template v-else>
                 <ClickableTreeNode v-for="node in treeData" :key="node.name + (node.isFile ? node.blogId : '')"
-                    :node="node" :depth="0" :badge-map="pendingCountMap" @file-click="handleFileClick" />
+                    :node="node" :depth="0" :badge-map="pendingCountMap"
+                    :initially-expanded="activeFilter === 'pending' || activeFilter === 'unsubmitted'"
+                    @file-click="handleFileClick" />
             </template>
         </div>
 
@@ -66,6 +68,7 @@ const pendingCountMap = ref(new Map())
 const filters = [
     { value: 'pending', label: '待批阅' },
     { value: 'reviewed', label: '已批阅' },
+    { value: 'unsubmitted', label: '未提交' },
     { value: 'noneed', label: '无需批阅' }
 ]
 
@@ -88,6 +91,12 @@ const filteredBlogs = computed(() => {
         })
     } else if (activeFilter.value === 'noneed') {
         blogs = blogs.filter(b => !hasQuestions(Number(b.id)))
+    } else if (activeFilter.value === 'unsubmitted') {
+        blogs = blogs.filter(b => {
+            const hasKey = answerKeysCache.value.has(Number(b.id))
+            const hasSubmission = studentSubmissionStatus.value.has(Number(b.id))
+            return hasKey && !hasSubmission
+        })
     }
 
     return blogs
@@ -99,9 +108,30 @@ const treeData = computed(() => {
 
 const studentSubmissionStatus = ref(new Map())
 const articleHasQuestionsCache = ref(new Map())
+const answerKeysCache = ref(new Map())
 
 function hasQuestions(blogId) {
     return articleHasQuestionsCache.value.get(Number(blogId)) || false
+}
+
+async function loadAnswerKeysCache() {
+    const { data, error } = await supabase
+        .from('article_answer_keys')
+        .select('blog_id')
+
+    if (error) {
+        console.error('加载答案数据失败:', error)
+        return
+    }
+
+    const cache = new Map()
+    const questionsCache = new Map()
+    ;(data || []).forEach(item => {
+        cache.set(Number(item.blog_id), true)
+        questionsCache.set(Number(item.blog_id), true)
+    })
+    answerKeysCache.value = cache
+    articleHasQuestionsCache.value = questionsCache
 }
 
 function buildTree(blogs) {
@@ -193,6 +223,7 @@ watch(() => props.allSubjects, (subjects) => {
 
 onMounted(() => {
     loadSubmissionStatus()
+    loadAnswerKeysCache()
 })
 </script>
 

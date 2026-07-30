@@ -32,7 +32,9 @@
             </p>
             <template v-else>
                 <ClickableTreeNode v-for="node in treeData" :key="node.name + (node.isFile ? node.blogId : '')"
-                    :node="node" :depth="0" @file-click="handleFileClick" />
+                    :node="node" :depth="0"
+                    :initially-expanded="activeFilter === 'unset'"
+                    @file-click="handleFileClick" />
             </template>
         </div>
 
@@ -44,8 +46,9 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { supabase } from '@/utils/supabase'
 import ClickableTreeNode from './ClickableTreeNode.vue'
 
 const props = defineProps({
@@ -148,6 +151,31 @@ watch(() => props.allSubjects, (subjects) => {
         currentSubject.value = subjects[0]
     }
 }, { immediate: true })
+
+// 加载答案数据（用于判断有无题目、是否已设置）
+async function loadAnswerKeysCache() {
+    const { data, error } = await supabase
+        .from('article_answer_keys')
+        .select('blog_id')
+
+    if (error) {
+        console.error('加载答案数据失败:', error)
+        return
+    }
+
+    const keysCache = new Map()
+    const questionsCache = new Map()
+    ;(data || []).forEach(item => {
+        keysCache.set(Number(item.blog_id), true)
+        questionsCache.set(Number(item.blog_id), true)
+    })
+    answerKeysCache.value = keysCache
+    articleHasQuestionsCache.value = questionsCache
+}
+
+onMounted(() => {
+    loadAnswerKeysCache()
+})
 </script>
 
 <style scoped>

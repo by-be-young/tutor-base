@@ -33,7 +33,9 @@
             </p>
             <template v-else>
                 <PermissionTreeNode v-for="node in treeData" :key="node.name + (node.isFile ? node.blogId : '')"
-                    :node="node" :depth="0" :permissions="currentPermissions" @toggle="handlePermissionToggle" />
+                    :node="node" :depth="0" :permissions="currentPermissions"
+                    :initially-expanded="activeFilter === 'unauthorized'"
+                    @toggle="handlePermissionToggle" />
             </template>
         </div>
 

@@ -1,4 +1,3 @@
-```markdown
 # Tutor Nest Vue - 学习资料仓库
 
 一个基于 Vue 3 构建的在线学习资料管理系统，支持 Markdown 文章展示、数学公式渲染、图片嵌入、触控笔绘制、题目练习与批阅等功能。
@@ -6,25 +5,28 @@
 ## 🌟 功能特性
 
 ### 核心功能
-- 📚 **文章浏览** - 支持 Markdown 格式的学习资料展示
-- 🔐 **用户认证** - 基于 Supabase 的登录/注册系统
-- 🎨 **双栏布局** - 桌面端自动切换双栏显示（正文 + 侧边栏）
-- 📐 **数学公式** - 基于 KaTeX 的 LaTeX 数学公式渲染
-- 🖼️ **图片嵌入** - 支持 `![[图片名]]` 语法的图片嵌入
-- ✍️ **触控笔绘制** - 平板触控笔可在页面上绘制（渐隐效果）
-- 📝 **题目系统** - 支持题目占位符、学生提交、教师批阅
+- 📚 **文章浏览** — 支持 Markdown 格式的学习资料展示
+- 🔐 **用户认证** — 基于 Supabase 的登录/注册系统
+- 🎨 **双栏布局** — 桌面端自动切换双栏显示（正文 + 侧边栏）
+- 📐 **数学公式** — 基于 KaTeX 的 LaTeX 数学公式渲染
+- 🖼️ **图片嵌入** — 支持 `![[图片名]]` 语法的图片嵌入
+- ✍️ **触控笔绘制** — 平板触控笔可在页面上绘制（渐隐效果）
+- 📝 **题目系统** — 支持题目占位符、学生提交、教师批阅
 
 ### 管理模式
-- 👥 **权限管理** - 管理员可控制学生对文章的访问权限
-- ✏️ **批阅中心** - 教师批阅学生答案（正确/半对/错误）
-- 🔑 **答案设置** - 设置标准答案并开启自动批阅
-- 📊 **状态追踪** - 实时显示学生提交和批阅状态
+- 👥 **权限管理** — 管理员可控制学生对文章的访问权限
+- ✏️ **批阅中心** — 教师批阅学生答案（正确/半对/错误）
+- 🔑 **答案设置** — 设置标准答案并开启自动批阅
+- 📊 **状态追踪** — 实时显示学生提交和批阅状态
 
 ### 用户体验
-- 💾 **自动保存** - 页面关闭前自动保存答题内容
-- 📱 **响应式设计** - 适配桌面、平板、手机等设备
-- 🎯 **筛选功能** - 按科目、状态等条件筛选文章
-- 🔔 **操作反馈** - Toast 弹窗提示操作结果
+- 💾 **自动保存** — 页面关闭前自动保存答题内容
+- 📱 **响应式设计** — 适配桌面、平板、手机等设备
+- 🎯 **筛选功能** — 按科目、状态等条件筛选文章
+- 🔔 **操作反馈** — Toast 弹窗提示操作结果
+- 📑 **目录侧边栏** — 从左侧滑入的目录树，h2 按 h1 分组折叠，点击标题跳转
+- 📋 **答题卡侧边栏** — 从左侧滑入的答题卡，显示各 h1 下的题目完成情况，点击题号跳转到对应 h1 顶部
+- 🔄 **模式切换跟随** — 切换双栏/单栏显示模式时自动定位到此前屏幕中央所在的 h1 顶部
 
 ---
 
@@ -33,8 +35,20 @@
 ```
 tutor-nest-vue/
 ├── public/
+│   ├── blogs/                      # Markdown 文章文件（.md 文件在此存放）
+│   │   ├── 化学/
+│   │   │   ├── 前导课讲义/
+│   │   │   ├── 理论课讲义/
+│   │   │   └── 课后练习/
+│   │   └── 英语/
+│   │       ├── 写作课讲义/
+│   │       ├── 语法课讲义/
+│   │       └── 课后练习/
 │   └── data/
-│       └── blogs.json              # 文章索引数据
+│       ├── blogs.json              # 文章索引（自动生成）
+│       └── id_map.json             # 文章 ID 映射表（自动生成）
+├── scripts/
+│   └── sync-blogs-data.js          # 博客数据同步脚本
 ├── src/
 │   ├── assets/                     # 静态资源
 │   ├── components/                 # 可复用组件
@@ -69,15 +83,6 @@ tutor-nest-vue/
 │   │   └── index.js                # 路由配置
 │   ├── App.vue                     # 根组件
 │   └── main.js                     # 入口文件
-├── blogs/                          # Markdown 文章目录
-│   ├── 化学/
-│   │   ├── 前导课讲义/
-│   │   ├── 理论课讲义/
-│   │   └── 课后练习/
-│   └── 英语/
-│       ├── 写作课讲义/
-│       ├── 语法课讲义/
-│       └── 课后练习/
 ├── index.html
 ├── vite.config.js
 └── package.json
@@ -109,21 +114,63 @@ tutor-nest-vue/
 
 | 路径 | 组件 | 说明 |
 |------|------|------|
-| `/` | HomeView | 首页 |
-| `/category?subject=xxx` | CategoryView | 分类页（需登录） |
-| `/blog/:id` | BlogDetailView | 文章详情（需登录） |
-| `/blog/:id?mode=review&studentId=xxx` | BlogDetailView | 批阅模式 |
-| `/blog/:id?mode=answer` | BlogDetailView | 答案设置模式 |
-| `/admin` | AdminView | 管理页面（需登录） |
-| `/*` | NotFoundView | 404 页面 |
+| `/#/` | HomeView | 首页 |
+| `/#/category?subject=xxx` | CategoryView | 分类页（需登录） |
+| `/#/blog/:id` | BlogDetailView | 文章详情（需登录） |
+| `/#/blog/:id?mode=review&studentId=xxx` | BlogDetailView | 批阅模式 |
+| `/#/blog/:id?mode=answer` | BlogDetailView | 答案设置模式 |
+| `/#/admin` | AdminView | 管理页面（需登录） |
+| `/#/*` | NotFoundView | 404 页面 |
 
 **主要逻辑：**
-- 使用 `createWebHistory` 实现 SPA 路由
+- 使用 `createWebHashHistory`（hash 模式）兼容 GitHub Pages 部署
 - 路由守卫检查登录状态
 
 ---
 
-### 3. 首页 `src/views/HomeView.vue`
+### 3. 文章数据同步机制
+
+`public/data/blogs.json` 和 `public/data/id_map.json` **无需手动维护**，由脚本自动生成。
+
+**触发时机：**
+- `npm run dev` 启动前（`predev` hook）
+- `npm run build` 构建前（`prebuild` hook）
+
+**执行流程：**
+
+```
+public/blogs/ 下的 .md 文件
+        ↓ 扫描
+scripts/sync-blogs-data.js
+        ├── 生成 id_map.json（路径 → ID 的映射关系）
+        └── 生成 blogs.json（文章索引，按系列 + ID 排序）
+```
+
+**新增文章：** 只需在 `public/blogs/` 下新建 `.md` 文件，下次 `npm run dev` 或 `npm run build` 时自动分配 ID 并同步到两个 JSON 文件。
+
+#### ID 分配规则与不重复保证
+
+```javascript
+const oldIdMap = readJson(ID_MAP_FILE)  // 读取现有映射
+const maxId = Math.max(...现有所有 id)   // 当前最大 ID
+let nextId = maxId + 1                  // 从 max+1 开始递增
+
+for (每个文件) {
+  if (已有) → 保留原 id                  // 已注册文件 ID 不变
+  else      → idMap[path] = nextId++    // 新文件分配递增 ID
+}
+```
+
+- **nextId 只增不减** — 从当前最大 ID 的下一编号起步，每次分配后 +1，永不回头
+- **已有文件不重分** — 每个文件注册后永久绑定其 ID，不会被覆盖或重新分配
+- **不受执行次数影响** — 无论运行多少次脚本、一次新增多少个文件，每个新文件都获得一个唯一的、从未使用过的 ID
+
+✅ **单次新增多个文件**：依次分配 `maxId+1`、`maxId+2`、`maxId+3` ...
+✅ **分多次新增文件**：首次新增得 `maxId+1`，登记进 `id_map.json`；下次再新增时以此为基数继续分配，已有文件纹丝不动。
+
+---
+
+### 4. 首页 `src/views/HomeView.vue`
 
 **功能：** 用户登录/注册，展示学科卡片
 
@@ -147,7 +194,7 @@ tutor-nest-vue/
 
 ---
 
-### 4. 分类页 `src/views/CategoryView.vue`
+### 5. 分类页 `src/views/CategoryView.vue`
 
 **功能：** 展示指定学科下的文章树状列表
 
@@ -164,12 +211,12 @@ tutor-nest-vue/
 5. 点击文件夹展开/折叠，点击文件跳转详情页
 
 **树节点组件：**
-- `FolderNode.vue` - 文件夹节点，可展开/折叠
-- `FileNode.vue` - 文件节点，显示警告图标
+- `FolderNode.vue` — 文件夹节点，可展开/折叠
+- `FileNode.vue` — 文件节点，显示警告图标
 
 ---
 
-### 5. 文章详情页 `src/views/BlogDetailView.vue`
+### 6. 文章详情页 `src/views/BlogDetailView.vue`
 
 **功能：** 文章阅读、答题、批阅、答案设置（四种模式合一）
 
@@ -182,7 +229,7 @@ tutor-nest-vue/
 | `answer` | `?mode=answer` | 教师设置标准答案 |
 
 **内容渲染流程：**
-1. 加载 Markdown 文件
+1. 加载 Markdown 文件（路径使用 `import.meta.env.BASE_URL` 适配子目录部署）
 2. 处理图片嵌入语法（`![[图片]]`）
 3. 注入题目占位符（`【@1】` → `<div class="question-slot">`）
 4. 渲染 Markdown 为 HTML
@@ -211,142 +258,105 @@ tutor-nest-vue/
 - 桌面端（≥1024px）自动切换双栏
 - 移动端单栏显示
 
+**目录侧边栏（TOC）：**
+- 从左侧以固定定位滑入，高度与屏幕一致，遮盖正文
+- 自动提取文章中的 h1、h2 标题
+- h2 按所属 h1 折叠，点击 h1 切换展开，同一时间只展开一个
+- 点击标题平滑滚动到对应位置
+- 与答题卡互斥（打开目录时自动关闭答题卡）
+
+**答题卡侧边栏：**
+- 显示各 h1 标题，标题下以 32×32 小方框排列题目序号
+- 方框底色按状态着色：灰白=未提交、琥珀=待批阅、绿=正确、橙=半对、红=错误
+- 点击题号跳转到对应 h1 顶部
+
+**悬浮按钮组（右下角）：**
+- 提交/保存按钮（主按钮）
+- 布局切换按钮（圆形，仅在有侧栏时显示）
+- 答题卡按钮（圆形，仅 study 模式且有题目时显示）
+- 目录按钮（圆形，文章有 h1 标题时显示）
+
 **数据库表：**
-- `article_answer_keys` - 存储标准答案
-- `article_question_submissions` - 存储学生提交
+- `article_answer_keys` — 存储标准答案
+- `article_question_submissions` — 存储学生提交
 
 ---
 
-### 6. 管理页面 `src/views/AdminView.vue`
+### 7. 管理页面 `src/views/AdminView.vue`
 
 **功能：** 学生管理、权限控制、批阅、答案设置
 
 **三个面板：**
 
 **权限管理面板 (`PermissionPanel.vue`)**
-- 选择学生 → 选择科目 → 勾选文章授权
-- 筛选：未授权/已授权/全部
+- 选择学生 → 选择科目 → 展开带复选框的树状文件列表
+- 筛选：**未授权**（默认，文件夹自动全展开）/ 已授权 / 全部
+- 文章行显示复选框，勾选即授权、取消即禁止
 - 保存权限到 `student` 表
 
 **批阅中心面板 (`ReviewPanel.vue`)**
-- 选择学生 → 选择科目 → 显示待批阅文章
-- 筛选：待批阅/已批阅/无需批阅
-- 点击文章进入批阅模式
-- 显示待批阅数量徽章
+- 选择学生 → 选择科目 → 筛选显示文章
+- 筛选：**待批阅**（文件夹自动全展开）/ 已批阅 / **未提交**（有题目且设了答案但学生未提交的文章，文件夹自动全展开）/ 无需批阅（没有题目的文章）
+- 点击文章进入批阅模式，显示该学生的答案和参考答案
 
 **答案设置面板 (`AnswerPanel.vue`)**
-- 选择科目 → 显示文章列表
-- 筛选：待设置/已设置/无需设置
-- 点击文章进入答案设置模式
-
-**数据缓存：**
-- `articleHasQuestions` - 检测文章是否包含题目
-- `articleAnswerKeys` - 文章是否已设置答案
-- `studentSubmissions` - 学生提交状态
+- 选择科目 → 筛选显示文章
+- 筛选：**待设置**（文件夹自动全展开）/ 已设置 / 无需设置（没有题目的文章）
+- 点击文章进入答案设置模式，可填写标准答案并开关自动批阅
 
 ---
 
-### 7. 状态管理 `src/stores/`
+### 8. 状态管理 `src/stores/`
 
-#### authStore.js - 认证状态
+#### authStore.js — 认证状态
 ```javascript
 // 管理用户登录状态
-state: { currentUser, permissionIds }
-actions: { login, register, logout, initFromStorage }
+// state: currentUser, permissionIds
+// actions: login, register, logout, initFromStorage
 ```
-
-**主要逻辑：**
 - 支持 Supabase 数据库登录
 - 超级用户（young）拥有所有权限
 - 登录信息持久化到 localStorage
 
-#### blogStore.js - 博客数据
+#### blogStore.js — 博客数据
 ```javascript
 // 管理文章数据
-state: { blogData, isLoading, error }
-actions: { loadBlogData, getBlogsBySubject, getBlogById }
+// state: blogData, isLoading, error
+// actions: loadBlogData, getBlogsBySubject, getBlogById
 ```
-
-**主要逻辑：**
-- 从 `/data/blogs.json` 加载文章索引
+- 从 `blogs.json` 加载文章索引（路径自动适配 BASE_URL）
 - 提供按学科、ID 查询方法
-- 加载失败使用默认数据
 
-#### adminStore.js - 管理员状态
+#### adminStore.js — 管理员状态
 ```javascript
 // 管理后台状态
-state: { students, currentStudentId, permissionDirty }
-actions: { loadStudents, addStudent, updatePermissions, savePermissions }
+// state: students, currentStudentId, permissionDirty
+// actions: loadStudents, addStudent, updatePermissions, savePermissions
 ```
-
-**主要逻辑：**
 - 从 `student` 表加载学生列表
 - 管理权限修改和保存
-- 追踪权限是否已修改（未保存提示）
 
 ---
 
-### 8. 组合式函数 `src/composables/`
+### 9. 组合式函数 `src/composables/`
 
-#### useKatex.js - 数学公式渲染
+#### useKatex.js — 数学公式渲染
+- 动态加载 KaTeX 库
+- 支持行内 `$...$` 和块级 `$$...$$`
 
-**功能：** 动态加载 KaTeX 库，渲染数学公式
+#### useImageEmbed.js — 图片嵌入
+- 解析 `![[图片名|选项]]` 语法
+- 支持尺寸、对齐、标题等选项
 
-**主要逻辑：**
-1. 预连接 CDN 加速
-2. 动态加载 CSS 和 JS
-3. 预处理文本节点（替换 `\cdotp` 为 `\cdot`）
-4. 使用 `renderMathInElement` 渲染公式
-5. 强制换行处理（防止超长公式溢出）
-6. 5秒超时保护（超时移除公式标记）
-
-**支持的公式语法：**
-- 行内公式：`$...$`
-- 块级公式：`$$...$$`
-- LaTeX 语法：`\(...\)` 和 `\[...\]`
-
-#### useImageEmbed.js - 图片嵌入
-
-**功能：** 解析 `![[图片名]]` 语法，嵌入图片
-
-**语法示例：**
-```markdown
-![[image.png]]                    # 基础图片
-![[image.png|300x200]]            # 指定尺寸
-![[image.png|center]]             # 居中
-![[image.png|图片标题]]           # 带标题
-![[image.png|300x200|center|标题]] # 完整语法
-```
-
-**主要逻辑：**
-1. 解析选项（尺寸、对齐、标题、图注）
-2. 生成带样式的 HTML img 标签
-3. 支持懒加载
-4. 观察 DOM 变化自动解析
-5. 注入图片样式（对齐、浮动、响应式）
-
-#### useDrawing.js - 触控笔绘制
-
-**功能：** 平板触控笔在页面上绘制线条（渐隐消失）
-
-**主要逻辑：**
-1. 创建全屏 Canvas 画布
-2. 仅响应触控笔（`pointerType === 'pen'`）
-3. 阻止绘制时的页面滚动
-4. 3秒无操作后渐隐（0.8秒淡出）
-5. `useDrawingInDetail()` 自动在详情页激活
+#### useDrawing.js — 触控笔绘制
+- 全屏 Canvas，仅响应触控笔
+- 3 秒无操作后渐隐
 
 ---
 
-### 9. AppHeader.vue - 导航栏
+### 10. AppHeader.vue — 导航栏
 
-**功能：** 全局导航栏，根据路由动态显示
-
-**主要逻辑：**
-- 首页：显示 Logo + 登录/退出按钮
-- 分类页：显示返回按钮 + 学科标题 + 学科切换按钮
-- 详情页：显示返回按钮 + 文章标题 + 模式标签
-- 管理页：由 AdminView 自定义导航栏
+根据路由动态显示：首页显示 Logo + 登录/退出、分类页显示返回 + 学科标题、详情页显示返回 + 文章标题 + 模式标签。
 
 ---
 
@@ -386,7 +396,7 @@ actions: { loadStudents, addStudent, updatePermissions, savePermissions }
 | Vue 3 | 前端框架 |
 | Vite | 构建工具 |
 | Pinia | 状态管理 |
-| Vue Router | 路由管理 |
+| Vue Router | 路由管理（hash 模式） |
 | Supabase | 后端数据库 |
 | Marked | Markdown 解析 |
 | KaTeX | 数学公式渲染 |
@@ -405,11 +415,13 @@ npm install
 ```bash
 npm run dev
 ```
+（自动执行 `sync-blogs-data.js` 同步文章数据后再启动）
 
 ### 构建生产版本
 ```bash
 npm run build
 ```
+（自动执行 `sync-blogs-data.js` 同步文章数据后再构建）
 
 ### 预览构建结果
 ```bash
@@ -420,8 +432,17 @@ npm run preview
 
 ## 📝 文章编写指南
 
+### 文章存放位置
+
+所有 `.md` 文件存放在 `public/blogs/` 下，按学科分目录存放。
+
+**新建文章步骤：**
+1. 在 `public/blogs/` 下创建 `.md` 文件
+2. 运行 `npm run dev`（或 `npm run build`）
+3. 脚本自动分配 ID、更新 `blogs.json` 和 `id_map.json`
+
 ### Markdown 格式
-文章使用标准 Markdown 语法编写，存放在 `blogs/` 目录下。
+文章使用标准 Markdown 语法编写。
 
 ### 题目占位符
 ```markdown
@@ -429,6 +450,8 @@ npm run preview
 【@2】这是第二道题
 ```
 或使用 `[@1]` 语法。
+
+**为兼容学生已有的提交记录，建议固定题目 ID 后不要随意改动。** 新增题目使用一个未用过的数字即可。
 
 ### 图片嵌入
 ```markdown
@@ -468,11 +491,27 @@ VITE_SUPABASE_URL=你的_Supabase_URL
 VITE_SUPABASE_ANON_KEY=你的_Supabase_Anon_Key
 ```
 
+部署到 GitHub Pages 时，需在仓库 Settings → Secrets and variables → Actions 中设置同名 Secrets。
+
+---
+
+## 🚢 部署
+
+GitHub Actions 自动部署（`.github/workflows/deploy.yml`）：
+
+1. 推送到 `main` 分支自动触发
+2. 注入 Supabase 环境变量（从 Secrets 读取）
+3. 以 `--base=/tutor-base/` 构建
+4. 部署到 GitHub Pages
+
+### 手动触发
+GitHub 仓库 → Actions → Deploy to GitHub Pages → Run workflow
+
 ---
 
 ## 📱 浏览器支持
 
-- Chrome/Edge (推荐)
+- Chrome/Edge（推荐）
 - Safari
 - Firefox
 - 平板浏览器（支持触控笔）
@@ -482,6 +521,5 @@ VITE_SUPABASE_ANON_KEY=你的_Supabase_Anon_Key
 ## 📄 许可证
 
 MIT License
-```
 
 这个 README 涵盖了项目的所有核心功能和代码逻辑说明，可以作为项目的完整文档。

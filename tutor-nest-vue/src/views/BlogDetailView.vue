@@ -17,10 +17,75 @@
                 v-html="fabButtonHtml"></button>
         </div>
 
-        <!-- 布局切换悬浮球 -->
-        <button v-if="hasSidebar" class="layout-toggle-fab" @click="cycleLayoutMode" :title="layoutToggleTitle">
-            <i class="fas" :class="layoutToggleIcon"></i>
-        </button>
+        <!-- 右下角悬浮按钮组 -->
+        <div class="fab-right-group">
+            <button v-if="hasSidebar" class="layout-toggle-fab" @click="cycleLayoutMode" :title="layoutToggleTitle">
+                <i class="fas" :class="layoutToggleIcon"></i>
+            </button>
+            <button v-if="showAnswerSheetFab" class="answer-sheet-fab" @click="toggleAnswerSheet" title="答题卡">
+                <i class="fas fa-th"></i>
+            </button>
+            <button v-if="showTocFab" class="toc-fab" @click="toggleToc" title="目录">
+                <i class="fas fa-list"></i>
+            </button>
+        </div>
+
+        <!-- 答题卡侧边栏 -->
+        <div v-if="answerSheetVisible" class="answer-sheet-overlay" :class="{ 'overlay-active': answerSheetActive }" @click.self="closeAnswerSheet">
+            <div class="answer-sheet-sidebar" :class="{ 'sidebar-open': answerSheetActive }" @click.stop>
+                <div class="answer-sheet-header">
+                    <span class="answer-sheet-title">答题卡</span>
+                    <button class="answer-sheet-close-btn" @click="closeAnswerSheet">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="answer-sheet-body">
+                    <div v-for="(section, sIdx) in answerSheetSections" :key="sIdx" class="answer-sheet-section">
+                        <div class="answer-sheet-section-title">{{ section.h1Title }}</div>
+                        <div class="answer-sheet-grid">
+                            <div v-for="q in section.questions" :key="q.questionId"
+                                 class="answer-sheet-cell"
+                                 :class="'cell-' + q.status"
+                                 @click="scrollToHeading(section.headingId)"
+                                 :title="`第${q.localIndex}题: ${q.statusLabel}`">
+                                {{ q.localIndex }}
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="answerSheetSections.length === 0" class="answer-sheet-empty">
+                        暂无题目
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录侧边栏 -->
+        <div v-if="tocVisible" class="answer-sheet-overlay" :class="{ 'overlay-active': tocActive }" @click.self="closeToc">
+            <div class="answer-sheet-sidebar" :class="{ 'sidebar-open': tocActive }" @click.stop>
+                <div class="answer-sheet-header">
+                    <span class="answer-sheet-title">目录</span>
+                    <button class="answer-sheet-close-btn" @click="closeToc">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="toc-body">
+                    <div v-for="(h1, idx) in tocData" :key="h1.id" class="toc-h1-item">
+                        <div class="toc-h1-title">
+                            <i class="fas toc-arrow" :class="expandedTocH1 === idx ? 'fa-chevron-down' : 'fa-chevron-right'" @click.stop="toggleTocH1(idx)"></i>
+                            <span class="toc-text" @click="scrollToHeading(h1.id)">{{ h1.text }}</span>
+                        </div>
+                        <div v-if="expandedTocH1 === idx && h1.children.length" class="toc-h2-list">
+                            <div v-for="h2 in h1.children" :key="h2.id" class="toc-h2-item" @click="scrollToHeading(h2.id)">
+                                {{ h2.text }}
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="tocData.length === 0" class="answer-sheet-empty">
+                        暂无目录
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -66,6 +131,17 @@ const submissionMap = ref(new Map())
 const slotNodes = ref(new Map())
 const statusNodes = ref(new Map())
 
+// 答题卡状态
+const answerSheetVisible = ref(false)
+const answerSheetActive = ref(false)
+const h1QuestionSections = ref([])
+
+// 目录状态
+const tocVisible = ref(false)
+const tocActive = ref(false)
+const tocData = ref([])
+const expandedTocH1 = ref(null)
+
 // ========== 计算属性 ==========
 const blogId = computed(() => {
     const id = route.params.id
@@ -104,6 +180,36 @@ const studentId = computed(() => {
         }
     }
     return null
+})
+
+const showAnswerSheetFab = computed(() => {
+    return currentMode.value === 'study' && h1QuestionSections.value.length > 0
+})
+
+const answerSheetSections = computed(() => {
+    return h1QuestionSections.value.map(section => ({
+        ...section,
+        questions: section.questions.map(q => {
+            const submission = submissionMap.value.get(q.questionId)
+            let status, statusLabel
+            if (!submission) {
+                status = 'unsubmitted'
+                statusLabel = '未提交'
+            } else if (submission.review_status !== 'reviewed') {
+                status = 'pending'
+                statusLabel = '待批阅'
+            } else {
+                status = submission.review_result || 'unsubmitted'
+                const labels = { correct: '正确', partial: '半对', wrong: '错误' }
+                statusLabel = labels[status] || '已批阅'
+            }
+            return { ...q, status, statusLabel }
+        })
+    }))
+})
+
+const showTocFab = computed(() => {
+    return tocData.value.length > 0
 })
 
 const layoutToggleIcon = computed(() => {
@@ -236,9 +342,12 @@ function renderMarkdownWithSidebar(markdown) {
         if (!hasSidebar) {
             html += renderMarkdown(section.h1 + '\n' + mainMd)
         } else {
-            const mainHtml = renderMarkdown(section.h1 + '\n' + mainMd)
+            // h1 放在双栏容器外部，确保在"仅答题区"模式下仍可见
+            const h1Html = renderMarkdown(section.h1)
+            const mainHtml = renderMarkdown(mainMd)
             const sidebarHtml = renderMarkdown(sidebarMd)
             html += `
+        ${h1Html}
         <div class="detail-section-two-column">
           <div class="detail-main-column">${mainHtml}</div>
           <div class="detail-sidebar-column">${sidebarHtml}</div>
@@ -313,12 +422,9 @@ function renderStudySlot(questionId, index) {
     wrapper.className = 'question-card question-card-study'
     wrapper.dataset.questionId = questionId
 
-    const header = document.createElement('div')
-    header.className = 'question-card-header'
-
     const textarea = document.createElement('textarea')
     textarea.className = 'question-textarea question-textarea-study'
-    textarea.rows = 3
+    textarea.rows = 2
     textarea.placeholder = '在这里填写答案'
 
     const submission = submissionMap.value.get(questionId)
@@ -334,19 +440,20 @@ function renderStudySlot(questionId, index) {
         }
     }
 
-    const footer = document.createElement('div')
-    footer.className = 'question-card-footer question-card-footer-between'
-
+    // 状态角标（左上角绝对定位）
     const { text, cls } = buildStatusPill(submission)
-    const status = createPill(text, cls)
-    footer.appendChild(status)
-    statusNodes.value.set(questionId, status)
+    const badge = createPill(text, cls)
+    wrapper.appendChild(badge)
+    statusNodes.value.set(questionId, badge)
 
-    const actionBtn = document.createElement('button')
-    actionBtn.type = 'button'
-    actionBtn.className = 'question-action-btn'
+    wrapper.appendChild(textarea)
 
     if (isReviewed) {
+        const footer = document.createElement('div')
+        footer.className = 'question-card-footer'
+        const actionBtn = document.createElement('button')
+        actionBtn.type = 'button'
+        actionBtn.className = 'question-action-btn'
         let showingAnswer = false
         actionBtn.innerHTML = '<i class="fas fa-eye"></i><span>查看答案</span>'
         actionBtn.addEventListener('click', function (e) {
@@ -363,21 +470,11 @@ function renderStudySlot(questionId, index) {
                 this.innerHTML = '<i class="fas fa-eye"></i><span>查看答案</span>'
             }
         })
-    } else {
-        actionBtn.innerHTML = '<i class="fas fa-paper-plane"></i><span>提交已做</span>'
-        actionBtn.addEventListener('click', async function () {
-            this.disabled = true
-            const ok = await persistStudyAnswers({ silent: false, targetQuestionId: questionId })
-            this.disabled = false
-            if (ok) {
-                await refreshSubmissionStatus()
-            }
-        })
+        footer.appendChild(actionBtn)
+        wrapper.appendChild(footer)
     }
 
-    footer.appendChild(actionBtn)
-    wrapper.append(header, textarea, footer)
-    slotNodes.value.set(questionId, { wrapper, textarea, status, mode: 'study' })
+    slotNodes.value.set(questionId, { wrapper, textarea, status: badge, mode: 'study' })
 
     return wrapper
 }
@@ -490,6 +587,156 @@ function renderAnswerSlot(questionId, index) {
     slotNodes.value.set(questionId, { wrapper, textarea, status, autoWrap, mode: 'answer' })
 
     return wrapper
+}
+
+// ========== 答题卡 ==========
+function buildH1QuestionMap(markdownWithSlots) {
+    const sections = []
+    const lines = markdownWithSlots.split('\n')
+    let currentH1 = null
+    let currentQuestions = []
+
+    for (const line of lines) {
+        const trimmed = line.trim()
+        if (trimmed.startsWith('# ')) {
+            if (currentH1 && currentQuestions.length > 0) {
+                sections.push({ h1Title: currentH1, questions: [...currentQuestions] })
+            }
+            currentH1 = trimmed.replace(/^#\s+/, '')
+            currentQuestions = []
+        } else if (currentH1) {
+            const idMatch = line.match(/data-question-id="([^"]+)"/)
+            if (idMatch) {
+                currentQuestions.push({
+                    questionId: idMatch[1],
+                    localIndex: currentQuestions.length + 1
+                })
+            }
+        }
+    }
+    if (currentH1 && currentQuestions.length > 0) {
+        sections.push({ h1Title: currentH1, questions: [...currentQuestions] })
+    }
+
+    return sections
+}
+
+function toggleAnswerSheet() {
+    if (answerSheetActive.value) {
+        answerSheetActive.value = false
+        setTimeout(() => { answerSheetVisible.value = false }, 300)
+    } else {
+        if (tocActive.value) {
+            tocActive.value = false
+            setTimeout(() => { tocVisible.value = false }, 300)
+        }
+        answerSheetVisible.value = true
+        nextTick(() => {
+            requestAnimationFrame(() => {
+                answerSheetActive.value = true
+            })
+        })
+    }
+}
+
+function closeAnswerSheet() {
+    answerSheetActive.value = false
+    setTimeout(() => { answerSheetVisible.value = false }, 300)
+}
+
+// ========== 目录 ==========
+function setupHeadingIds(container) {
+    const headings = container.querySelectorAll('h1, h2')
+    const tree = []
+    let currentH1 = null
+    let idCounter = 0
+
+    headings.forEach(el => {
+        el.id = `toc-heading-${idCounter++}`
+        const text = el.textContent.trim()
+        const level = el.tagName === 'H1' ? 1 : 2
+
+        if (level === 1) {
+            currentH1 = { id: el.id, text, level, children: [] }
+            tree.push(currentH1)
+        } else if (currentH1 && level === 2) {
+            currentH1.children.push({ id: el.id, text, level })
+        }
+    })
+
+    // 同步更新 h1QuestionSections 中的 headingId，供答题卡跳转使用
+    if (tree.length > 0) {
+        h1QuestionSections.value = h1QuestionSections.value.map((section, idx) => ({
+            ...section,
+            headingId: tree[idx]?.id || ''
+        }))
+    }
+
+    return tree
+}
+
+function toggleToc() {
+    if (tocActive.value) {
+        tocActive.value = false
+        setTimeout(() => { tocVisible.value = false }, 300)
+    } else {
+        if (answerSheetActive.value) {
+            answerSheetActive.value = false
+            setTimeout(() => { answerSheetVisible.value = false }, 300)
+        }
+        tocVisible.value = true
+        nextTick(() => {
+            requestAnimationFrame(() => {
+                tocActive.value = true
+            })
+        })
+    }
+}
+
+function closeToc() {
+    tocActive.value = false
+    setTimeout(() => { tocVisible.value = false }, 300)
+}
+
+function scrollToHeading(headingId) {
+    if (!headingId) return
+    const el = document.getElementById(headingId)
+    if (el) {
+        // 偏移顶部导航栏的高度（~56px），使标题不紧贴视口顶部
+        const NAV_BAR_HEIGHT = 64
+        const rect = el.getBoundingClientRect()
+        window.scrollBy({
+            top: rect.top - NAV_BAR_HEIGHT,
+            behavior: 'smooth'
+        })
+    }
+    closeToc()
+    closeAnswerSheet()
+}
+
+function toggleTocH1(idx) {
+    expandedTocH1.value = expandedTocH1.value === idx ? null : idx
+}
+
+function findCenterHeading() {
+    const headings = detailBodyRef.value?.querySelectorAll('h1')
+    if (!headings?.length) return null
+
+    const viewCenter = window.scrollY + window.innerHeight / 2
+    let closest = headings[0]
+    let minDist = Infinity
+
+    headings.forEach(h => {
+        const rect = h.getBoundingClientRect()
+        const hCenter = rect.top + rect.height / 2 + window.scrollY
+        const dist = Math.abs(hCenter - viewCenter)
+        if (dist < minDist) {
+            minDist = dist
+            closest = h
+        }
+    })
+
+    return closest.id || null
 }
 
 // ========== 数据持久化 ==========
@@ -780,6 +1027,13 @@ function resetDetailState() {
     renderedContent.value = ''
     layoutMode.value = 'both'
     hasSidebar.value = false
+    h1QuestionSections.value = []
+    answerSheetVisible.value = false
+    answerSheetActive.value = false
+    tocData.value = []
+    tocVisible.value = false
+    tocActive.value = false
+    expandedTocH1.value = null
 }
 
 // ========== 加载内容 ==========
@@ -835,7 +1089,10 @@ async function loadContent() {
         questionCount.value = slotResult.questionCount
         questionIdList.value = slotResult.questionIdList
 
-        // 3. 检测是否有侧栏内容，并渲染 Markdown
+        // 3. 构建 h1 → 题目映射（用于答题卡）
+        h1QuestionSections.value = buildH1QuestionMap(slotResult.markdown)
+
+        // 4. 检测是否有侧栏内容，并渲染 Markdown
         const sections = parseMarkdownWithSidebar(slotResult.markdown)
         hasSidebar.value = sections.some(s => s.sidebarContent.join('').trim().length > 0)
         renderedContent.value = renderMarkdownWithSidebar(slotResult.markdown)
@@ -863,7 +1120,12 @@ async function loadContent() {
         await nextTick()
         initializeQuestionSlots()
 
-        // 8. 观察图片嵌入
+        // 8. 为 h1/h2 注入 ID 并构建目录数据
+        if (detailBodyRef.value) {
+            tocData.value = setupHeadingIds(detailBodyRef.value)
+        }
+
+        // 9. 观察图片嵌入
         if (detailBodyRef.value) {
             observe(detailBodyRef.value)
         }
@@ -878,9 +1140,27 @@ async function loadContent() {
 
 // ========== 布局切换 ==========
 function cycleLayoutMode() {
+    // 记录切换前屏幕中央所在的 h1
+    const centerH1Id = findCenterHeading()
+
     const states = ['both', 'left', 'right']
     const idx = states.indexOf(layoutMode.value)
     layoutMode.value = states[(idx + 1) % states.length]
+
+    // 切换后自动跳转到该 h1 顶部（偏移导航栏高度）
+    if (centerH1Id) {
+        nextTick(() => {
+            const el = document.getElementById(centerH1Id)
+            if (el) {
+                const NAV_BAR_HEIGHT = 64
+                const rect = el.getBoundingClientRect()
+                window.scrollBy({
+                    top: rect.top - NAV_BAR_HEIGHT,
+                    behavior: 'smooth'
+                })
+            }
+        })
+    }
 }
 
 // ========== FAB 按钮处理 ==========
@@ -1141,12 +1421,13 @@ onUnmounted(() => {
 :deep(.question-card) {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    padding: 18px 20px;
+    gap: 6px;
+    padding: 6px 10px;
     border-radius: 22px;
-    background: rgba(255, 255, 255, 0.82);
-    border: 1px solid rgba(120, 170, 155, 0.16);
-    box-shadow: 0 10px 24px rgba(80, 130, 120, 0.08);
+    background: rgba(255, 255, 255, 0.25);
+    border: 1px solid rgba(120, 170, 155, 0.07);
+    box-shadow: none;
+    position: relative;
 }
 
 :deep(.question-card-header) {
@@ -1154,21 +1435,76 @@ onUnmounted(() => {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    opacity: 0.45;
+    font-size: 0.82rem;
+    min-height: 20px;
+}
+
+/* 状态角标：左上角绝对定位 */
+:deep(.question-card-study > .question-pill) {
+    position: absolute;
+    top: -10px;
+    left: 12px;
+    z-index: 1;
+    padding: 1px 10px;
+    min-height: 20px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    line-height: 1.5;
+    background: rgba(120, 170, 155, 0.08);
+    color: #4c6b5b;
+    border: 1px solid rgba(120, 170, 155, 0.15);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+:deep(.question-card-study > .question-pill.is-waiting),
+:deep(.question-card-study > .question-pill.is-muted) {
+    background: rgba(240, 244, 242, 0.7);
+    color: #7a8a80;
+    border-color: rgba(180, 200, 190, 0.3);
+}
+
+:deep(.question-card-study > .question-pill.is-pending) {
+    background: rgba(242, 226, 172, 0.6);
+    color: #7b6420;
+    border-color: rgba(227, 203, 124, 0.35);
+}
+
+:deep(.question-card-study > .question-pill.is-correct) {
+    background: rgba(205, 237, 221, 0.75);
+    color: #2f7b57;
+    border-color: rgba(80, 176, 122, 0.25);
+}
+
+:deep(.question-card-study > .question-pill.is-partial) {
+    background: rgba(255, 234, 188, 0.7);
+    color: #a87b19;
+    border-color: rgba(227, 188, 90, 0.3);
+}
+
+:deep(.question-card-study > .question-pill.is-wrong) {
+    background: rgba(255, 224, 224, 0.7);
+    color: #b65661;
+    border-color: rgba(208, 116, 126, 0.3);
 }
 
 :deep(.question-textarea) {
     width: 100%;
     resize: vertical;
-    min-height: 88px;
-    border-radius: 16px;
-    border: 1px solid rgba(120, 170, 155, 0.18);
-    background: rgba(255, 255, 255, 0.95);
-    padding: 14px 16px;
+    min-height: 64px;
+    border-radius: 14px;
+    border: 1px solid rgba(120, 170, 155, 0.22);
+    background: rgba(255, 255, 255, 0.98);
+    padding: 10px 14px;
     font-size: 1rem;
     color: #345143;
     outline: none;
-    line-height: 1.65;
+    line-height: 1.6;
     transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    box-shadow: 0 2px 8px rgba(80, 130, 120, 0.04);
 }
 
 :deep(.question-textarea:focus) {
@@ -1191,56 +1527,68 @@ onUnmounted(() => {
 :deep(.question-card-footer) {
     display: flex;
     align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    opacity: 0.5;
+    padding-top: 2px;
 }
 
 :deep(.question-card-footer-between) {
     justify-content: space-between;
 }
 
-:deep(.question-pill) {
+/* 非角标的 pill（review/answer 模式中使用） */
+:deep(.question-card:not(.question-card-study) > .question-pill),
+:deep(.question-card-review .question-pill),
+:deep(.question-card-answer .question-pill) {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 0 12px;
-    min-height: 28px;
+    padding: 0 10px;
+    min-height: 24px;
     border-radius: 999px;
-    background: rgba(120, 170, 155, 0.12);
+    background: rgba(120, 170, 155, 0.08);
     color: #4c6b5b;
-    font-size: 0.82rem;
-    border: 1px solid rgba(120, 170, 155, 0.14);
+    font-size: 0.75rem;
+    border: 1px solid rgba(120, 170, 155, 0.10);
 }
 
-:deep(.question-pill.is-waiting),
-:deep(.question-pill.is-muted) {
-    background: rgba(216, 222, 219, 0.4);
+:deep(.question-card-review .question-pill.is-waiting),
+:deep(.question-card-review .question-pill.is-muted),
+:deep(.question-card-answer .question-pill.is-waiting),
+:deep(.question-card-answer .question-pill.is-muted) {
+    background: rgba(216, 222, 219, 0.3);
     color: #6d756e;
 }
 
-:deep(.question-pill.is-pending) {
-    background: rgba(242, 226, 172, 0.48);
+:deep(.question-card-review .question-pill.is-pending),
+:deep(.question-card-answer .question-pill.is-pending) {
+    background: rgba(242, 226, 172, 0.35);
     color: #7b6420;
-    border-color: rgba(227, 203, 124, 0.32);
+    border-color: rgba(227, 203, 124, 0.25);
 }
 
-:deep(.question-pill.is-correct),
-:deep(.question-pill.is-auto) {
-    background: rgba(205, 237, 221, 0.75);
+:deep(.question-card-review .question-pill.is-correct),
+:deep(.question-card-review .question-pill.is-auto),
+:deep(.question-card-answer .question-pill.is-correct),
+:deep(.question-card-answer .question-pill.is-auto) {
+    background: rgba(205, 237, 221, 0.55);
     color: #2f7b57;
-    border-color: rgba(80, 176, 122, 0.18);
+    border-color: rgba(80, 176, 122, 0.15);
 }
 
-:deep(.question-pill.is-partial) {
-    background: rgba(255, 234, 188, 0.8);
+:deep(.question-card-review .question-pill.is-partial),
+:deep(.question-card-answer .question-pill.is-partial) {
+    background: rgba(255, 234, 188, 0.6);
     color: #a87b19;
-    border-color: rgba(227, 188, 90, 0.24);
+    border-color: rgba(227, 188, 90, 0.2);
 }
 
-:deep(.question-pill.is-wrong) {
-    background: rgba(255, 224, 224, 0.82);
+:deep(.question-card-review .question-pill.is-wrong),
+:deep(.question-card-answer .question-pill.is-wrong) {
+    background: rgba(255, 224, 224, 0.6);
     color: #b65661;
-    border-color: rgba(208, 116, 126, 0.24);
+    border-color: rgba(208, 116, 126, 0.2);
 }
 
 :deep(.question-review-toolbar) {
@@ -1404,12 +1752,27 @@ onUnmounted(() => {
     color: white !important;
 }
 
-/* 布局切换悬浮球 */
-.layout-toggle-fab {
+/* 右下角悬浮按钮组 */
+.fab-right-group {
     position: fixed;
     bottom: 100px;
     right: 30px;
     z-index: 998;
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    align-items: center;
+}
+
+.fab-right-group button {
+    position: static;
+    z-index: auto;
+}
+
+/* 布局切换悬浮球 + 答题卡悬浮球 + 目录悬浮球（相同样式） */
+.layout-toggle-fab,
+.answer-sheet-fab,
+.toc-fab {
     width: 48px;
     height: 48px;
     border-radius: 50%;
@@ -1425,13 +1788,216 @@ onUnmounted(() => {
     transition: all 0.25s ease;
 }
 
-.layout-toggle-fab:hover {
+.layout-toggle-fab:hover,
+.answer-sheet-fab:hover {
     transform: scale(1.12) translateY(-2px);
     box-shadow: 0 8px 28px rgba(123, 200, 196, 0.55);
 }
 
-.layout-toggle-fab:active {
+.layout-toggle-fab:active,
+.answer-sheet-fab:active {
     transform: scale(0.92);
+}
+
+/* 答题卡侧边栏 */
+.answer-sheet-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.15);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+.answer-sheet-overlay.overlay-active {
+    opacity: 1;
+}
+
+.answer-sheet-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 300px;
+    height: 100%;
+    background: #ffffff;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+}
+.answer-sheet-sidebar.sidebar-open {
+    transform: translateX(0);
+}
+
+.answer-sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid rgba(120, 170, 155, 0.12);
+    flex-shrink: 0;
+}
+
+.answer-sheet-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #2d4a3a;
+}
+
+.answer-sheet-close-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(120, 170, 155, 0.08);
+    color: #4c6b5b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    transition: background 0.2s ease;
+}
+.answer-sheet-close-btn:hover {
+    background: rgba(120, 170, 155, 0.2);
+}
+
+.answer-sheet-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px 24px;
+}
+
+.answer-sheet-section {
+    margin-bottom: 20px;
+}
+.answer-sheet-section:last-child {
+    margin-bottom: 0;
+}
+
+.answer-sheet-section-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #3a5a4a;
+    margin-bottom: 10px;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.answer-sheet-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.answer-sheet-cell {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: default;
+    border: 1px solid rgba(120, 170, 155, 0.15);
+    background: rgba(240, 244, 242, 0.5);
+    color: #6d7a72;
+    transition: transform 0.15s ease;
+}
+.answer-sheet-cell:hover {
+    transform: scale(1.15);
+}
+
+/* 答题卡单元格状态色 */
+.answer-sheet-cell.cell-unsubmitted {
+    background: rgba(240, 244, 242, 0.4);
+    color: #8a9a90;
+    border-color: rgba(120, 170, 155, 0.12);
+}
+.answer-sheet-cell.cell-pending {
+    background: rgba(242, 226, 172, 0.55);
+    color: #7b6420;
+    border-color: rgba(227, 203, 124, 0.3);
+}
+.answer-sheet-cell.cell-correct {
+    background: rgba(205, 237, 221, 0.7);
+    color: #2f7b57;
+    border-color: rgba(80, 176, 122, 0.2);
+}
+.answer-sheet-cell.cell-partial {
+    background: rgba(255, 234, 188, 0.7);
+    color: #a87b19;
+    border-color: rgba(227, 188, 90, 0.25);
+}
+.answer-sheet-cell.cell-wrong {
+    background: rgba(255, 224, 224, 0.7);
+    color: #b65661;
+    border-color: rgba(208, 116, 126, 0.25);
+}
+
+.answer-sheet-empty {
+    text-align: center;
+    color: #8a9a90;
+    font-size: 0.9rem;
+    padding: 40px 0;
+}
+
+/* 目录树样式 */
+.toc-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0 24px;
+}
+
+.toc-h1-item {
+    border-bottom: 1px solid rgba(120, 170, 155, 0.08);
+}
+.toc-h1-item:last-child {
+    border-bottom: none;
+}
+
+.toc-h1-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px;
+    cursor: pointer;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #2d4a3a;
+    transition: background 0.15s ease;
+    user-select: none;
+}
+.toc-h1-title:hover {
+    background: rgba(120, 170, 155, 0.06);
+}
+.toc-h1-title i {
+    font-size: 0.7rem;
+    color: #7a9a8a;
+    width: 12px;
+    flex-shrink: 0;
+}
+
+.toc-h2-list {
+    background: rgba(245, 248, 246, 0.4);
+}
+
+.toc-h2-item {
+    padding: 8px 20px 8px 44px;
+    font-size: 0.85rem;
+    color: #4c6b5b;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    user-select: none;
+}
+.toc-h2-item:hover {
+    background: rgba(120, 170, 155, 0.08);
+    color: #1d4a3a;
 }
 
 /* Toast 弹窗 */
@@ -1559,12 +2125,22 @@ onUnmounted(() => {
         font-size: 1.1rem;
     }
 
-    .layout-toggle-fab {
+    .fab-right-group {
         bottom: 72px;
         right: 16px;
+        gap: 10px;
+    }
+
+    .layout-toggle-fab,
+    .answer-sheet-fab,
+    .toc-fab {
         width: 42px;
         height: 42px;
         font-size: 1rem;
+    }
+
+    .answer-sheet-sidebar {
+        width: 260px;
     }
 }
 </style>

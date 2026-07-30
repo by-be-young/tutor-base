@@ -19,6 +19,7 @@
         <div v-show="expanded" class="tree-children" style="padding-left: 20px;">
             <ClickableTreeNode v-for="child in node.children" :key="child.name + (child.isFile ? child.blogId : '')"
                 :node="child" :depth="depth + 1" :badge-map="badgeMap"
+                :initially-expanded="initiallyExpanded"
                 @file-click="(blogId) => $emit('file-click', blogId)" />
         </div>
     </div>
@@ -30,12 +31,13 @@ import { ref, computed } from 'vue'
 const props = defineProps({
     node: { type: Object, required: true },
     depth: { type: Number, default: 0 },
-    badgeMap: { type: Map, default: () => new Map() }
+    badgeMap: { type: Map, default: () => new Map() },
+    initiallyExpanded: { type: Boolean, default: false }
 })
 
 defineEmits(['file-click'])
 
-const expanded = ref(false)
+const expanded = ref(props.initiallyExpanded)
 
 const paddingStyle = computed(() => ({
     paddingLeft: `${props.depth * 20 + 8}px`
