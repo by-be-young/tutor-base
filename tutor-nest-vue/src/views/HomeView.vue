@@ -246,8 +246,6 @@ defineExpose({
 </script>
 
 <style scoped>
-/* 所有样式从 style.css 迁移，添加 scoped */
-
 * {
   margin: 0;
   padding: 0;
@@ -372,50 +370,59 @@ defineExpose({
   padding: 4px 8px;
 }
 
-/* 书本卡片样式 */
+/* ========== 书本卡片样式（5页堆叠） ========== */
 .subject-card {
+  position: relative;
   flex: 0 0 auto;
   width: 200px;
   padding: 30px 20px 28px;
   border-radius: 4px 16px 16px 4px;
-  background: rgba(255, 255, 255, 0.5);
+  background: #ffffff;
+  /* 改为不透明白色，内页才能清晰显示 */
   backdrop-filter: blur(8px);
-  box-shadow:
-    8px 8px 24px rgba(80, 130, 120, 0.06),
-    -2px 0 0 0 rgba(91, 168, 164, 0.2) inset;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-left: 4px solid var(--teal-dark, #5BA8A4);
+  border-left: 8px solid var(--teal-dark, #5BA8A4);
   cursor: pointer;
   text-align: center;
-  position: relative;
   transform: perspective(800px) rotateY(-2deg) rotateX(2deg);
   transform-origin: left center;
   transition: all 0.35s cubic-bezier(0.2, 0.9, 0.4, 1);
   text-decoration: none;
   color: inherit;
   display: block;
+
+  /* 多层阴影模拟5页堆叠（卡片本身是第1页，后面4层阴影代表第2~5页） */
+  box-shadow:
+    /* 原有的轻柔环境阴影（可保留） */
+    8px 8px 24px rgba(80, 130, 120, 0.06),
+    /* 左侧内阴影模拟书脊 */
+    -2px 0 0 0 rgba(91, 168, 164, 0.2) inset,
+    /* 书页堆叠（向右下方向偏移） */
+    2px 2px 0 0 #f9f9f9,
+    4px 4px 0 0 #f0f0f0,
+    6px 6px 0 0 #e5e5e5,
+    8px 8px 0 0 #dbdbdb;
 }
 
+/* 移除原有的右侧渐变伪元素，不再需要 */
 .subject-card::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 30px;
-  height: 100%;
-  background: linear-gradient(to left, rgba(255, 255, 255, 0.3), transparent);
-  pointer-events: none;
-  border-radius: 0 16px 16px 0;
+  display: none;
 }
 
 .subject-card:hover {
   transform: perspective(800px) rotateY(-6deg) rotateX(4deg) translateY(-6px);
   box-shadow:
     12px 16px 40px rgba(80, 130, 120, 0.12),
-    -2px 0 0 0 rgba(91, 168, 164, 0.3) inset;
-  background: rgba(255, 255, 255, 0.7);
+    -2px 0 0 0 rgba(91, 168, 164, 0.3) inset,
+    /* hover 时书页偏移稍微加大，增加立体厚度 */
+    2px 2px 0 0 #f9f9f9,
+    5px 5px 0 0 #f0f0f0,
+    8px 8px 0 0 #e5e5e5,
+    11px 11px 0 0 #dbdbdb;
+  background: #ffffff;
 }
 
+/* 图标、文字等样式保持不变 */
 .subject-card .card-icon {
   font-size: 2.6rem;
   margin-bottom: 10px;
