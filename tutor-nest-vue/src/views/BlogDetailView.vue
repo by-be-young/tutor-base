@@ -822,7 +822,7 @@ async function loadContent() {
         }
 
         // 加载 Markdown 内容
-        const response = await fetch(`/blogs/${blog.path}`)
+        const response = await fetch(`${import.meta.env.BASE_URL}blogs/${blog.path}`)
         if (!response.ok) throw new Error('文件加载失败')
 
         let content = await response.text()
