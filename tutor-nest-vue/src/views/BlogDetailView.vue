@@ -94,6 +94,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useBlogStore } from '@/stores/blogStore'
+import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
 import { useKatex } from '@/composables/useKatex'
 import { useImageEmbed } from '@/composables/useImageEmbed'
 import { useDrawingInDetail } from '@/composables/useDrawing'
@@ -104,6 +105,7 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const blogStore = useBlogStore()
+const wrongQuestionsStore = useWrongQuestionsStore()
 const { renderMath } = useKatex()
 const { processMarkdown, observe, disconnect } = useImageEmbed()
 useDrawingInDetail()
@@ -250,28 +252,197 @@ function renderMarkdown(markdown) {
 }
 
 // ========== 题目占位符注入 ==========
+// 题目文本映射：questionId → 题目内容（供错题本自动收集使用）
+const questionTextMap = ref(new Map())
+
+// 占位符语法（仅支持全角形式，编号前后允许空格）：
+//   答题占位符：【@】自动编号 / 【@N】显式编号
+//   题干占位符：【题干N】标记第 N 题的题干片段（可多处使用，按出现顺序拼接）
+//   公共题干占位符：【题干N-M】标记第 N~M 题的公共题干（大题），区间内每题共享
+const ANSWER_TOKEN = /【@(\d*)】/g
+const STEM_TOKEN = /【题干\s*(\d+)(?:\s*-\s*(\d+))?\s*】/g
+// 单行判定用（match() 搭配全局正则会丢失捕获组，故另定义非全局版本）
+const STEM_TOKEN_ONE = /【题干\s*(\d+)(?:\s*-\s*(\d+))?\s*】/
+
+/** 清理题干片段中的 markdown 语法、标题行、分隔线与空行 */
+function cleanStemText(text) {
+    return text
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/`(.+?)`/g, '$1')
+        .split('\n')
+        .filter(line => {
+            const t = line.trim()
+            if (!t) return false
+            if (/^#{1,6}\s/.test(t)) return false // 排除标题行
+            if (/^---\s*$/.test(t)) return false  // 排除分隔线
+            return true
+        })
+        .join('\n')
+        .trim()
+}
+
+/** 查找某个位置之前最近的一级标题（# 章节标题），找不到返回「本文」 */
+function nearestH1(markdown, pos) {
+    const lines = markdown.slice(0, pos).split('\n')
+    for (let i = lines.length - 1; i >= 0; i--) {
+        const m = lines[i]?.match(/^#\s+(.*)$/)
+        if (m) {
+            return m[1].replace(/\*\*(.+?)\*\*/g, '$1').trim() || '本文'
+        }
+    }
+    return '本文'
+}
+
 function injectQuestionSlots(markdown) {
-    const tokenRegex = /(?:【\s*@\s*(\d*)\s*】|\[\s*@\s*(\d*)\s*\])/g
+    questionTextMap.value = new Map()
+
+    // 第一遍：按位置收集所有占位符（题干标记 + 答题标记），记录答题标记的原始位置。
+    // 题干标记支持区间：【题干N】单题 / 【题干N-M】公共题干（区间内每题共享）
+    const tokens = []
+    for (const m of markdown.matchAll(STEM_TOKEN)) {
+        const start = Number(m[1])
+        const end = m[2] ? Number(m[2]) : start
+        const ids = []
+        for (let n = start; n <= end; n++) ids.push(String(n))
+        tokens.push({ type: 'stem', ids, index: m.index, end: m.index + m[0].length })
+    }
+    for (const m of markdown.matchAll(ANSWER_TOKEN)) {
+        tokens.push({ type: 'answer', id: m[1], index: m.index, end: m.index + m[0].length })
+    }
+    tokens.sort((a, b) => a.index - b.index)
+    const answerRawIndices = tokens.filter(t => t.type === 'answer').map(t => t.index)
+
+    // 题干片段：题干标记之后、下一个占位符之前的文本。
+    // 一个「题干N」可出现在正文任何位置（如双栏分离布局），按出现顺序归属第 N 题
+    const stemFragments = new Map()   // 题号 → 片段数组
+    for (let i = 0; i < tokens.length; i++) {
+        const t = tokens[i]
+        if (t.type !== 'stem') continue
+        const next = tokens[i + 1]
+        const end = next ? next.index : markdown.length
+        const fragment = cleanStemText(markdown.slice(t.end, end))
+        if (!fragment) continue
+        t.ids.forEach(id => {
+            if (!stemFragments.has(id)) stemFragments.set(id, [])
+            stemFragments.get(id).push(fragment)
+        })
+    }
+
+    // 第二遍：大题分组框。
+    // 区间标记【题干N-M】与最后一个小题占位符之间没有 `---`（同一栏）时，
+    // 用一个大框包住公共题干及全部小题（纯样式作用，不影响解析）
+    const lines = markdown.split('\n')
+    const openLines = new Map()   // 行号 → 打开次数
+    const closeLines = new Map()  // 行号 → 关闭次数
+    for (let i = 0; i < lines.length; i++) {
+        const stemMatch = lines[i].match(STEM_TOKEN_ONE)
+        if (!stemMatch) continue
+        const n = Number(stemMatch[1])
+        const m = stemMatch[2] ? Number(stemMatch[2]) : n
+        if (m <= n) continue // 单题标记或非法区间不分组
+
+        // 找区间终点：
+        //   优先用区间内最后一个小题的题干标记行，再向后扫描到其内容结束
+        //   （遇到 `---`、下一个题干标记、`#` 标题或文档末尾为止；答题占位符行不结束，便于同栏混排）
+        let lastStemLine = -1    // 区间内最后一个小题（单题）题干标记行
+        let lastAnswerLine = -1  // 区间内最后一个答题占位符行
+        for (let j = i + 1; j < lines.length; j++) {
+            const sm = lines[j].match(STEM_TOKEN_ONE)
+            if (sm && sm[2] === undefined) {
+                const id = Number(sm[1])
+                if (id >= n && id <= m) lastStemLine = j
+            }
+            for (const am of lines[j].matchAll(ANSWER_TOKEN)) {
+                const id = am[1] === '' ? null : Number(am[1])
+                if (id !== null && id >= n && id <= m) lastAnswerLine = j
+            }
+        }
+
+        let closeLine
+        if (lastStemLine !== -1) {
+            // 从最后小题题干标记之后扫描内容结束位置
+            closeLine = lastStemLine
+            for (let j = lastStemLine + 1; j < lines.length; j++) {
+                const t = lines[j].trim()
+                if (t === '---' || STEM_TOKEN_ONE.test(lines[j]) || /^#\s/.test(t)) {
+                    closeLine = j - 1
+                    break
+                }
+                closeLine = j
+            }
+        } else if (lastAnswerLine !== -1) {
+            closeLine = lastAnswerLine
+        } else {
+            continue
+        }
+
+        // 区间起点到终点之间出现 `---` 说明跨栏（如布局 B），不分组
+        let hasSep = false
+        for (let j = i; j <= closeLine; j++) {
+            if (lines[j].trim() === '---') {
+                hasSep = true
+                break
+            }
+        }
+        if (hasSep) continue
+
+        openLines.set(i, (openLines.get(i) || 0) + 1)
+        closeLines.set(closeLine, (closeLines.get(closeLine) || 0) + 1)
+    }
+
+    // 按行重建：组开始行前插入 `<div class="question-group">` + 空行，组结束行后插入 空行 + `</div>`
+    const groupedLines = []
+    for (let i = 0; i < lines.length; i++) {
+        for (let k = 0; k < (openLines.get(i) || 0); k++) {
+            groupedLines.push('<div class="question-group">', '')
+        }
+        groupedLines.push(lines[i])
+        for (let k = 0; k < (closeLines.get(i) || 0); k++) {
+            groupedLines.push('', '</div>')
+        }
+    }
+    const groupedMarkdown = groupedLines.join('\n')
+
+    // 第三遍：渲染 markdown
+    //   题干标记 → 样式化题号标签（如「第 1 题」「第 1-3 题」）；答题标记 → 答题卡片
     let autoCounter = 1
     const usedIndices = new Set()
     const questionIds = []
+    const answerPositions = new Map() // questionId → 答题占位符在原文中的位置
     let slotCount = 0
+    let answerIdx = 0
 
-    const processed = markdown.replace(tokenRegex, (match, id1, id2) => {
-        const numericId = (id1 !== undefined) ? id1 : id2
-        let questionId
-        if (numericId !== '') {
-            questionId = String(numericId)
-            usedIndices.add(Number(numericId))
+    const processed = groupedMarkdown
+        .replace(STEM_TOKEN, (_, n, m2) =>
+            `<span class="stem-label">第 ${n}${m2 ? '-' + m2 : ''} 题</span>`)
+        .replace(ANSWER_TOKEN, (_, numericId) => {
+            let questionId
+            if (numericId !== '') {
+                questionId = String(numericId)
+                usedIndices.add(Number(numericId))
+            } else {
+                while (usedIndices.has(autoCounter)) autoCounter++
+                questionId = String(autoCounter)
+                usedIndices.add(autoCounter)
+                autoCounter++
+            }
+            slotCount++
+            questionIds.push(questionId)
+            answerPositions.set(questionId, answerRawIndices[answerIdx++])
+            return `<div class="question-slot" data-question-id="${questionId}"></div>`
+        })
+
+    // 第三遍：生成错题本题目内容
+    //   有题干标记 → 拼接全部片段；无 → 回退「最近章节标题 · 第N题」
+    questionIds.forEach(questionId => {
+        const fragments = stemFragments.get(questionId)
+        let text
+        if (fragments && fragments.length > 0) {
+            text = fragments.join('\n')
         } else {
-            while (usedIndices.has(autoCounter)) autoCounter++
-            questionId = String(autoCounter)
-            usedIndices.add(autoCounter)
-            autoCounter++
+            text = `${nearestH1(markdown, answerPositions.get(questionId) ?? 0)} · 第${questionId}题`
         }
-        slotCount++
-        questionIds.push(questionId)
-        return `<div class="question-slot" data-question-id="${questionId}"></div>`
+        questionTextMap.value.set(questionId, text.length > 400 ? text.slice(0, 400) + '…' : text)
     })
 
     return { markdown: processed, questionCount: slotCount, questionIdList: questionIds }
@@ -440,6 +611,10 @@ function renderStudySlot(questionId, index) {
         }
     }
 
+    // 题号角标（右上角，与状态角标同款样式）
+    const numberBadge = createPill(`第 ${questionId} 题`, 'is-number')
+    wrapper.appendChild(numberBadge)
+
     // 状态角标（左上角绝对定位）
     const { text, cls } = buildStatusPill(submission)
     const badge = createPill(text, cls)
@@ -448,9 +623,22 @@ function renderStudySlot(questionId, index) {
 
     wrapper.appendChild(textarea)
 
+    // 卡片操作栏：加入错题本（总是显示）+ 查看答案（仅已批阅）
+    const footer = document.createElement('div')
+    footer.className = 'question-card-footer'
+
+    // 加入错题本按钮
+    const wrongBtn = document.createElement('button')
+    wrongBtn.type = 'button'
+    wrongBtn.className = 'question-action-btn'
+    wrongBtn.innerHTML = '<i class="fas fa-book-medical"></i><span>加入错题本</span>'
+    wrongBtn.addEventListener('click', function (e) {
+        e.preventDefault()
+        handleAddToWrongBook(questionId, this)
+    })
+    footer.appendChild(wrongBtn)
+
     if (isReviewed) {
-        const footer = document.createElement('div')
-        footer.className = 'question-card-footer'
         const actionBtn = document.createElement('button')
         actionBtn.type = 'button'
         actionBtn.className = 'question-action-btn'
@@ -471,8 +659,8 @@ function renderStudySlot(questionId, index) {
             }
         })
         footer.appendChild(actionBtn)
-        wrapper.appendChild(footer)
     }
+    wrapper.appendChild(footer)
 
     slotNodes.value.set(questionId, { wrapper, textarea, status: badge, mode: 'study' })
 
@@ -739,6 +927,89 @@ function findCenterHeading() {
     return closest.id || null
 }
 
+// ========== 加入错题本 ==========
+/**
+ * 答题卡片上的「加入错题本」按钮：把当前题主动加入错题本
+ * 同一来源已有记录时提示，不重复添加
+ */
+async function handleAddToWrongBook(questionId, btn) {
+    if (!blogId.value || !studentId.value) {
+        showToast('当前没有可用的学生身份，无法添加', 'error')
+        return
+    }
+
+    const key = String(questionId)
+    const studentIdStr = String(studentId.value)
+    const blogIdVal = blogId.value
+
+    // 检查是否已在错题本
+    const { data: existing } = await supabase
+        .from('wrong_questions')
+        .select('id')
+        .eq('student_id', studentIdStr)
+        .eq('source_blog_id', blogIdVal)
+        .eq('source_question_id', key)
+        .maybeSingle()
+
+    if (existing) {
+        showToast('该题已在错题本中', 'info')
+        return
+    }
+
+    const node = slotNodes.value.get(key)
+    const submission = submissionMap.value.get(key)
+    const answer = node?.textarea?.value || submission?.answer_text || ''
+
+    const { error } = await supabase
+        .from('wrong_questions')
+        .insert({
+            student_id: studentIdStr,
+            source_blog_id: blogIdVal,
+            source_question_id: key,
+            my_answer: answer,
+            is_manual: true,
+            wrong_count: 1
+        })
+
+    if (error) {
+        console.error('加入错题本失败:', error)
+        showToast(`添加失败：${error.message || '请稍后重试'}`, 'error', 5000)
+        return
+    }
+
+    showToast('已加入错题本', 'success')
+    if (btn) {
+        btn.disabled = true
+        btn.innerHTML = '<i class="fas fa-check"></i><span>已加入</span>'
+    }
+}
+
+// ========== 错题自动收集 ==========
+/**
+ * 题目被批阅为「错误」时，自动收集到错题本
+ * @param {string|number} questionId 题目编号
+ * @param {string} [myAnswer] 本次作答内容（可选，覆盖 submissionMap 中的值）
+ */
+async function autoCollectWrongQuestion(questionId, myAnswer) {
+    if (!blogId.value || !studentId.value) return
+
+    const key = String(questionId)
+    const submission = myAnswer !== undefined
+        ? { answer_text: myAnswer }
+        : submissionMap.value.get(key)
+
+    try {
+        await wrongQuestionsStore.autoCollect({
+            studentId: studentId.value,
+            myAnswer: submission?.answer_text || '',
+            sourceBlogId: blogId.value,
+            sourceQuestionId: key
+        })
+    } catch (err) {
+        console.error('自动收集错题失败:', err)
+    }
+}
+
 // ========== 数据持久化 ==========
 async function persistStudyAnswers({ silent = false, targetQuestionId = null } = {}) {
     if (isSubmitting.value) return false
@@ -752,6 +1023,7 @@ async function persistStudyAnswers({ silent = false, targetQuestionId = null } =
 
         const rows = []
         const now = new Date().toISOString()
+        const autoWrongQueue = []
 
         slotNodes.value.forEach((node, questionId) => {
             if (targetQuestionId && String(targetQuestionId) !== String(questionId)) return
@@ -774,6 +1046,9 @@ async function persistStudyAnswers({ silent = false, targetQuestionId = null } =
                 reviewStatus = 'reviewed'
                 reviewResult = normalizeLineBreaks(answer) === normalizeLineBreaks(answerKey.answer_text) ? 'correct' : 'wrong'
                 reviewedAt = now
+                if (reviewResult === 'wrong') {
+                    autoWrongQueue.push({ questionId, answer })
+                }
             }
 
             rows.push({
@@ -802,6 +1077,11 @@ async function persistStudyAnswers({ silent = false, targetQuestionId = null } =
             if (!silent) setFabStatus(false, '提交失败，请稍后重试')
             return false
         }
+
+        // 自动批阅为「错误」的题目收集到错题本（静默执行，不影响提交结果）
+        autoWrongQueue.forEach(item => {
+            autoCollectWrongQuestion(item.questionId, item.answer)
+        })
 
         if (!silent) setFabStatus(true, '提交成功！')
         return true
@@ -903,6 +1183,11 @@ async function persistReviewResult(questionId, reviewResult) {
         const { text, cls } = buildStatusPill(submissionMap.value.get(questionId))
         status.textContent = text
         status.className = `question-pill ${cls}`
+    }
+
+    // 批阅为「错误」时自动收集到错题本（静默执行）
+    if (reviewResult === 'wrong') {
+        autoCollectWrongQuestion(questionId, submission.answer_text)
     }
 
     setFabStatus(true, '批阅已保存')
@@ -1017,6 +1302,7 @@ function initializeQuestionSlots() {
 function resetDetailState() {
     questionCount.value = 0
     questionIdList.value = []
+    questionTextMap.value = new Map()
     answerKeyMap.value = new Map()
     submissionMap.value = new Map()
     slotNodes.value = new Map()
@@ -1489,6 +1775,42 @@ onUnmounted(() => {
     background: rgba(255, 224, 224, 0.7);
     color: #b65661;
     border-color: rgba(208, 116, 126, 0.3);
+}
+
+/* 题号角标：左上角（与状态角标同款样式） */
+:deep(.question-card-study > .question-pill.is-number) {
+    background: rgba(91, 168, 164, 0.15);
+    color: #2f6a66;
+    border-color: rgba(91, 168, 164, 0.3);
+}
+
+/* 状态角标：右上角 */
+:deep(.question-card-study > .question-pill:not(.is-number)) {
+    left: auto;
+    right: 12px;
+}
+
+/* 题干题号标签（正文中显示「第 N 题」） */
+:deep(.stem-label) {
+    display: inline-block;
+    padding: 2px 12px;
+    border-radius: 999px;
+    background: rgba(91, 168, 164, 0.15);
+    color: #2f6a66;
+    font-size: 0.82rem;
+    font-weight: 600;
+    border: 1px solid rgba(91, 168, 164, 0.3);
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+/* 大题分组框（公共题干 + 小题，纯样式作用） */
+:deep(.question-group) {
+    border: 2px solid rgba(91, 168, 164, 0.35);
+    border-radius: 20px;
+    padding: 20px 22px 14px;
+    background: rgba(240, 248, 246, 0.45);
+    margin: 22px 0;
 }
 
 :deep(.question-textarea) {

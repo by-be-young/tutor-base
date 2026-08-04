@@ -32,6 +32,28 @@
             </router-link>
           </div>
         </div>
+
+        <!-- 错题本入口卡片 -->
+        <router-link to="/wrong-questions" class="wrong-questions-entry">
+          <div class="wq-entry-icon">
+            <i class="fas fa-book-medical"></i>
+          </div>
+          <div class="wq-entry-text">
+            <div class="wq-entry-title">错题本</div>
+            <div class="wq-entry-sub">
+              <template v-if="unmasteredCount > 0">
+                还有 {{ unmasteredCount }} 道错题未掌握
+              </template>
+              <template v-else>
+                没有未掌握的错题，继续保持
+              </template>
+            </div>
+          </div>
+          <div v-if="unmasteredCount > 0" class="wq-entry-badge">{{ unmasteredCount }}</div>
+          <div class="wq-entry-arrow">
+            <i class="fas fa-arrow-right"></i>
+          </div>
+        </router-link>
       </div>
     </div>
 
@@ -66,10 +88,12 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useBlogStore } from '@/stores/blogStore'
+import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const blogStore = useBlogStore()
+const wrongQuestionsStore = useWrongQuestionsStore()
 
 // 本地状态
 const username = ref('')
@@ -121,6 +145,11 @@ const stats = computed(() => {
     subjects: subjects.value.length,
     articles: subjects.value.reduce((sum, s) => sum + s.count, 0)
   }
+})
+
+// 未掌握的错题数量（入口卡片徽章）
+const unmasteredCount = computed(() => {
+  return wrongQuestionsStore.questions.filter(q => !q.mastered).length
 })
 
 // 方法
@@ -184,6 +213,16 @@ async function loadBlogsData() {
   }
 }
 
+// 加载错题本数据（用于入口卡片计数）
+async function loadWrongQuestions() {
+  try {
+    const studentId = wrongQuestionsStore.getStudentId(authStore.currentUser)
+    await wrongQuestionsStore.fetchQuestions(studentId)
+  } catch (err) {
+    console.error('加载错题数据失败:', err)
+  }
+}
+
 // 水平滚动
 function enableHorizontalScroll(container) {
   if (!container) return
@@ -221,6 +260,7 @@ onMounted(async () => {
   // 如果已登录，加载数据
   if (authStore.isLoggedIn) {
     await loadBlogsData()
+    await loadWrongQuestions()
   }
 
   // 设置水平滚动
@@ -473,6 +513,87 @@ defineExpose({
   color: var(--green, #8FCFB8);
 }
 
+/* ========== 错题本入口卡片 ========== */
+.wrong-questions-entry {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 8px auto 0;
+  max-width: 480px;
+  padding: 16px 22px;
+  border-radius: 18px;
+  background: rgba(255, 251, 230, 0.75);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(217, 186, 75, 0.35);
+  border-left: 8px solid #d9ba4b;
+  box-shadow: 8px 8px 24px rgba(80, 130, 120, 0.08);
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.35s cubic-bezier(0.2, 0.9, 0.4, 1);
+  position: relative;
+}
+
+.wrong-questions-entry:hover {
+  transform: translateY(-3px) rotateX(2deg);
+  box-shadow: 12px 16px 40px rgba(80, 130, 120, 0.14);
+  background: rgba(255, 251, 230, 0.92);
+}
+
+.wq-entry-icon {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: #8a6d1a;
+  background: rgba(217, 186, 75, 0.18);
+}
+
+.wq-entry-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.wq-entry-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #705d13;
+}
+
+.wq-entry-sub {
+  font-size: 0.85rem;
+  color: #8a7a4a;
+  margin-top: 2px;
+}
+
+.wq-entry-badge {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #d9ba4b;
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(217, 186, 75, 0.4);
+}
+
+.wq-entry-arrow {
+  color: rgba(138, 109, 26, 0.35);
+  transition: transform 0.3s ease;
+}
+
+.wrong-questions-entry:hover .wq-entry-arrow {
+  transform: translateX(5px);
+  color: #8a6d1a;
+}
+
 /* 底部固定区域 */
 .bottom-fixed {
   flex-shrink: 0;
@@ -717,6 +838,26 @@ defineExpose({
   .dot1,
   .dot2 {
     display: none;
+  }
+
+  .wrong-questions-entry {
+    max-width: 100%;
+    padding: 12px 16px;
+    gap: 12px;
+  }
+
+  .wq-entry-icon {
+    width: 42px;
+    height: 42px;
+    font-size: 1.2rem;
+  }
+
+  .wq-entry-title {
+    font-size: 1.05rem;
+  }
+
+  .wq-entry-sub {
+    font-size: 0.78rem;
   }
 }
 </style>

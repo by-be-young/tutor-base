@@ -30,6 +30,10 @@
                 <span class="nav-user-status">
                     {{ authStore.isLoggedIn ? authStore.username : '未登录' }}
                 </span>
+                <router-link v-if="authStore.isLoggedIn" to="/wrong-questions" class="nav-btn nav-btn-wrong-questions"
+                    :class="{ 'is-active': route.name === 'WrongQuestions' }">
+                    <i class="fas fa-book-medical"></i> 错题本
+                </router-link>
                 <button v-if="!authStore.isLoggedIn" class="nav-btn nav-btn-login" @click="$emit('login-click')">
                     登录
                 </button>
@@ -205,6 +209,27 @@ function handleLogout() {
     background: rgba(213, 117, 135, 0.08);
     border-color: rgba(213, 117, 135, 0.2);
     color: #d57587;
+}
+
+.nav-btn-wrong-questions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(217, 186, 75, 0.12);
+    color: #8a6d1a;
+    border-color: rgba(217, 186, 75, 0.2);
+}
+
+.nav-btn-wrong-questions:hover {
+    background: rgba(217, 186, 75, 0.22);
+    transform: translateY(-1px);
+    color: #705d13;
+}
+
+.nav-btn-wrong-questions.is-active {
+    background: rgba(217, 186, 75, 0.28);
+    border-color: rgba(217, 186, 75, 0.4);
+    font-weight: 600;
 }
 
 .nav-subject-switcher {

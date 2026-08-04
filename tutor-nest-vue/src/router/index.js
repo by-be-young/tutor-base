@@ -26,6 +26,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/wrong-questions',
+    name: 'WrongQuestions',
+    component: () => import('@/views/WrongQuestionsView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/chemistry',
     name: 'Chemistry',
     redirect: '/category?subject=化学'
