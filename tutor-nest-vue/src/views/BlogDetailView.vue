@@ -404,17 +404,18 @@ function injectQuestionSlots(markdown) {
     const groupedMarkdown = groupedLines.join('\n')
 
     // 第三遍：渲染 markdown
-    //   题干标记 → 样式化题号标签（如「第 1 题」「第 1-3 题」）；答题标记 → 答题卡片
+    //   答题标记 → 答题卡片（构建 questionId → 显示顺序号 映射）
+    //   题干标记 → 样式化题号标签（显示顺序号，如「第 1 题」「第 1-3 题」，与实际 id 无关）
     let autoCounter = 1
     const usedIndices = new Set()
     const questionIds = []
     const answerPositions = new Map() // questionId → 答题占位符在原文中的位置
+    const idOrderMap = new Map()      // questionId → 显示顺序号（从 1 按出现顺序递增）
     let slotCount = 0
     let answerIdx = 0
+    let orderCounter = 0
 
     const processed = groupedMarkdown
-        .replace(STEM_TOKEN, (_, n, m2) =>
-            `<span class="stem-label">第 ${n}${m2 ? '-' + m2 : ''} 题</span>`)
         .replace(ANSWER_TOKEN, (_, numericId) => {
             let questionId
             if (numericId !== '') {
@@ -427,9 +428,18 @@ function injectQuestionSlots(markdown) {
                 autoCounter++
             }
             slotCount++
+            orderCounter++
             questionIds.push(questionId)
+            idOrderMap.set(questionId, orderCounter)
             answerPositions.set(questionId, answerRawIndices[answerIdx++])
             return `<div class="question-slot" data-question-id="${questionId}"></div>`
+        })
+        .replace(STEM_TOKEN, (_, n, m2) => {
+            const on = idOrderMap.get(String(n))
+            const om = m2 ? idOrderMap.get(String(m2)) : undefined
+            const start = on ?? Number(n)
+            const end = m2 ? (om ?? Number(m2)) : null
+            return `<span class="stem-label">第 ${start}${end !== null ? '-' + end : ''} 题</span>`
         })
 
     // 第三遍：生成错题本题目内容
@@ -611,8 +621,8 @@ function renderStudySlot(questionId, index) {
         }
     }
 
-    // 题号角标（右上角，与状态角标同款样式）
-    const numberBadge = createPill(`第 ${questionId} 题`, 'is-number')
+    // 题号角标（左上角，显示顺序号，与实际 id 无关）
+    const numberBadge = createPill(`第 ${index} 题`, 'is-number')
     wrapper.appendChild(numberBadge)
 
     // 状态角标（左上角绝对定位）
@@ -783,6 +793,7 @@ function buildH1QuestionMap(markdownWithSlots) {
     const lines = markdownWithSlots.split('\n')
     let currentH1 = null
     let currentQuestions = []
+    let globalIndex = 0 // 全文章顺序号（与题干标签/答题角标一致，跨章节递增）
 
     for (const line of lines) {
         const trimmed = line.trim()
@@ -795,9 +806,10 @@ function buildH1QuestionMap(markdownWithSlots) {
         } else if (currentH1) {
             const idMatch = line.match(/data-question-id="([^"]+)"/)
             if (idMatch) {
+                globalIndex++
                 currentQuestions.push({
                     questionId: idMatch[1],
-                    localIndex: currentQuestions.length + 1
+                    localIndex: globalIndex
                 })
             }
         }

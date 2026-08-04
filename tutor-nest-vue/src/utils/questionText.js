@@ -39,8 +39,10 @@ export function nearestH1(markdown, pos) {
 
 /**
  * 扫描文章中的全部占位符（题干标记 + 答题标记）
- * 答题占位符的 id 已解析自动编号（无编号按出现顺序从 1 开始，跳过已用编号）
- * @returns {Array<{type:'stem'|'answer', ids?:string[], id?:string, index:number, end:number}>}
+ * 答题占位符：
+ *   id —— 存储用编号（显式编号原样；无编号按出现顺序自动分配，跳过已用编号）
+ *   order —— 显示用顺序号（从 1 开始按出现顺序递增，与实际 id 无关）
+ * @returns {Array<{type:'stem'|'answer', ids?:string[], id?:string, order?:number, index:number, end:number}>}
  */
 function scanTokens(markdown) {
     const tokens = []
@@ -52,8 +54,10 @@ function scanTokens(markdown) {
         tokens.push({ type: 'stem', ids, index: m.index, end: m.index + m[0].length })
     }
     let autoCounter = 1
+    let order = 0
     const used = new Set()
     for (const m of markdown.matchAll(ANSWER_TOKEN)) {
+        order++
         let id
         if (m[1] !== '') {
             id = m[1]
@@ -64,10 +68,25 @@ function scanTokens(markdown) {
             used.add(autoCounter)
             autoCounter++
         }
-        tokens.push({ type: 'answer', id, index: m.index, end: m.index + m[0].length })
+        tokens.push({ type: 'answer', id, order, index: m.index, end: m.index + m[0].length })
     }
     tokens.sort((a, b) => a.index - b.index)
     return tokens
+}
+
+/**
+ * 查询某道题的显示顺序号（第几个答题占位符，从 1 开始）
+ * 文章中没有该题时返回 null
+ *
+ * @param {string} markdown 文章原文
+ * @param {string|number} questionId 存储用题目编号
+ * @returns {number|null}
+ */
+export function resolveQuestionOrder(markdown, questionId) {
+    const key = String(questionId)
+    const tokens = scanTokens(markdown)
+    const answer = tokens.find(t => t.type === 'answer' && t.id === key)
+    return answer ? answer.order : null
 }
 
 /**
@@ -132,6 +151,8 @@ export function resolveQuestionText(markdown, questionId) {
         if (nearby) return nearby
     }
 
-    return `${nearestH1(markdown, answer?.index ?? 0)} · 第${key}题`
+    // 回退：显示顺序号（文章中没有该题时用原编号）
+    const display = answer ? answer.order : key
+    return `${nearestH1(markdown, answer?.index ?? 0)} · 第${display}题`
 }
 

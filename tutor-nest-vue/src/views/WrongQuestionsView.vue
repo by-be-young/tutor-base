@@ -118,7 +118,7 @@
                     <!-- 来源文章链接 -->
                     <div v-if="q.source_blog_id" class="wq-source-link">
                         <i class="fas fa-link"></i>
-                        来自《{{ blogTitleOf(q.source_blog_id) }}》第 {{ q.source_question_id }} 题
+                        来自《{{ blogTitleOf(q.source_blog_id) }}》第 {{ resolvedOf(q).order ?? q.source_question_id }} 题
                         <router-link :to="`/blog/${q.source_blog_id}`" class="wq-source-jump">
                             跳转原文 <i class="fas fa-arrow-right"></i>
                         </router-link>
@@ -252,7 +252,7 @@ import { useBlogStore } from '@/stores/blogStore'
 import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
 import { useKatex } from '@/composables/useKatex'
 import { supabase } from '@/utils/supabase'
-import { resolveQuestionText } from '@/utils/questionText'
+import { resolveQuestionText, resolveQuestionOrder } from '@/utils/questionText'
 
 const authStore = useAuthStore()
 const blogStore = useBlogStore()
@@ -319,14 +319,18 @@ async function resolveAll() {
         let subject = ''
         let questionText = ''
         let correctAnswer = ''
+        let order = null
         if (q.source_blog_id != null) {
             const blog = blogStore.blogData.find(b => Number(b.id) === Number(q.source_blog_id))
             subject = blog?.series || ''
             const md = articleCache.get(String(q.source_blog_id))
-            if (md) questionText = resolveQuestionText(md, q.source_question_id)
+            if (md) {
+                questionText = resolveQuestionText(md, q.source_question_id)
+                order = resolveQuestionOrder(md, q.source_question_id)
+            }
             correctAnswer = answerMap.get(`${q.source_blog_id}-${String(q.source_question_id)}`) || ''
         }
-        map.set(q.id, { subject, questionText, correctAnswer })
+        map.set(q.id, { subject, questionText, correctAnswer, order })
     })
     resolvedMap.value = map
     resolvedReady.value = true
