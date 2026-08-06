@@ -8,8 +8,9 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 /** 图片存储的基础路径 */
 const IMAGE_BASE_PATH = ref('blogs/图片/')
 
-/** 是否启用懒加载 */
-const ENABLE_LAZY_LOAD = ref(true)
+/** 是否启用懒加载（默认关闭：图片数量有限，懒加载在 Edge 下会因
+ *  opacity:0 被判定不可见而延迟 load 事件，导致图片永不显示） */
+const ENABLE_LAZY_LOAD = ref(false)
 
 /** 图片加载失败时的占位图（可选） */
 const PLACEHOLDER_IMAGE = ref(null)
@@ -490,6 +491,22 @@ export function useImageEmbed() {
             img.addEventListener('load', () => {
                 img.classList.add('loaded')
             })
+
+            // 若图片已加载完成（缓存/已触发过 load），立即显示，避免永久透明占位
+            if (img.complete && img.naturalWidth > 0) {
+                img.classList.add('loaded')
+            } else if (!img.complete) {
+                // lazy 图片尚未加载：延迟轮询几次，加载完成即显示（避免监听错过 load 事件）
+                let tries = 0
+                const poll = setInterval(() => {
+                    if (img.complete) {
+                        clearInterval(poll)
+                        if (img.naturalWidth > 0) img.classList.add('loaded')
+                    } else if (++tries > 20) {
+                        clearInterval(poll)
+                    }
+                }, 300)
+            }
 
             img.addEventListener('error', () => {
                 img.style.display = 'none'

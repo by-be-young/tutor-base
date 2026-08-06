@@ -32,6 +32,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/wrong-training',
+    name: 'WrongTraining',
+    component: () => import('@/views/WrongTrainingView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/chemistry',
     name: 'Chemistry',
     redirect: '/category?subject=化学'

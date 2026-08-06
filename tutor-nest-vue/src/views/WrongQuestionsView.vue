@@ -48,6 +48,9 @@
                         :class="{ 'is-active': statusFilter === tab.value }" @click="statusFilter = tab.value">
                         {{ tab.label }}
                     </button>
+                    <router-link to="/wrong-training" class="wq-tab wq-tab-training">
+                        <i class="fas fa-dumbbell"></i> 错题训练
+                    </router-link>
                 </div>
 
                 <div class="wq-toolbar-right">
@@ -251,6 +254,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useBlogStore } from '@/stores/blogStore'
 import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
 import { useKatex } from '@/composables/useKatex'
+import { useImageEmbed } from '@/composables/useImageEmbed'
 import { supabase } from '@/utils/supabase'
 import { resolveQuestionText, resolveQuestionOrder } from '@/utils/questionText'
 
@@ -258,6 +262,8 @@ const authStore = useAuthStore()
 const blogStore = useBlogStore()
 const wrongQuestionsStore = useWrongQuestionsStore()
 const { renderMath } = useKatex()
+const { processMarkdown, setBasePath } = useImageEmbed()
+setBasePath('blogs/图片/')
 
 // ========== 动态解析（题干/学科/正确答案） ==========
 // 错题表只存来源（source_blog_id + source_question_id），
@@ -337,9 +343,9 @@ async function resolveAll() {
 }
 
 // ========== 渲染工具 ==========
-/** 题干内容渲染：保留 HTML（如图片标签），换行转 <br>，$...$ 公式由 KaTeX 渲染 */
+/** 题干内容渲染：解析图片嵌入（![[图片]] → <img>），换行转 <br>，$...$ 公式由 KaTeX 渲染 */
 function renderQuestionText(text) {
-    return String(text ?? '').replace(/\n/g, '<br>')
+    return processMarkdown(String(text ?? '')).replace(/\n/g, '<br>')
 }
 
 /** 详情文本安全渲染：转义 HTML 防注入，换行转 <br>，$...$ 公式由 KaTeX 渲染 */
@@ -597,7 +603,7 @@ function showToast(message, type = 'info', duration = 3000) {
     toastTimer = setTimeout(() => {
         toast.classList.remove('toast-visible')
         setTimeout(() => {
-            if (toast.parentNode) toast.remove()
+            if (toast.parentNode) toast.parentNode.removeChild(toast)
             toastTimer = null
         }, 300)
     }, duration)
@@ -760,6 +766,22 @@ watch([filteredQuestions, expandedId, modalVisible], () => {
     color: var(--teal-dark);
     border-color: var(--teal-dark);
     font-weight: 600;
+}
+
+/* 错题训练入口按钮 */
+.wq-tab-training {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(217, 186, 75, 0.15);
+    color: #8a6d1a;
+    border-color: rgba(217, 186, 75, 0.25);
+    text-decoration: none;
+}
+
+.wq-tab-training:hover {
+    background: rgba(217, 186, 75, 0.28);
+    color: #705d13;
 }
 
 .wq-toolbar-right {

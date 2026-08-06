@@ -169,8 +169,16 @@ async function renderMathInContainer(container) {
 
     const timer = setTimeout(() => {
         timedOut = true
-        container.innerHTML = originalHTML.replace(/\$/g, '')
-        container.querySelectorAll('.katex,.katex-display').forEach((e) => e.remove())
+        // 超时恢复：只把 KaTeX 已渲染的节点还原为原 $...$ 文本，
+        // 不重置整个 innerHTML（避免破坏已加载的图片）
+        container.querySelectorAll('.katex,.katex-display').forEach((e) => {
+            const parent = e.parentNode
+            if (parent) {
+                const text = document.createTextNode(e.textContent || '')
+                parent.insertBefore(text, e)
+                parent.removeChild(e)
+            }
+        })
     }, RENDER_TIMEOUT)
 
     try {

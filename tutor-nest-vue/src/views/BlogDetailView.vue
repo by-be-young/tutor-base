@@ -1243,7 +1243,7 @@ function showToast(message, type = 'info', duration = 3000) {
     toastTimer = setTimeout(() => {
         toast.classList.remove('toast-visible')
         setTimeout(() => {
-            if (toast.parentNode) toast.remove()
+            if (toast.parentNode) toast.parentNode.removeChild(toast)
             toastTimer = null
         }, 300)
     }, duration)

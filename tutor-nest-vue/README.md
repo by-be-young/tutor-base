@@ -24,6 +24,7 @@
 - 📱 **响应式设计** — 适配桌面、平板、手机等设备
 - 🎯 **筛选功能** — 按科目、状态等条件筛选文章
 - 🔔 **操作反馈** — Toast 弹窗提示操作结果
+- 🏋️ **错题训练** — 独立页面重做错题本中的题目，做错次数自动累积
 - 📑 **目录侧边栏** — 从左侧滑入的目录树，h2 按 h1 分组折叠，点击标题跳转
 - 📋 **答题卡侧边栏** — 从左侧滑入的答题卡，显示各 h1 下的题目完成情况，点击题号跳转到对应 h1 顶部
 - 🔄 **模式切换跟随** — 切换双栏/单栏显示模式时自动定位到此前屏幕中央所在的 h1 顶部
@@ -119,6 +120,8 @@ tutor-nest-vue/
 | `/#/blog/:id` | BlogDetailView | 文章详情（需登录） |
 | `/#/blog/:id?mode=review&studentId=xxx` | BlogDetailView | 批阅模式 |
 | `/#/blog/:id?mode=answer` | BlogDetailView | 答案设置模式 |
+| `/#/wrong-questions` | WrongQuestionsView | 错题本（需登录） |
+| `/#/wrong-training` | WrongTrainingView | 错题训练（需登录） |
 | `/#/admin` | AdminView | 管理页面（需登录） |
 | `/#/*` | NotFoundView | 404 页面 |
 
