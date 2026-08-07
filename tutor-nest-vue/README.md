@@ -36,7 +36,7 @@
 ```
 tutor-nest-vue/
 ├── public/
-│   ├── blogs/                      # Markdown 文章文件（.md 文件在此存放）
+│   ├── articles/                      # Markdown 文章文件（.md 文件在此存放）
 │   │   ├── 化学/
 │   │   │   ├── 前导课讲义/
 │   │   │   ├── 理论课讲义/
@@ -46,10 +46,10 @@ tutor-nest-vue/
 │   │       ├── 语法课讲义/
 │   │       └── 课后练习/
 │   └── data/
-│       ├── blogs.json              # 文章索引（自动生成）
+│       ├── articles.json              # 文章索引（自动生成）
 │       └── id_map.json             # 文章 ID 映射表（自动生成）
 ├── scripts/
-│   └── sync-blogs-data.js          # 博客数据同步脚本
+│   └── sync-articles-data.js          # 博客数据同步脚本
 ├── src/
 │   ├── assets/                     # 静态资源
 │   ├── components/                 # 可复用组件
@@ -61,13 +61,13 @@ tutor-nest-vue/
 │   │   │   ├── ReviewPanel.vue         # 批阅中心面板
 │   │   │   ├── AnswerPanel.vue         # 答案设置面板
 │   │   │   └── ClickableTreeNode.vue   # 可点击树节点
-│   │   └── blogs/
+│   │   └── articles/
 │   │       ├── FolderNode.vue      # 文件夹节点
 │   │       └── FileNode.vue        # 文件节点
 │   ├── views/                      # 页面视图
 │   │   ├── HomeView.vue            # 首页（登录/注册/学科卡片）
 │   │   ├── CategoryView.vue        # 分类页（文章列表）
-│   │   ├── BlogDetailView.vue      # 详情页（文章阅读/答题/批阅）
+│   │   ├── ArticleDetailView.vue      # 详情页（文章阅读/答题/批阅）
 │   │   ├── AdminView.vue           # 管理页（权限/批阅/答案）
 │   │   └── NotFoundView.vue        # 404 页面
 │   ├── composables/                # 组合式函数
@@ -117,9 +117,9 @@ tutor-nest-vue/
 |------|------|------|
 | `/#/` | HomeView | 首页 |
 | `/#/category?subject=xxx` | CategoryView | 分类页（需登录） |
-| `/#/blog/:id` | BlogDetailView | 文章详情（需登录） |
-| `/#/blog/:id?mode=review&studentId=xxx` | BlogDetailView | 批阅模式 |
-| `/#/blog/:id?mode=answer` | BlogDetailView | 答案设置模式 |
+| `/#/blog/:id` | ArticleDetailView | 文章详情（需登录） |
+| `/#/blog/:id?mode=review&studentId=xxx` | ArticleDetailView | 批阅模式 |
+| `/#/blog/:id?mode=answer` | ArticleDetailView | 答案设置模式 |
 | `/#/wrong-questions` | WrongQuestionsView | 错题本（需登录） |
 | `/#/wrong-training` | WrongTrainingView | 错题训练（需登录） |
 | `/#/admin` | AdminView | 管理页面（需登录） |
@@ -133,7 +133,7 @@ tutor-nest-vue/
 
 ### 3. 文章数据同步机制
 
-`public/data/blogs.json` 和 `public/data/id_map.json` **无需手动维护**，由脚本自动生成。
+`public/data/articles.json` 和 `public/data/id_map.json` **无需手动维护**，由脚本自动生成。
 
 **触发时机：**
 - `npm run dev` 启动前（`predev` hook）
@@ -142,14 +142,14 @@ tutor-nest-vue/
 **执行流程：**
 
 ```
-public/blogs/ 下的 .md 文件
+public/articles/ 下的 .md 文件
         ↓ 扫描
-scripts/sync-blogs-data.js
+scripts/sync-articles-data.js
         ├── 生成 id_map.json（路径 → ID 的映射关系）
-        └── 生成 blogs.json（文章索引，按系列 + ID 排序）
+        └── 生成 articles.json（文章索引，按系列 + ID 排序）
 ```
 
-**新增文章：** 只需在 `public/blogs/` 下新建 `.md` 文件，下次 `npm run dev` 或 `npm run build` 时自动分配 ID 并同步到两个 JSON 文件。
+**新增文章：** 只需在 `public/articles/` 下新建 `.md` 文件，下次 `npm run dev` 或 `npm run build` 时自动分配 ID 并同步到两个 JSON 文件。
 
 #### ID 分配规则与不重复保证
 
@@ -219,7 +219,7 @@ for (每个文件) {
 
 ---
 
-### 6. 文章详情页 `src/views/BlogDetailView.vue`
+### 6. 文章详情页 `src/views/ArticleDetailView.vue`
 
 **功能：** 文章阅读、答题、批阅、答案设置（四种模式合一）
 
@@ -326,9 +326,9 @@ for (每个文件) {
 ```javascript
 // 管理文章数据
 // state: blogData, isLoading, error
-// actions: loadBlogData, getBlogsBySubject, getBlogById
+// actions: loadArticleData, getArticlesBySubject, getArticleById
 ```
-- 从 `blogs.json` 加载文章索引（路径自动适配 BASE_URL）
+- 从 `articles.json` 加载文章索引（路径自动适配 BASE_URL）
 - 提供按学科、ID 查询方法
 
 #### adminStore.js — 管理员状态
@@ -419,13 +419,13 @@ npm install
 ```bash
 npm run dev
 ```
-（自动执行 `sync-blogs-data.js` 同步文章数据后再启动）
+（自动执行 `sync-articles-data.js` 同步文章数据后再启动）
 
 ### 构建生产版本
 ```bash
 npm run build
 ```
-（自动执行 `sync-blogs-data.js` 同步文章数据后再构建）
+（自动执行 `sync-articles-data.js` 同步文章数据后再构建）
 
 ### 预览构建结果
 ```bash
@@ -438,12 +438,12 @@ npm run preview
 
 ### 文章存放位置
 
-所有 `.md` 文件存放在 `public/blogs/` 下，按学科分目录存放。
+所有 `.md` 文件存放在 `public/articles/` 下，按学科分目录存放。
 
 **新建文章步骤：**
-1. 在 `public/blogs/` 下创建 `.md` 文件
+1. 在 `public/articles/` 下创建 `.md` 文件
 2. 运行 `npm run dev`（或 `npm run build`）
-3. 脚本自动分配 ID、更新 `blogs.json` 和 `id_map.json`
+3. 脚本自动分配 ID、更新 `articles.json` 和 `id_map.json`
 
 ### Markdown 格式
 文章使用标准 Markdown 语法编写。

@@ -1,4 +1,4 @@
-<!-- src/views/BlogDetailView.vue -->
+<!-- src/views/ArticleDetailView.vue -->
 <template>
     <div class="detail-container">
         <!-- 标题区 -->
@@ -93,7 +93,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
-import { useBlogStore } from '@/stores/blogStore'
+import { useArticleStore } from '@/stores/blogStore'
 import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
 import { useKatex } from '@/composables/useKatex'
 import { useImageEmbed } from '@/composables/useImageEmbed'
@@ -104,7 +104,7 @@ import { marked } from 'marked'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
-const blogStore = useBlogStore()
+const blogStore = useArticleStore()
 const wrongQuestionsStore = useWrongQuestionsStore()
 const { renderMath } = useKatex()
 const { processMarkdown, observe, disconnect } = useImageEmbed()
@@ -112,7 +112,7 @@ useDrawingInDetail()
 
 // 配置图片基础路径
 const { setBasePath } = useImageEmbed()
-setBasePath('blogs/图片/')
+setBasePath('articles/图片/')
 
 // ========== 状态管理 ==========
 const detailBodyRef = ref(null)
@@ -150,7 +150,7 @@ const blogId = computed(() => {
     return id ? parseInt(id, 10) : null
 })
 
-const currentBlog = computed(() => {
+const currentArticle = computed(() => {
     return blogStore.blogData.find(b => b.id === blogId.value)
 })
 
@@ -1014,7 +1014,7 @@ async function autoCollectWrongQuestion(questionId, myAnswer) {
         await wrongQuestionsStore.autoCollect({
             studentId: studentId.value,
             myAnswer: submission?.answer_text || '',
-            sourceBlogId: blogId.value,
+            sourceArticleId: blogId.value,
             sourceQuestionId: key
         })
     } catch (err) {
@@ -1355,7 +1355,7 @@ async function loadContent() {
             return
         }
 
-        const blog = currentBlog.value
+        const blog = currentArticle.value
         if (!blog) {
             renderedContent.value = '<p>文章未找到。</p>'
             blogTitle.value = '未找到'
@@ -1374,7 +1374,7 @@ async function loadContent() {
         }
 
         // 加载 Markdown 内容
-        const response = await fetch(`${import.meta.env.BASE_URL}blogs/${blog.path}`)
+        const response = await fetch(`${import.meta.env.BASE_URL}articles/${blog.path}`)
         if (!response.ok) throw new Error('文件加载失败')
 
         let content = await response.text()
@@ -1508,7 +1508,7 @@ watch(
 
 // ========== 生命周期 ==========
 onMounted(async () => {
-    await blogStore.loadBlogData()
+    await blogStore.loadArticleData()
     await loadContent()
     breakpointMql.addEventListener('change', handleBreakpointChange)
     window.addEventListener('pagehide', handlePageHide)

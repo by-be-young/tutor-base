@@ -1,7 +1,7 @@
 /**
- * scripts/sync-blogs-data.js
+ * scripts/sync-articles-data.js
  *
- * 扫描 public/blogs/ 下的所有 .md 文件，自动生成 id_map.json 和 blogs.json。
+ * 扫描 public/articles/ 下的所有 .md 文件，自动生成 id_map.json 和 articles.json。
  * 已有文件保留原 id，新文件分配 (当前最大 id + 1)。
  *
  * 在 npm run dev 和 npm run build 前自动执行。
@@ -13,8 +13,8 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
-const BLOGS_DIR = join(ROOT, 'public', 'blogs')
-const DATA_FILE = join(ROOT, 'public', 'data', 'blogs.json')
+const BLOGS_DIR = join(ROOT, 'public', 'articles')
+const DATA_FILE = join(ROOT, 'public', 'data', 'articles.json')
 const ID_MAP_FILE = join(ROOT, 'public', 'data', 'id_map.json')
 
 // ===== 工具函数 =====
@@ -61,7 +61,7 @@ function seriesFromPath(relPath) {
 
 function main() {
   if (!existsSync(BLOGS_DIR)) {
-    console.warn('[sync-blogs] 未找到 public/blogs/ 目录，跳过')
+    console.warn('[sync-articles] 未找到 public/articles/ 目录，跳过')
     return
   }
 
@@ -83,15 +83,15 @@ function main() {
   }
   writeFileSync(ID_MAP_FILE, JSON.stringify(idMap, null, 2) + '\n', 'utf-8')
 
-  // 3. 从旧的 blogs.json 读取已有日期
-  const oldBlogs = readJson(DATA_FILE) || []
+  // 3. 从旧的 articles.json 读取已有日期
+  const oldArticles = readJson(DATA_FILE) || []
   const dateMap = new Map()
-  for (const item of oldBlogs) {
+  for (const item of oldArticles) {
     dateMap.set(item.path, item.date)
   }
 
-  // 4. 生成 blogs.json
-  const blogs = files.map(relPath => ({
+  // 4. 生成 articles.json
+  const articles = files.map(relPath => ({
     id: idMap[relPath],
     title: titleFromPath(relPath),
     series: seriesFromPath(relPath),
@@ -100,15 +100,15 @@ function main() {
   }))
 
   // 5. 按系列 + id 排序
-  blogs.sort((a, b) => {
+  articles.sort((a, b) => {
     if (a.series !== b.series) return a.series.localeCompare(b.series, 'zh-CN')
     return a.id - b.id
   })
 
-  writeFileSync(DATA_FILE, JSON.stringify(blogs, null, 2) + '\n', 'utf-8')
-  console.log(`[sync-blogs] 同步完成：${files.length} 篇文章`)
+  writeFileSync(DATA_FILE, JSON.stringify(articles, null, 2) + '\n', 'utf-8')
+  console.log(`[sync-articles] 同步完成：${files.length} 篇文章`)
   console.log(`  → id_map.json 已更新（${Object.keys(idMap).length} 项）`)
-  console.log(`  → blogs.json 已生成`)
+  console.log(`  → articles.json 已生成`)
 }
 
 main()

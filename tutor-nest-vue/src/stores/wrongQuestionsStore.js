@@ -111,8 +111,8 @@ export const useWrongQuestionsStore = defineStore('wrongQuestions', () => {
      *   - 保留已填写的错因、笔记、掌握状态等增强字段
      * 不存在则新建记录
      */
-    async function autoCollect({ studentId, sourceBlogId, sourceQuestionId, myAnswer }) {
-        if (!studentId || !sourceBlogId || sourceQuestionId === undefined) return null
+    async function autoCollect({ studentId, sourceArticleId, sourceQuestionId, myAnswer }) {
+        if (!studentId || !sourceArticleId || sourceQuestionId === undefined) return null
 
         const studentIdStr = String(studentId)
         const sourceQuestionIdStr = String(sourceQuestionId)
@@ -122,7 +122,7 @@ export const useWrongQuestionsStore = defineStore('wrongQuestions', () => {
             .from('wrong_questions')
             .select('id, wrong_count, wrong_reason, note, mastered')
             .eq('student_id', studentIdStr)
-            .eq('source_blog_id', sourceBlogId)
+            .eq('source_blog_id', sourceArticleId)
             .eq('source_question_id', sourceQuestionIdStr)
             .maybeSingle()
 
@@ -135,7 +135,7 @@ export const useWrongQuestionsStore = defineStore('wrongQuestions', () => {
             student_id: studentIdStr,
             my_answer: myAnswer || '',
             is_manual: false,
-            source_blog_id: sourceBlogId,
+            source_blog_id: sourceArticleId,
             source_question_id: sourceQuestionIdStr,
             wrong_count: 1,
             updated_at: new Date().toISOString()

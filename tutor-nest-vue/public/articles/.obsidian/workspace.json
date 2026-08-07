@@ -14,7 +14,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "化学/理论课讲义/3-1 原电池.md",
+                "file": "化学/课后练习/3 电化学-课后习题.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -36,12 +36,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "化学/理论课讲义/3-1 原电池.md",
+                "file": "化学/课后练习/3 电化学-课后习题.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "3-1 原电池"
+              "title": "3 电化学-课后习题"
             }
           },
           {
@@ -222,6 +222,7 @@
   },
   "active": "f8e78e5bd34fe217",
   "lastOpenFiles": [
+    "化学/理论课讲义/3-1 原电池.md",
     "化学/理论课讲义/2-2 硫和氮.md",
     "化学/理论课讲义/1-2 钠和氯.md",
     "化学/理论课讲义/2-1 氧化还原反应.md",
@@ -247,7 +248,6 @@
     "英语/写作课讲义/作文练习.md",
     "英语/写作课讲义/应用文写作.md",
     "化学/理论课讲义/3-2 电解池.md",
-    "化学/理论课讲义/3-1 原电池.md",
     "图片",
     "化学/前导课讲义/前导课.md",
     "英语/课后练习/精读任务/精读任务-7.md",

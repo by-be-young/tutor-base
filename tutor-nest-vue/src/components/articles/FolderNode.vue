@@ -1,4 +1,4 @@
-<!-- src/components/blogs/FolderNode.vue -->
+<!-- src/components/articles/FolderNode.vue -->
 <template>
     <div class="tree-folder-wrapper" :style="paddingStyle">
         <div class="tree-item tree-folder" @click.stop="toggleExpand">

@@ -4,7 +4,7 @@
   功能说明：
     1. 展示当前学生的全部错题（手动添加 + 自动收集）
     2. 题目内容、学科、正确答案不存储在表中，按来源文章动态解析
-       （subject ← blogs.json series；题干 ← 文章 markdown 的【题干N】标记；
+       （subject ← articles.json series；题干 ← 文章 markdown 的【题干N】标记；
         correct_answer ← article_answer_keys）
     3. 统计、筛选（学科/状态/搜索）、排序、掌握标记、编辑、删除
     4. 手动添加：从文章选题（学科 → 文章 → 题号，实时预览题干）
@@ -251,7 +251,7 @@
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
-import { useBlogStore } from '@/stores/blogStore'
+import { useArticleStore } from '@/stores/blogStore'
 import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
 import { useKatex } from '@/composables/useKatex'
 import { useImageEmbed } from '@/composables/useImageEmbed'
@@ -259,11 +259,11 @@ import { supabase } from '@/utils/supabase'
 import { resolveQuestionText, resolveQuestionOrder } from '@/utils/questionText'
 
 const authStore = useAuthStore()
-const blogStore = useBlogStore()
+const blogStore = useArticleStore()
 const wrongQuestionsStore = useWrongQuestionsStore()
 const { renderMath } = useKatex()
 const { processMarkdown, setBasePath } = useImageEmbed()
-setBasePath('blogs/图片/')
+setBasePath('articles/图片/')
 
 // ========== 动态解析（题干/学科/正确答案） ==========
 // 错题表只存来源（source_blog_id + source_question_id），
@@ -285,7 +285,7 @@ async function loadArticle(blogId) {
     let md = null
     if (blog) {
         try {
-            const res = await fetch(`${import.meta.env.BASE_URL}blogs/${blog.path}`)
+            const res = await fetch(`${import.meta.env.BASE_URL}articles/${blog.path}`)
             if (res.ok) md = await res.text()
         } catch {
             md = null
@@ -442,7 +442,7 @@ const filteredQuestions = computed(() => {
 
 // ========== 数据加载 ==========
 async function loadData() {
-    await blogStore.loadBlogData()
+    await blogStore.loadArticleData()
     const studentId = wrongQuestionsStore.getStudentId(authStore.currentUser)
     await wrongQuestionsStore.fetchQuestions(studentId)
     await resolveAll()

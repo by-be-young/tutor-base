@@ -14,7 +14,7 @@
     - 路由参数：query.subject（当前选中的科目）
   
   数据流：
-    route.query.subject  →  currentSubject  →  filteredBlogs  →  treeData  →  渲染目录树
+    route.query.subject  →  currentSubject  →  filteredArticles  →  treeData  →  渲染目录树
     authStore.permissionIds ──────────────────┘
     
     blogStore.blogData ──────────────────────────────────────────────────┘
@@ -35,7 +35,7 @@
           展示空状态提示，引导用户从首页选择科目
           触发条件：未选择科目(currentSubject为空) 或 过滤后博客列表为空
         -->
-        <div v-else-if="!currentSubject || filteredBlogs.length === 0" class="empty-tip">
+        <div v-else-if="!currentSubject || filteredArticles.length === 0" class="empty-tip">
             请从首页选择科目。<br>
             <router-link to="/" class="tip-link">返回首页</router-link>
         </div>
@@ -75,7 +75,7 @@
  * 
  * 核心职责：
  * 1. 管理当前科目状态（currentSubject）
- * 2. 计算属性生成过滤后博客列表（filteredBlogs）
+ * 2. 计算属性生成过滤后博客列表（filteredArticles）
  * 3. 将博客列表转换为目录树结构（treeData）
  * 4. 加载博客提交状态（submissionStatusMap）
  * 5. 处理文件节点的导航跳转
@@ -86,13 +86,13 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
-import { useBlogStore } from '@/stores/blogStore'
+import { useArticleStore } from '@/stores/blogStore'
 import { supabase } from '@/utils/supabase'
 
 // 子组件：目录文件夹节点
-import FolderNode from '@/components/blogs/FolderNode.vue'
+import FolderNode from '@/components/articles/FolderNode.vue'
 // 子组件：目录文件节点
-import FileNode from '@/components/blogs/FileNode.vue'
+import FileNode from '@/components/articles/FileNode.vue'
 
 // ==================== 路由与状态管理 ====================
 
@@ -103,7 +103,7 @@ const router = useRouter()
 /** 认证状态管理 store，提供登录状态和用户权限信息 */
 const authStore = useAuthStore()
 /** 博客数据管理 store，提供博客数据加载功能 */
-const blogStore = useBlogStore()
+const blogStore = useArticleStore()
 
 // ==================== 响应式状态 ====================
 
@@ -136,7 +136,7 @@ const submissionStatusMap = ref(new Map())
  * 
  * @type {import('vue').ComputedRef<Array>}
  */
-const filteredBlogs = computed(() => {
+const filteredArticles = computed(() => {
     // 未选择科目时直接返回空
     if (!currentSubject.value) return []
 
@@ -155,14 +155,14 @@ const filteredBlogs = computed(() => {
 /**
  * 博客目录树结构
  * 
- * 构建时机：filteredBlogs 变化时自动重新计算
+ * 构建时机：filteredArticles 变化时自动重新计算
  * 构建结果：根级节点数组（文件夹和文件混排，文件夹在前）
  * 
  * @type {import('vue').ComputedRef<Array>}
  */
 const treeData = computed(() => {
-    if (!filteredBlogs.value.length) return []
-    return buildTree(filteredBlogs.value)
+    if (!filteredArticles.value.length) return []
+    return buildTree(filteredArticles.value)
 })
 
 // ==================== 工具函数 ====================
@@ -181,14 +181,14 @@ const treeData = computed(() => {
  *   输入：{ path: "/基础/语法/变量", title: "let声明", id: 1 }
  *   输出：{ name: "基础" → children: [{ name: "语法" → children: [{ name: "let声明", isFile: true, blogId: 1 }] }] }
  * 
- * @param {Array} blogs - 待构建的博客数据数组
+ * @param {Array} articles - 待构建的博客数据数组
  * @returns {Array} 构建完成的根级节点数组
  */
-function buildTree(blogs) {
+function buildTree(articles) {
     // 虚拟根节点，用于统一处理逻辑
     const root = { children: [] }
 
-    blogs.forEach(blog => {
+    articles.forEach(blog => {
         // 分割路径并去掉第一个空段（路径以 "/" 开头时第一个元素为空字符串）
         const parts = blog.path.split('/')
         const dirParts = parts.slice(1)
@@ -274,10 +274,10 @@ function navigateToDetail(blogId) {
 onMounted(async () => {
     if (authStore.isLoggedIn) {
         // 触发博客数据加载（异步操作）
-        await blogStore.loadBlogData()
+        await blogStore.loadArticleData()
 
         // 提取当前可见博客的 ID 列表
-        const blogIds = filteredBlogs.value.map(b => b.id)
+        const blogIds = filteredArticles.value.map(b => b.id)
         if (blogIds.length > 0) {
             // 批量查询提交状态
             submissionStatusMap.value = await loadSubmissionStatus(blogIds)
@@ -296,8 +296,8 @@ watch(() => route.query.subject, async (newSubject) => {
         currentSubject.value = newSubject
         // 重新加载提交状态
         if (authStore.isLoggedIn) {
-            await blogStore.loadBlogData()
-            const blogIds = filteredBlogs.value.map(b => b.id)
+            await blogStore.loadArticleData()
+            const blogIds = filteredArticles.value.map(b => b.id)
             if (blogIds.length > 0) {
                 submissionStatusMap.value = await loadSubmissionStatus(blogIds)
             }

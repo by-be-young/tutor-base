@@ -16,13 +16,13 @@ export const useAuthStore = defineStore('auth', () => {
         return permissionIds.value
     }
 
-    async function loadAllBlogIds() {
+    async function loadAllArticleIds() {
         try {
-            const res = await fetch(`${import.meta.env.BASE_URL}data/blogs.json`)
+            const res = await fetch(`${import.meta.env.BASE_URL}data/articles.json`)
             if (!res.ok) throw new Error('加载文章数据失败')
-            const blogs = await res.json()
-            if (!Array.isArray(blogs)) return []
-            return blogs
+            const articles = await res.json()
+            if (!Array.isArray(articles)) return []
+            return articles
                 .map(blog => Number(blog?.id))
                 .filter(Number.isFinite)
         } catch (err) {
@@ -40,7 +40,7 @@ export const useAuthStore = defineStore('auth', () => {
 
         // 超级用户处理
         if (normalized.toLowerCase() === 'young') {
-            const allPermissions = await loadAllBlogIds()
+            const allPermissions = await loadAllArticleIds()
             const superUser = {
                 id: 'young-super-user',
                 username: normalized,

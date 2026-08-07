@@ -62,14 +62,14 @@ const showBackButton = computed(() => {
 })
 
 const showCenterInfo = computed(() => {
-    return route.name === 'Category' || route.name === 'BlogDetail'
+    return route.name === 'Category' || route.name === 'ArticleDetail'
 })
 
 const centerTitle = computed(() => {
     if (route.name === 'Category') {
         return route.query.subject || '科目'
     }
-    if (route.name === 'BlogDetail') {
+    if (route.name === 'ArticleDetail') {
         return '文章详情'
     }
     return ''

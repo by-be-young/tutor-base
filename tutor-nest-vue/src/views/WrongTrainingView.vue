@@ -233,21 +233,21 @@
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
-import { useBlogStore } from '@/stores/blogStore'
+import { useArticleStore } from '@/stores/blogStore'
 import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
 import { useWrongQuestionsResolve } from '@/composables/useWrongQuestionsResolve'
 import { useKatex } from '@/composables/useKatex'
 import { useImageEmbed } from '@/composables/useImageEmbed'
 
 const authStore = useAuthStore()
-const blogStore = useBlogStore()
+const blogStore = useArticleStore()
 const wrongQuestionsStore = useWrongQuestionsStore()
 const { resolvedOf, resolveQuestions } = useWrongQuestionsResolve()
 const { renderMath } = useKatex()
 
 // 图片嵌入解析（与文章页一致：![[图片]] → <img>）
 const { processMarkdown, setBasePath } = useImageEmbed()
-setBasePath('blogs/图片/')
+setBasePath('articles/图片/')
 
 // ========== 渲染工具 ==========
 function renderQuestionText(text) {
@@ -439,7 +439,7 @@ function restart() {
 
 // ========== 数据加载 ==========
 async function loadData() {
-    await blogStore.loadBlogData()
+    await blogStore.loadArticleData()
     const studentId = wrongQuestionsStore.getStudentId(authStore.currentUser)
     await wrongQuestionsStore.fetchQuestions(studentId)
     await resolveQuestions(wrongQuestionsStore.questions)

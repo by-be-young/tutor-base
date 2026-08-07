@@ -28,7 +28,7 @@
         <div class="admin-tree">
             <p v-if="!selectedStudentId" class="tree-placeholder">请先选择学生</p>
             <p v-else-if="!currentSubject" class="tree-placeholder">请先选择科目</p>
-            <p v-else-if="filteredBlogs.length === 0" class="tree-placeholder">
+            <p v-else-if="filteredArticles.length === 0" class="tree-placeholder">
                 该筛选条件下暂无文章
             </p>
             <template v-else>
@@ -72,38 +72,38 @@ const filters = [
     { value: 'noneed', label: '无需批阅' }
 ]
 
-const subjectBlogs = computed(() => {
+const subjectArticles = computed(() => {
     return props.blogData.filter(b => b.series === currentSubject.value)
 })
 
-const filteredBlogs = computed(() => {
-    let blogs = subjectBlogs.value
+const filteredArticles = computed(() => {
+    let articles = subjectArticles.value
 
     if (activeFilter.value === 'pending') {
-        blogs = blogs.filter(b => {
+        articles = articles.filter(b => {
             const status = studentSubmissionStatus.value.get(Number(b.id))
             return status === 'pending'
         })
     } else if (activeFilter.value === 'reviewed') {
-        blogs = blogs.filter(b => {
+        articles = articles.filter(b => {
             const status = studentSubmissionStatus.value.get(Number(b.id))
             return status === 'reviewed'
         })
     } else if (activeFilter.value === 'noneed') {
-        blogs = blogs.filter(b => !hasQuestions(Number(b.id)))
+        articles = articles.filter(b => !hasQuestions(Number(b.id)))
     } else if (activeFilter.value === 'unsubmitted') {
-        blogs = blogs.filter(b => {
+        articles = articles.filter(b => {
             const hasKey = answerKeysCache.value.has(Number(b.id))
             const hasSubmission = studentSubmissionStatus.value.has(Number(b.id))
             return hasKey && !hasSubmission
         })
     }
 
-    return blogs
+    return articles
 })
 
 const treeData = computed(() => {
-    return buildTree(filteredBlogs.value)
+    return buildTree(filteredArticles.value)
 })
 
 const studentSubmissionStatus = ref(new Map())
@@ -134,10 +134,10 @@ async function loadAnswerKeysCache() {
     articleHasQuestionsCache.value = questionsCache
 }
 
-function buildTree(blogs) {
+function buildTree(articles) {
     const root = { children: [] }
 
-    blogs.forEach(blog => {
+    articles.forEach(blog => {
         const parts = blog.path.split('/')
         const dirParts = parts.slice(1)
         const title = blog.title

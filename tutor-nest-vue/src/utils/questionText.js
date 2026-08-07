@@ -1,5 +1,5 @@
 // src/utils/questionText.js
-// 题干占位符解析工具（与 BlogDetailView 的解析规则保持一致）
+// 题干占位符解析工具（与 ArticleDetailView 的解析规则保持一致）
 // 占位符语法：
 //   答题占位符：【@】自动编号 / 【@N】显式编号
 //   题干占位符：【题干N】/【题干N-M】（编号前后允许空格）

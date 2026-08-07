@@ -71,7 +71,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
-import { useBlogStore } from '@/stores/blogStore'
+import { useArticleStore } from '@/stores/blogStore'
 import { useAdminStore } from '@/stores/adminStore'
 import PermissionPanel from '@/components/admin/PermissionPanel.vue'
 import ReviewPanel from '@/components/admin/ReviewPanel.vue'
@@ -79,7 +79,7 @@ import AnswerPanel from '@/components/admin/AnswerPanel.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const blogStore = useBlogStore()
+const blogStore = useArticleStore()
 const adminStore = useAdminStore()
 
 // 标签页
@@ -148,7 +148,7 @@ function handleLogout() {
 
 // 初始化
 onMounted(async () => {
-    await blogStore.loadBlogData()
+    await blogStore.loadArticleData()
     await adminStore.loadStudents()
 
     if (students.value.length > 0) {

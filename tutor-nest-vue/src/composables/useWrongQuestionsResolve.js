@@ -3,12 +3,12 @@
 // 错题表只存来源（source_blog_id + source_question_id），
 // 展示时从文章 markdown 与答案表动态解析题干、学科、正确答案、顺序号
 import { ref } from 'vue'
-import { useBlogStore } from '@/stores/blogStore'
+import { useArticleStore } from '@/stores/blogStore'
 import { supabase } from '@/utils/supabase'
 import { resolveQuestionText, resolveQuestionOrder } from '@/utils/questionText'
 
 export function useWrongQuestionsResolve() {
-    const blogStore = useBlogStore()
+    const blogStore = useArticleStore()
 
     const resolvedMap = ref(new Map())   // 错题 id → { subject, questionText, correctAnswer, order }
     const resolvedReady = ref(false)     // 动态解析是否完成
@@ -25,7 +25,7 @@ export function useWrongQuestionsResolve() {
         let md = null
         if (blog) {
             try {
-                const res = await fetch(`${import.meta.env.BASE_URL}blogs/${blog.path}`)
+                const res = await fetch(`${import.meta.env.BASE_URL}articles/${blog.path}`)
                 if (res.ok) md = await res.text()
             } catch {
                 md = null
@@ -47,10 +47,10 @@ export function useWrongQuestionsResolve() {
             return new Map()
         }
         const map = new Map()
-        ;(data || []).forEach(k => map.set(`${k.blog_id}-${String(k.question_id)}`, {
-            answerText: k.answer_text || '',
-            autoGrade: Boolean(k.auto_grade)
-        }))
+            ; (data || []).forEach(k => map.set(`${k.blog_id}-${String(k.question_id)}`, {
+                answerText: k.answer_text || '',
+                autoGrade: Boolean(k.auto_grade)
+            }))
         return map
     }
 

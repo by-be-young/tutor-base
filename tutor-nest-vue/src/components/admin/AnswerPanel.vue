@@ -27,7 +27,7 @@
 
         <div class="admin-tree">
             <p v-if="!currentSubject" class="tree-placeholder">请先选择科目</p>
-            <p v-else-if="filteredBlogs.length === 0" class="tree-placeholder">
+            <p v-else-if="filteredArticles.length === 0" class="tree-placeholder">
                 该筛选条件下暂无文章
             </p>
             <template v-else>
@@ -67,26 +67,26 @@ const filters = [
     { value: 'noneed', label: '无需设置' }
 ]
 
-const subjectBlogs = computed(() => {
+const subjectArticles = computed(() => {
     return props.blogData.filter(b => b.series === currentSubject.value)
 })
 
-const filteredBlogs = computed(() => {
-    let blogs = subjectBlogs.value
+const filteredArticles = computed(() => {
+    let articles = subjectArticles.value
 
     if (activeFilter.value === 'set') {
-        blogs = blogs.filter(b => answerKeysCache.value.has(Number(b.id)))
+        articles = articles.filter(b => answerKeysCache.value.has(Number(b.id)))
     } else if (activeFilter.value === 'unset') {
-        blogs = blogs.filter(b => !answerKeysCache.value.has(Number(b.id)))
+        articles = articles.filter(b => !answerKeysCache.value.has(Number(b.id)))
     } else if (activeFilter.value === 'noneed') {
-        blogs = blogs.filter(b => !hasQuestions(Number(b.id)))
+        articles = articles.filter(b => !hasQuestions(Number(b.id)))
     }
 
-    return blogs
+    return articles
 })
 
 const treeData = computed(() => {
-    return buildTree(filteredBlogs.value)
+    return buildTree(filteredArticles.value)
 })
 
 const answerKeysCache = ref(new Map())
@@ -96,10 +96,10 @@ function hasQuestions(blogId) {
     return articleHasQuestionsCache.value.get(Number(blogId)) || false
 }
 
-function buildTree(blogs) {
+function buildTree(articles) {
     const root = { children: [] }
 
-    blogs.forEach(blog => {
+    articles.forEach(blog => {
         const parts = blog.path.split('/')
         const dirParts = parts.slice(1)
         const title = blog.title

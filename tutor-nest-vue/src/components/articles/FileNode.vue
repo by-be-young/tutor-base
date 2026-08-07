@@ -1,4 +1,4 @@
-<!-- src/components/blogs/FileNode.vue -->
+<!-- src/components/articles/FileNode.vue -->
 <template>
     <div class="tree-item tree-file" :style="paddingStyle" @click="$emit('click')">
         <span class="file-icon"><i class="fas fa-file-alt"></i></span>

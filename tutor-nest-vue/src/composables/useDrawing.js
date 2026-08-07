@@ -365,12 +365,12 @@ export function useDrawingInDetail() {
         () => route.name,
         (newRouteName, oldRouteName) => {
             // 离开旧页面时停用
-            if (oldRouteName === 'BlogDetail') {
+            if (oldRouteName === 'ArticleDetail') {
                 deactivate()
             }
 
             // 进入详情页时激活
-            if (newRouteName === 'BlogDetail') {
+            if (newRouteName === 'ArticleDetail') {
                 // 延迟激活，确保 DOM 已渲染
                 setTimeout(() => activate(), 100)
             }
@@ -380,7 +380,7 @@ export function useDrawingInDetail() {
 
     // 组件挂载时检查当前路由
     onMounted(() => {
-        if (route.name === 'BlogDetail') {
+        if (route.name === 'ArticleDetail') {
             setTimeout(() => activate(), 100)
         }
     })

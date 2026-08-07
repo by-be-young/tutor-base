@@ -87,12 +87,12 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
-import { useBlogStore } from '@/stores/blogStore'
+import { useArticleStore } from '@/stores/blogStore'
 import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const blogStore = useBlogStore()
+const blogStore = useArticleStore()
 const wrongQuestionsStore = useWrongQuestionsStore()
 
 // 本地状态
@@ -116,12 +116,12 @@ const subjects = computed(() => {
     .map(Number)
     .filter(Number.isFinite)
 
-  const allowedBlogs = blogStore.blogData.filter(b =>
+  const allowedArticles = blogStore.blogData.filter(b =>
     permissionIds.includes(Number(b.id))
   )
 
   const subjectMap = new Map()
-  allowedBlogs.forEach(b => {
+  allowedArticles.forEach(b => {
     const subject = b.series
     if (!subjectMap.has(subject)) {
       subjectMap.set(subject, [])
@@ -130,9 +130,9 @@ const subjects = computed(() => {
   })
 
   return Array.from(subjectMap.entries())
-    .map(([name, blogs]) => ({
+    .map(([name, articles]) => ({
       name,
-      count: blogs.length
+      count: articles.length
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 })
@@ -176,7 +176,7 @@ async function handleLogin() {
 
   try {
     await authStore.login(trimmedUsername)
-    await loadBlogsData()
+    await loadArticlesData()
   } catch (err) {
     error.value = err.message || '登录失败，请重试'
     await nextTick()
@@ -197,7 +197,7 @@ async function handleRegister() {
 
   try {
     await authStore.register(trimmedUsername)
-    await loadBlogsData()
+    await loadArticlesData()
   } catch (err) {
     error.value = err.message || '注册失败，请重试'
     await nextTick()
@@ -205,9 +205,9 @@ async function handleRegister() {
   }
 }
 
-async function loadBlogsData() {
+async function loadArticlesData() {
   try {
-    await blogStore.loadBlogData()
+    await blogStore.loadArticleData()
   } catch (err) {
     error.value = '加载数据失败，请稍后重试'
   }
@@ -259,7 +259,7 @@ function handleKeydown(e) {
 onMounted(async () => {
   // 如果已登录，加载数据
   if (authStore.isLoggedIn) {
-    await loadBlogsData()
+    await loadArticlesData()
     await loadWrongQuestions()
   }
 

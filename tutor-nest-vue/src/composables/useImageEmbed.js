@@ -6,7 +6,7 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 // ================================================================
 
 /** 图片存储的基础路径 */
-const IMAGE_BASE_PATH = ref('blogs/图片/')
+const IMAGE_BASE_PATH = ref('articles/图片/')
 
 /** 是否启用懒加载（默认关闭：图片数量有限，懒加载在 Edge 下会因
  *  opacity:0 被判定不可见而延迟 load 事件，导致图片永不显示） */

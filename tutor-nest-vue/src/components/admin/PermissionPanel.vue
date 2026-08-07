@@ -28,7 +28,7 @@
         <div class="admin-tree">
             <p v-if="!selectedStudentId" class="tree-placeholder">请先选择学生</p>
             <p v-else-if="!currentSubject" class="tree-placeholder">请选择科目</p>
-            <p v-else-if="filteredBlogs.length === 0" class="tree-placeholder">
+            <p v-else-if="filteredArticles.length === 0" class="tree-placeholder">
                 该筛选条件下暂无文章
             </p>
             <template v-else>
@@ -76,30 +76,30 @@ const currentPermissions = computed(() => {
     return student?.permissions || []
 })
 
-const subjectBlogs = computed(() => {
+const subjectArticles = computed(() => {
     return props.blogData.filter(b => b.series === currentSubject.value)
 })
 
-const filteredBlogs = computed(() => {
-    let blogs = subjectBlogs.value
+const filteredArticles = computed(() => {
+    let articles = subjectArticles.value
 
     if (activeFilter.value === 'authorized') {
-        blogs = blogs.filter(b => currentPermissions.value.includes(Number(b.id)))
+        articles = articles.filter(b => currentPermissions.value.includes(Number(b.id)))
     } else if (activeFilter.value === 'unauthorized') {
-        blogs = blogs.filter(b => !currentPermissions.value.includes(Number(b.id)))
+        articles = articles.filter(b => !currentPermissions.value.includes(Number(b.id)))
     }
 
-    return blogs
+    return articles
 })
 
 const treeData = computed(() => {
-    return buildTree(filteredBlogs.value)
+    return buildTree(filteredArticles.value)
 })
 
-function buildTree(blogs) {
+function buildTree(articles) {
     const root = { children: [] }
 
-    blogs.forEach(blog => {
+    articles.forEach(blog => {
         const parts = blog.path.split('/')
         const dirParts = parts.slice(1)
         const title = blog.title
