@@ -285,6 +285,17 @@ onMounted(async () => {
     }
 })
 
+// 自动登录（initFromStorage 异步恢复会话）完成后同步加载数据
+watch(() => authStore.isLoggedIn, async (loggedIn) => {
+    if (loggedIn) {
+        await blogStore.loadArticleData()
+        const blogIds = filteredArticles.value.map(b => b.id)
+        if (blogIds.length > 0) {
+            submissionStatusMap.value = await loadSubmissionStatus(blogIds)
+        }
+    }
+})
+
 /**
  * 监听路由 query 参数 subject 的变化
  * 当用户从首页切换科目时，更新当前科目并触发数据重新计算

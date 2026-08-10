@@ -109,15 +109,53 @@ export const useAuthStore = defineStore('auth', () => {
         permissionIds.value = user?.permissions || []
     }
 
-    function initFromStorage() {
+    /**
+     * 从本地恢复登录并同步数据库最新信息：
+     * - 普通学生：重新查询 student 表同步最新权限；用户已删除则清除本地登录；
+     *   数据库不可达时保留本地快照，避免误登出
+     * - 超级用户：从 articles.json 刷新全部文章权限（新增文章自动可见）
+     */
+    async function initFromStorage() {
         const raw = localStorage.getItem(STORAGE_KEY)
         if (!raw) return
+        let user
         try {
-            const user = JSON.parse(raw)
-            setUser(user)
+            user = JSON.parse(raw)
         } catch {
             localStorage.removeItem(STORAGE_KEY)
+            return
         }
+
+        // 超级用户：刷新全部文章权限
+        if (user.id === 'young-super-user') {
+            const allPermissions = await loadAllArticleIds()
+            const fresh = { ...user, permissions: allPermissions }
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh))
+            setUser(fresh)
+            return
+        }
+
+        // 普通学生：从数据库同步最新信息（权限可能已变更）
+        const { data, error } = await supabase
+            .from('student')
+            .select('id, username, permissions')
+            .eq('id', user.id)
+            .maybeSingle()
+
+        if (error) {
+            // 数据库不可达：保留本地快照，避免误登出
+            console.error('同步用户信息失败，使用本地缓存:', error)
+            setUser(user)
+            return
+        }
+        if (!data) {
+            // 用户已不存在 → 清除本地登录
+            logout()
+            return
+        }
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+        setUser(data)
     }
 
     return {

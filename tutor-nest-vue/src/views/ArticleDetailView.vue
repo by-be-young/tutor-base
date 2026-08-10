@@ -954,16 +954,16 @@ async function handleAddToWrongBook(questionId, btn) {
     const studentIdStr = String(studentId.value)
     const blogIdVal = blogId.value
 
-    // 检查是否已在错题本
+    // 检查是否已在错题本（removed = true 的软删除记录视为不存在，可重新加入）
     const { data: existing } = await supabase
         .from('wrong_questions')
-        .select('id')
+        .select('id, removed, wrong_count')
         .eq('student_id', studentIdStr)
         .eq('source_blog_id', blogIdVal)
         .eq('source_question_id', key)
         .maybeSingle()
 
-    if (existing) {
+    if (existing && !existing.removed) {
         showToast('该题已在错题本中', 'info')
         return
     }
@@ -972,16 +972,28 @@ async function handleAddToWrongBook(questionId, btn) {
     const submission = submissionMap.value.get(key)
     const answer = node?.textarea?.value || submission?.answer_text || ''
 
-    const { error } = await supabase
-        .from('wrong_questions')
-        .insert({
-            student_id: studentIdStr,
-            source_blog_id: blogIdVal,
-            source_question_id: key,
-            my_answer: answer,
-            is_manual: true,
-            wrong_count: 1
-        })
+    // 存在软删除记录时复活（保留错因、笔记、掌握状态等字段），否则新建
+    const { error } = existing
+        ? await supabase
+            .from('wrong_questions')
+            .update({
+                removed: false,
+                my_answer: answer,
+                is_manual: true,
+                wrong_count: (existing.wrong_count || 0) + 1,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', existing.id)
+        : await supabase
+            .from('wrong_questions')
+            .insert({
+                student_id: studentIdStr,
+                source_blog_id: blogIdVal,
+                source_question_id: key,
+                my_answer: answer,
+                is_manual: true,
+                wrong_count: 1
+            })
 
     if (error) {
         console.error('加入错题本失败:', error)
@@ -989,7 +1001,7 @@ async function handleAddToWrongBook(questionId, btn) {
         return
     }
 
-    showToast('已加入错题本', 'success')
+    showToast(existing ? '已重新加入错题本' : '已加入错题本', 'success')
     if (btn) {
         btn.disabled = true
         btn.innerHTML = '<i class="fas fa-check"></i><span>已加入</span>'
@@ -1505,6 +1517,11 @@ watch(
         loadContent()
     }
 )
+
+// 自动登录（initFromStorage 异步恢复会话）完成后重新加载内容
+watch(() => authStore.isLoggedIn, (loggedIn) => {
+    if (loggedIn) loadContent()
+})
 
 // ========== 生命周期 ==========
 onMounted(async () => {

@@ -138,6 +138,7 @@ export const useWrongQuestionsStore = defineStore('wrongQuestions', () => {
             source_blog_id: sourceArticleId,
             source_question_id: sourceQuestionIdStr,
             wrong_count: 1,
+            removed: false, // 曾被删除（软删除）的记录再次做错时复活
             updated_at: new Date().toISOString()
         }
 

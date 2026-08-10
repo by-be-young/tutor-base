@@ -223,6 +223,14 @@ async function loadWrongQuestions() {
   }
 }
 
+// 自动登录（initFromStorage 异步恢复会话）完成后同步加载数据
+watch(() => authStore.isLoggedIn, async (loggedIn) => {
+  if (loggedIn) {
+    await loadArticlesData()
+    await loadWrongQuestions()
+  }
+})
+
 // 水平滚动
 function enableHorizontalScroll(container) {
   if (!container) return
