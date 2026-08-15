@@ -5,12 +5,20 @@ import { supabase } from '@/utils/supabase'
 
 export const useAuthStore = defineStore('auth', () => {
     const STORAGE_KEY = 'blog_user'
+    const ADMIN_BACKUP_KEY = 'blog_admin_backup' // 管理员进入学生账号前的会话备份
 
     const currentUser = ref(null)
     const permissionIds = ref([])
 
     const isLoggedIn = computed(() => !!currentUser.value)
     const username = computed(() => currentUser.value?.username || '')
+
+    // 是否处于「管理员进入学生账号」状态（存在备份且当前不是超级用户）
+    const isImpersonating = computed(() => {
+        return !!localStorage.getItem(ADMIN_BACKUP_KEY)
+            && !!currentUser.value
+            && currentUser.value.id !== 'young-super-user'
+    })
 
     function getPermissionIds() {
         return permissionIds.value
@@ -100,8 +108,40 @@ export const useAuthStore = defineStore('auth', () => {
 
     function logout() {
         localStorage.removeItem(STORAGE_KEY)
+        localStorage.removeItem(ADMIN_BACKUP_KEY)
         currentUser.value = null
         permissionIds.value = []
+    }
+
+    /**
+     * 管理员快捷进入学生账号：备份当前管理员会话后直接登录为学生，无需账号密码
+     * @param {string} username 学生用户名
+     */
+    async function enterStudentAccount(username) {
+        if (currentUser.value) {
+            localStorage.setItem(ADMIN_BACKUP_KEY, JSON.stringify(currentUser.value))
+        }
+        return await login(username)
+    }
+
+    /**
+     * 从学生账号返回管理员：恢复备份的管理员会话并同步最新权限
+     * @returns {object|null} 恢复的管理员用户；无备份时返回 null
+     */
+    async function restoreAdmin() {
+        const raw = localStorage.getItem(ADMIN_BACKUP_KEY)
+        if (!raw) return null
+        try {
+            const admin = JSON.parse(raw)
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(admin))
+            localStorage.removeItem(ADMIN_BACKUP_KEY)
+            setUser(admin)
+            await initFromStorage() // 同步最新权限（超级用户刷新全部文章；普通学生查库）
+            return admin
+        } catch {
+            localStorage.removeItem(ADMIN_BACKUP_KEY)
+            return null
+        }
     }
 
     function setUser(user) {
@@ -163,11 +203,14 @@ export const useAuthStore = defineStore('auth', () => {
         permissionIds,
         isLoggedIn,
         username,
+        isImpersonating,
         getPermissionIds,
         login,
         register,
         logout,
         initFromStorage,
-        setUser
+        setUser,
+        enterStudentAccount,
+        restoreAdmin
     }
 })

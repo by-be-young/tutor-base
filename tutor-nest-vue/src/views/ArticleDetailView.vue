@@ -682,6 +682,10 @@ function renderReviewSlot(questionId, index) {
     wrapper.className = 'question-card question-card-review'
     wrapper.dataset.questionId = questionId
 
+    // 题号角标（左上角，显示顺序号，与实际 id 无关）
+    const numberBadge = createPill(`第 ${index} 题`, 'is-number')
+    wrapper.appendChild(numberBadge)
+
     const submission = submissionMap.value.get(questionId)
     const answerKey = answerKeyMap.value.get(questionId)
 
@@ -743,6 +747,10 @@ function renderAnswerSlot(questionId, index) {
     const wrapper = document.createElement('div')
     wrapper.className = 'question-card question-card-answer'
     wrapper.dataset.questionId = questionId
+
+    // 题号角标（左上角，显示顺序号，与实际 id 无关）
+    const numberBadge = createPill(`第 ${index} 题`, 'is-number')
+    wrapper.appendChild(numberBadge)
 
     const key = answerKeyMap.value.get(questionId) || { answer_text: '', auto_grade: false }
 
@@ -1811,6 +1819,26 @@ onUnmounted(() => {
     background: rgba(91, 168, 164, 0.15);
     color: #2f6a66;
     border-color: rgba(91, 168, 164, 0.3);
+}
+
+/* 题号角标：review / answer 模式的答题框同样标注题号（与 study 模式一致，左上角） */
+:deep(.question-card:not(.question-card-study) > .question-pill.is-number) {
+    position: absolute;
+    top: -10px;
+    left: 12px;
+    z-index: 1;
+    padding: 1px 10px;
+    min-height: 20px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    line-height: 1.5;
+    background: rgba(91, 168, 164, 0.15);
+    color: #2f6a66;
+    border: 1px solid rgba(91, 168, 164, 0.3);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 /* 状态角标：右上角 */

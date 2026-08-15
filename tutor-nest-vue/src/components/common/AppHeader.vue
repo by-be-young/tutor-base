@@ -4,9 +4,9 @@
         <div class="nav-inner">
             <!-- 左侧 -->
             <div class="nav-left">
-                <router-link v-if="showBackButton" :to="backLink" class="nav-logo">
+                <a v-if="showBackButton" href="#" class="nav-logo" @click.prevent="handleBack">
                 <i class="fas fa-arrow-left"></i> {{ backText }}
-            </router-link>
+            </a>
                 <span v-else class="nav-logo">学习资料仓库</span>
             </div>
 
@@ -30,6 +30,10 @@
                 <span class="nav-user-status">
                     {{ authStore.isLoggedIn ? authStore.username : '未登录' }}
                 </span>
+                <!-- 返回管理员（管理员进入学生账号后显示，一键恢复管理员会话） -->
+                <button v-if="authStore.isImpersonating" class="nav-btn nav-btn-back-admin" @click="handleRestoreAdmin">
+                    <i class="fas fa-user-shield"></i> 返回管理员
+                </button>
                 <router-link v-if="authStore.isLoggedIn" to="/wrong-questions" class="nav-btn nav-btn-wrong-questions"
                     :class="{ 'is-active': route.name === 'WrongQuestions' }">
                     <i class="fas fa-book-medical"></i> 错题本
@@ -110,6 +114,21 @@ const backLink = computed(() => {
 const backText = computed(() => {
     return route.query.from === 'admin' ? '管理员' : '学习资料仓库'
 })
+
+// 返回上一级页面（无历史记录时回退到原目标地址）
+function handleBack() {
+    if (window.history.state?.back) {
+        router.back()
+    } else {
+        router.push(backLink.value)
+    }
+}
+
+// 从学生账号一键返回管理员
+async function handleRestoreAdmin() {
+    await authStore.restoreAdmin()
+    router.push('/admin')
+}
 
 function handleLogout() {
     authStore.logout()
@@ -260,6 +279,21 @@ function handleLogout() {
     background: rgba(151, 130, 200, 0.3);
     border-color: rgba(151, 130, 200, 0.45);
     font-weight: 600;
+}
+
+/* 返回管理员（管理员进入学生账号后显示） */
+.nav-btn-back-admin {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(91, 168, 164, 0.16);
+    color: var(--teal-dark);
+    border-color: rgba(91, 168, 164, 0.3);
+}
+
+.nav-btn-back-admin:hover {
+    background: rgba(91, 168, 164, 0.32);
+    transform: translateY(-1px);
 }
 
 .nav-subject-switcher {

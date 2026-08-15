@@ -19,6 +19,10 @@
                 <button class="admin-btn admin-btn-add" @click="addStudent">
                     <i class="fas fa-user-plus"></i> 新增
                 </button>
+                <button class="admin-btn admin-btn-enter" :disabled="!selectedStudentId" @click="enterStudentAccount"
+                    title="以该学生的身份直接进入，无需账号密码">
+                    <i class="fas fa-sign-in-alt"></i> 进入账号
+                </button>
                 <button class="admin-btn admin-btn-save" :disabled="!permissionDirty" @click="savePermissions">
                     <i :class="permissionDirty ? 'fas fa-save' : 'fas fa-check'"></i>
                     {{ permissionDirty ? '保存权限' : '已保存' }}
@@ -138,6 +142,18 @@ async function addStudent() {
         selectedStudentId.value = adminStore.currentStudentId
     } catch (error) {
         alert(error.message || '新增失败，请重试')
+    }
+}
+
+// 以当前所选学生的身份直接进入其账号（备份管理员会话，无需账号密码）
+async function enterStudentAccount() {
+    const student = adminStore.currentStudent
+    if (!student) return
+    try {
+        await authStore.enterStudentAccount(student.username)
+        router.push('/')
+    } catch (error) {
+        alert(error.message || '进入失败，请重试')
     }
 }
 
@@ -275,6 +291,23 @@ watch(selectedStudentId, (newId) => {
 
 .admin-btn-add:hover {
     background: rgba(91, 168, 164, 0.25);
+}
+
+.admin-btn-enter {
+    background: rgba(143, 207, 184, 0.35);
+    color: #2f6a66;
+    border-color: rgba(143, 207, 184, 0.55);
+}
+
+.admin-btn-enter:hover {
+    background: rgba(143, 207, 184, 0.5);
+}
+
+.admin-btn-enter:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }
 
 .admin-btn-save {
