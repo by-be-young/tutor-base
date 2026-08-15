@@ -34,6 +34,11 @@
                     :class="{ 'is-active': route.name === 'WrongQuestions' }">
                     <i class="fas fa-book-medical"></i> 错题本
                 </router-link>
+                <!-- 任务系统：仅超级管理员 young 可见 -->
+                <router-link v-if="isSuperAdmin" to="/tasks" class="nav-btn nav-btn-tasks"
+                    :class="{ 'is-active': route.name === 'Tasks' }">
+                    <i class="fas fa-list-check"></i> 任务
+                </router-link>
                 <button v-if="!authStore.isLoggedIn" class="nav-btn nav-btn-login" @click="$emit('login-click')">
                     登录
                 </button>
@@ -53,6 +58,9 @@ import { useAuthStore } from '@/stores/authStore'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+
+// 超级管理员（young）可见任务系统入口
+const isSuperAdmin = computed(() => authStore.username.toLowerCase() === 'young')
 
 const emit = defineEmits(['login-click'])
 
@@ -229,6 +237,28 @@ function handleLogout() {
 .nav-btn-wrong-questions.is-active {
     background: rgba(217, 186, 75, 0.28);
     border-color: rgba(217, 186, 75, 0.4);
+    font-weight: 600;
+}
+
+/* 任务入口（仅超级管理员可见） */
+.nav-btn-tasks {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(151, 130, 200, 0.14);
+    color: #5d4a8a;
+    border-color: rgba(151, 130, 200, 0.22);
+}
+
+.nav-btn-tasks:hover {
+    background: rgba(151, 130, 200, 0.26);
+    transform: translateY(-1px);
+    color: #4a3a72;
+}
+
+.nav-btn-tasks.is-active {
+    background: rgba(151, 130, 200, 0.3);
+    border-color: rgba(151, 130, 200, 0.45);
     font-weight: 600;
 }
 
