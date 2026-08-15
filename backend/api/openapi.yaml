@@ -1,0 +1,376 @@
+openapi: 3.1.0
+info:
+  title: Tutor Base Backend API
+  version: 0.1.0
+servers:
+  - url: /api/v1
+paths:
+  /system/status:
+    get:
+      operationId: getSystemStatus
+      summary: Get the backend service status
+      security: []
+      responses:
+        '200':
+          description: The service is running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStatus'
+              example:
+                status: ok
+                service: tutor-base-backend
+                version: 0.1.0-SNAPSHOT
+                time: '2026-08-14T08:30:00Z'
+  /csrf:
+    get:
+      operationId: getCsrfToken
+      summary: 获取当前浏览器会话的 CSRF token
+      security: []
+      responses:
+        '200':
+          description: Token 只应保存在前端内存中。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CsrfToken'
+  /sessions:
+    post:
+      operationId: createSession
+      summary: 使用用户名和密码建立会话
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功并轮换会话 Cookie。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSession'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+  /session:
+    get:
+      operationId: getCurrentSession
+      summary: 获取当前账户的安全投影
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 当前已认证账户。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSession'
+        '401':
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: deleteCurrentSession
+      summary: 注销并撤销当前服务端会话
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      responses:
+        '204':
+          description: 会话已撤销，Cookie 已清除。
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /account-activations/complete:
+    post:
+      operationId: completeAccountActivation
+      summary: 使用一次性激活码设置初始密码
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteActivationRequest'
+      responses:
+        '204':
+          description: 账户已激活；该操作不会自动登录。
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+  /admin/account-activations:
+    post:
+      operationId: issueAccountActivation
+      summary: 为待激活账户发行新的一次性激活码
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueActivationRequest'
+      responses:
+        '201':
+          description: 明文激活码只在本次响应中出现。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuedActivation'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /admin/learners:
+    get:
+      operationId: listLearners
+      summary: List learners and their content grants
+      description: Results are ordered by learnerId ascending and use an opaque keyset cursor.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: A page of learners visible to an administrator.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearnerCollection'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+components:
+  parameters:
+    CsrfHeader:
+      name: X-CSRF-TOKEN
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-TUTOR_SESSION
+  responses:
+    Problem:
+      description: The request could not be completed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ApiProblem'
+  schemas:
+    CsrfToken:
+      type: object
+      additionalProperties: false
+      required: [token, headerName]
+      properties:
+        token:
+          type: string
+          minLength: 1
+        headerName:
+          type: string
+          const: X-CSRF-TOKEN
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 100
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+    AccountSession:
+      type: object
+      additionalProperties: false
+      required: [accountId, learnerId, username, roles]
+      properties:
+        accountId:
+          type: integer
+          format: int64
+        learnerId:
+          type: [integer, 'null']
+          format: int64
+        username:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [LEARNER, ADMINISTRATOR]
+    CompleteActivationRequest:
+      type: object
+      additionalProperties: false
+      required: [username, activationCode, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 100
+        activationCode:
+          type: string
+          minLength: 1
+          maxLength: 256
+        password:
+          type: string
+          minLength: 12
+          maxLength: 128
+    IssueActivationRequest:
+      type: object
+      additionalProperties: false
+      required: [accountId]
+      properties:
+        accountId:
+          type: integer
+          format: int64
+          minimum: 1
+    IssuedActivation:
+      type: object
+      additionalProperties: false
+      required: [activationId, activationCode, expiresAt]
+      properties:
+        activationId:
+          type: integer
+          format: int64
+        activationCode:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+    SystemStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - service
+        - version
+        - time
+      properties:
+        status:
+          type: string
+          const: ok
+        service:
+          type: string
+          const: tutor-base-backend
+        version:
+          type: string
+          minLength: 1
+        time:
+          type: string
+          format: date-time
+    LearnerCollection:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LearnerSummary'
+        nextCursor:
+          type:
+            - string
+            - 'null'
+    LearnerSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - learnerId
+        - username
+        - contentGrantArticleIds
+      properties:
+        learnerId:
+          type: integer
+          format: int64
+          minimum: 1
+        username:
+          type: string
+          minLength: 1
+        contentGrantArticleIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+    ApiProblem:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
+        - code
+        - traceId
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
+        code:
+          type: string
+        traceId:
+          type: string
