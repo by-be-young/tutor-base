@@ -10,6 +10,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
@@ -33,6 +34,16 @@ final class ApiExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ProblemDetail validationFailed(MethodArgumentNotValidException exception, HttpServletRequest request) {
+        return ApiProblem.create(
+                HttpStatus.BAD_REQUEST,
+                "validation_failed",
+                "Request validation failed",
+                "One or more request fields are invalid.",
+                request);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    ProblemDetail constraintViolation(ConstraintViolationException exception, HttpServletRequest request) {
         return ApiProblem.create(
                 HttpStatus.BAD_REQUEST,
                 "validation_failed",

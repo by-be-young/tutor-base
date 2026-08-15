@@ -138,7 +138,8 @@
 | Method | Path | Auth | 语义 |
 | --- | --- | --- | --- |
 | GET | `/admin/learners` | administrator | 按学习者 ID 游标查询学习者及内容授权；账户状态在身份迁移后增加 |
-| POST | `/admin/account-activations` | administrator | 为待激活账户生成一次性激活码 |
+| PUT | `/admin/learners/{learnerId}/password` | administrator | 直接设置或重置学习者密码，并撤销其旧会话和未使用激活码 |
+| POST | `/admin/account-activations` | administrator | 兼容接口：为待激活账户生成一次性激活码；当前前端不使用 |
 
 ## 7. System Status contract（第一阶段）
 

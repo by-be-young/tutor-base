@@ -2,6 +2,9 @@ package com.tutorbase.database;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -12,6 +15,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationVersion;
 import org.flywaydb.core.api.output.MigrateResult;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Container;
@@ -34,7 +38,7 @@ class FlywayMigrationTest {
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
 
     @Test
-    void givenEmptyPostgresWhenFlywayMigratesThenApplicationBaselineIsComplete() throws SQLException {
+    void givenEmptyPostgresWhenFlywayMigratesThenApplicationBaselineIsComplete() throws SQLException, IOException {
         Flyway flyway = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
@@ -45,6 +49,7 @@ class FlywayMigrationTest {
 
         assertThat(result.migrationsExecuted).isEqualTo(3);
         assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("3");
+        assertThat(flyway.migrate().migrationsExecuted).isZero();
 
         try (Connection connection = POSTGRES.createConnection("")) {
             assertThat(readApplicationTables(connection)).isEqualTo(EXPECTED_TABLES);
@@ -58,9 +63,64 @@ class FlywayMigrationTest {
             assertThat(hasConstraint(connection, "account_activation_state_check")).isTrue();
             assertThat(hasConstraint(connection, "account_activation_expiry_check")).isTrue();
 
+            execute(connection, Files.readString(
+                    Path.of("..", "database", "audit", "post_v3_identity_checks.sql")));
+            execute(connection, Files.readString(
+                    Path.of("..", "database", "audit", "flyway_adoption_checks.sql")));
+            execute(connection, Files.readString(
+                    Path.of("..", "database", "audit", "flyway_adoption_details.sql")));
+
             assertDatabaseRejectsInvalidStates(connection);
             assertWrongQuestionsFollowStudentLifecycle(connection);
             assertUpdatedAtTriggers(connection);
+        }
+    }
+
+    @Test
+    void givenVerifiedProductionDriftWhenReconciledThenV2InvariantsAreInstalled() throws Exception {
+        try (PostgreSQLContainer driftDatabase = new PostgreSQLContainer("postgres:17-alpine")) {
+            driftDatabase.start();
+            Flyway.configure()
+                    .dataSource(driftDatabase.getJdbcUrl(), driftDatabase.getUsername(), driftDatabase.getPassword())
+                    .locations("classpath:db/migration")
+                    .target(MigrationVersion.fromVersion("1"))
+                    .load()
+                    .migrate();
+
+            try (Connection connection = driftDatabase.createConnection("")) {
+                execute(connection, """
+                        ALTER TABLE public.article_answer_keys
+                            RENAME CONSTRAINT article_answer_keys_blog_question_unique TO unique_blog_question_id;
+                        ALTER INDEX public.idx_article_answer_keys_question_id RENAME TO idx_answer_keys_question_id;
+                        ALTER TABLE public.article_question_submissions
+                            RENAME CONSTRAINT article_question_submissions_blog_student_question_unique
+                            TO unique_blog_student_question_id;
+                        ALTER TABLE public.article_question_submissions
+                            ADD CONSTRAINT unique_submission UNIQUE (blog_id, student_id, question_id);
+                        ALTER INDEX public.idx_article_question_submissions_question_id
+                            RENAME TO idx_submissions_question_id;
+                        ALTER TABLE public.wrong_questions
+                            RENAME CONSTRAINT wrong_questions_student_source_unique
+                            TO wrong_questions_student_id_source_blog_id_source_question_i_key;
+                        """);
+
+                String reconciliation = Files.readString(Path.of(
+                        "..", "database", "reconciliation",
+                        "2026-08-15_align_existing_schema_through_v3.sql"));
+                execute(connection, reconciliation);
+                execute(connection, reconciliation);
+
+                assertThat(isColumnNullable(connection, "student", "permissions")).isFalse();
+                assertThat(hasConstraint(connection, "article_question_submissions_review_state_check")).isTrue();
+                assertThat(hasConstraint(connection, "wrong_questions_student_id_fkey")).isTrue();
+                assertThat(hasConstraint(connection, "wrong_questions_wrong_count_check")).isTrue();
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM pg_proc AS procedure
+                        JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+                        WHERE namespace.nspname = 'public' AND procedure.proname = 'set_updated_at'
+                        """)).isEqualTo(1);
+                assertThat(readTriggerCount(connection)).isEqualTo(3);
+            }
         }
     }
 
@@ -204,6 +264,20 @@ class FlywayMigrationTest {
             row.next();
             return row.getLong(1);
         }
+    }
+
+    private long readTriggerCount(Connection connection) throws SQLException {
+        return readCount(connection, """
+                SELECT count(*) FROM pg_trigger AS trigger
+                JOIN pg_class AS table_class ON table_class.oid = trigger.tgrelid
+                JOIN pg_namespace AS namespace ON namespace.oid = table_class.relnamespace
+                WHERE namespace.nspname = 'public'
+                  AND trigger.tgname IN (
+                      'article_answer_keys_set_updated_at',
+                      'article_question_submissions_set_updated_at',
+                      'wrong_questions_set_updated_at')
+                  AND NOT trigger.tgisinternal
+                """);
     }
 
     private OffsetDateTime readUpdatedAt(Connection connection, String tableName, long id) throws SQLException {

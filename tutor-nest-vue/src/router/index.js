@@ -1,5 +1,6 @@
 // src/router/index.js
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/authStore'
 
 const routes = [
   {
@@ -23,7 +24,7 @@ const routes = [
     path: '/admin',
     name: 'Admin',
     component: () => import('@/views/AdminView.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, requiredRole: 'ADMINISTRATOR' }
   },
   {
     path: '/wrong-questions',
@@ -60,15 +61,19 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
-  // 这里可以添加认证检查
-  // const authStore = useAuthStore()
-  // if (to.meta.requiresAuth && !authStore.isLoggedIn) {
-  //   next('/')
-  // } else {
-  //   next()
-  // }
-  next()
+router.beforeEach(async (to) => {
+  const authStore = useAuthStore()
+  await authStore.ensureInitialized()
+
+  if (to.meta.requiresAuth && !authStore.isLoggedIn) {
+    return { name: 'Home', query: { redirect: to.fullPath } }
+  }
+  const requiresAdministrator = to.meta.requiredRole === 'ADMINISTRATOR'
+    || (to.name === 'ArticleDetail' && ['answer', 'review'].includes(to.query.mode))
+  if (requiresAdministrator && !authStore.isAdministrator) {
+    return { name: 'Home' }
+  }
+  return true
 })
 
 export default router

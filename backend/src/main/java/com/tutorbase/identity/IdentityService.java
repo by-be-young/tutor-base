@@ -87,9 +87,25 @@ class IdentityService {
 
     @Transactional
     void bootstrapAdministrator(String username, String password) {
-        if (!properties.bootstrap().enabled()
-                || store.activateBootstrap(normalize(username), passwords.encode(password), clock.instant()) != 1) {
+        if (!properties.bootstrap().enabled()) {
             throw new InvalidActivation();
+        }
+        String normalizedUsername = normalize(username);
+        Instant now = clock.instant();
+        store.prepareBootstrapAdministrator(normalizedUsername);
+        if (store.activateBootstrap(normalizedUsername, passwords.encode(password), now) != 1) {
+            throw new InvalidActivation();
+        }
+    }
+
+    @Transactional
+    void setLearnerPassword(long learnerId, String password) {
+        String passwordHash = passwords.encode(password);
+        switch (store.setLearnerPassword(learnerId, passwordHash, clock.instant())) {
+            case CHANGED -> {
+            }
+            case NOT_FOUND -> throw new AccountNotFound();
+            case STATE_CONFLICT -> throw new AccountStateConflict();
         }
     }
 

@@ -1518,7 +1518,7 @@ watch(
     }
 )
 
-// 自动登录（initFromStorage 异步恢复会话）完成后重新加载内容
+// 服务端会话异步恢复完成后重新加载内容
 watch(() => authStore.isLoggedIn, (loggedIn) => {
     if (loggedIn) loadContent()
 })

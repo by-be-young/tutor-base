@@ -34,6 +34,9 @@
                     :class="{ 'is-active': route.name === 'WrongQuestions' }">
                     <i class="fas fa-book-medical"></i> 错题本
                 </router-link>
+                <router-link v-if="authStore.isAdministrator" to="/admin" class="nav-btn nav-btn-admin">
+                    管理
+                </router-link>
                 <button v-if="!authStore.isLoggedIn" class="nav-btn nav-btn-login" @click="$emit('login-click')">
                     登录
                 </button>
@@ -103,9 +106,12 @@ const backText = computed(() => {
     return route.query.from === 'admin' ? '管理员' : '学习资料仓库'
 })
 
-function handleLogout() {
-    authStore.logout()
-    router.push('/')
+async function handleLogout() {
+    try {
+        await authStore.logout()
+    } finally {
+        await router.push('/')
+    }
 }
 </script>
 

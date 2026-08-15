@@ -8,7 +8,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-@RestControllerAdvice(assignableTypes = {IdentityController.class, AdminAccountActivationController.class})
+@RestControllerAdvice(assignableTypes = {
+        IdentityController.class,
+        AdminAccountActivationController.class,
+        AdminLearnerPasswordController.class
+})
 final class IdentityHttpExceptionHandler {
     @ExceptionHandler(IdentityRateLimiter.RateLimited.class)
     ResponseEntity<ProblemDetail> rateLimited(
@@ -45,6 +49,6 @@ final class IdentityHttpExceptionHandler {
             IdentityService.AccountStateConflict exception,
             HttpServletRequest request) {
         return ApiProblem.create(HttpStatus.CONFLICT, "state_conflict", "Account state conflict",
-                "The account is not pending activation.", request);
+                "The requested account state does not allow this operation.", request);
     }
 }

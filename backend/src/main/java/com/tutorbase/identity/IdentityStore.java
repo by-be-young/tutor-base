@@ -82,6 +82,18 @@ final class IdentityStore {
                 .param("username", username).update();
     }
 
+    void prepareBootstrapAdministrator(String username) {
+        jdbc.sql("LOCK TABLE public.account IN SHARE ROW EXCLUSIVE MODE").update();
+        jdbc.sql("""
+                INSERT INTO public.account (username, username_normalized, role)
+                SELECT :username, :username, 'administrator'
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM public.account WHERE role = 'administrator'
+                )
+                ON CONFLICT (username_normalized) DO NOTHING
+                """).param("username", username).update();
+    }
+
     Optional<String> lockAccountStatus(long accountId) {
         return jdbc.sql("SELECT status FROM public.account WHERE id = :accountId FOR UPDATE")
                 .param("accountId", accountId)
@@ -100,6 +112,44 @@ final class IdentityStore {
                 RETURNING id
                 """).param("accountId", accountId).param("hash", hash).param("expiresAt", dbTime(expiresAt))
                 .param("createdBy", createdBy).param("now", dbTime(now)).query(Long.class).single();
+    }
+
+    PasswordChangeResult setLearnerPassword(long learnerId, String passwordHash, Instant now) {
+        String result = jdbc.sql("""
+                WITH target AS (
+                    SELECT id, role, status
+                    FROM public.account WHERE learner_id = :learnerId FOR UPDATE
+                ), eligible AS (
+                    SELECT id FROM target
+                    WHERE role = 'learner' AND status IN ('pending_activation', 'active')
+                ), updated AS (
+                    UPDATE public.account a
+                    SET password_hash = :passwordHash,
+                        status = 'active',
+                        activated_at = COALESCE(a.activated_at, :now)
+                    FROM eligible WHERE a.id = eligible.id
+                    RETURNING a.id
+                ), revoked_sessions AS (
+                    UPDATE public.account_session s SET revoked_at = :now
+                    FROM updated WHERE s.account_id = updated.id AND s.revoked_at IS NULL
+                    RETURNING s.id
+                ), revoked_activations AS (
+                    UPDATE public.account_activation t SET revoked_at = :now
+                    FROM updated
+                    WHERE t.account_id = updated.id AND t.consumed_at IS NULL AND t.revoked_at IS NULL
+                    RETURNING t.id
+                )
+                SELECT CASE
+                    WHEN NOT EXISTS (SELECT 1 FROM target) THEN 'not_found'
+                    WHEN NOT EXISTS (SELECT 1 FROM eligible) THEN 'state_conflict'
+                    ELSE 'changed'
+                END
+                """).param("learnerId", learnerId)
+                .param("passwordHash", passwordHash)
+                .param("now", dbTime(now))
+                .query(String.class)
+                .single();
+        return PasswordChangeResult.valueOf(result.toUpperCase(java.util.Locale.ROOT));
     }
 
     private static AccountRow account(ResultSet rs, int rowNumber) throws SQLException {
@@ -125,5 +175,11 @@ final class IdentityStore {
     }
 
     record SessionRow(long id, AccountPrincipal principal) {
+    }
+
+    enum PasswordChangeResult {
+        CHANGED,
+        NOT_FOUND,
+        STATE_CONFLICT
     }
 }

@@ -74,9 +74,10 @@
 
       <!-- 登录表单（未登录时显示） -->
       <form v-else class="login-form" @submit.prevent="handleLogin">
-        <input v-model="username" type="text" placeholder="你的用户名" required autofocus ref="usernameInput" />
-        <button type="submit" class="login-btn">进入</button>
-        <button type="button" class="register-btn" @click="handleRegister">注册</button>
+        <input v-model="username" type="text" autocomplete="username" placeholder="用户名" required autofocus
+          ref="usernameInput" />
+        <input v-model="password" type="password" autocomplete="current-password" placeholder="密码" required />
+        <button type="submit" class="login-btn">登录</button>
         <div v-if="error" class="login-error">{{ error }}</div>
       </form>
     </div>
@@ -97,6 +98,7 @@ const wrongQuestionsStore = useWrongQuestionsStore()
 
 // 本地状态
 const username = ref('')
+const password = ref('')
 const error = ref('')
 const scrollContainer = ref(null)
 const usernameInput = ref(null)
@@ -173,33 +175,21 @@ async function handleLogin() {
     usernameInput.value?.focus()
     return
   }
-
-  try {
-    await authStore.login(trimmedUsername)
-    await loadArticlesData()
-  } catch (err) {
-    error.value = err.message || '登录失败，请重试'
-    await nextTick()
-    usernameInput.value?.focus()
-  }
-}
-
-async function handleRegister() {
-  error.value = ''
-  const trimmedUsername = username.value.trim()
-
-  if (!trimmedUsername) {
-    error.value = '请输入用户名'
-    await nextTick()
-    usernameInput.value?.focus()
+  if (!password.value) {
+    error.value = '请输入密码'
     return
   }
 
   try {
-    await authStore.register(trimmedUsername)
+    await authStore.login(trimmedUsername, password.value)
+    password.value = ''
     await loadArticlesData()
+    const redirect = router.currentRoute.value.query.redirect
+    if (typeof redirect === 'string' && redirect.startsWith('/')) {
+      await router.push(redirect)
+    }
   } catch (err) {
-    error.value = err.message || '注册失败，请重试'
+    error.value = err.message || '登录失败，请重试'
     await nextTick()
     usernameInput.value?.focus()
   }
@@ -223,7 +213,7 @@ async function loadWrongQuestions() {
   }
 }
 
-// 自动登录（initFromStorage 异步恢复会话）完成后同步加载数据
+// 服务端会话异步恢复完成后同步加载数据
 watch(() => authStore.isLoggedIn, async (loggedIn) => {
   if (loggedIn) {
     await loadArticlesData()
@@ -244,25 +234,6 @@ function enableHorizontalScroll(container) {
   }, { passive: false })
 }
 
-// 管理员快捷键
-let plusCount = 0
-let timer = null
-
-function handleKeydown(e) {
-  if (e.key === '+') {
-    plusCount++
-    clearTimeout(timer)
-    timer = setTimeout(() => {
-      plusCount = 0
-    }, 1000)
-
-    if (plusCount >= 3) {
-      plusCount = 0
-      router.push('/admin')
-    }
-  }
-}
-
 // 生命周期
 onMounted(async () => {
   // 如果已登录，加载数据
@@ -275,14 +246,6 @@ onMounted(async () => {
   await nextTick()
   enableHorizontalScroll(scrollContainer.value)
 
-  // 监听键盘快捷键
-  document.addEventListener('keydown', handleKeydown)
-})
-
-// 清理事件监听
-import { onUnmounted } from 'vue'
-onUnmounted(() => {
-  document.removeEventListener('keydown', handleKeydown)
 })
 
 // 暴露方法给父组件（导航栏的登录按钮）
@@ -687,8 +650,7 @@ defineExpose({
   box-shadow: 0 4px 16px rgba(80, 130, 120, 0.08);
 }
 
-.login-form .login-btn,
-.login-form .register-btn {
+.login-form .login-btn {
   padding: 12px 24px;
   border-radius: 50px;
   font-size: 1rem;
@@ -710,15 +672,6 @@ defineExpose({
   background: rgba(91, 168, 164, 0.5);
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(91, 168, 164, 0.1);
-}
-
-.login-form .register-btn {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.login-form .register-btn:hover {
-  background: rgba(255, 255, 255, 0.35);
-  transform: translateY(-2px);
 }
 
 .login-error {
@@ -836,8 +789,7 @@ defineExpose({
     font-size: 0.95rem;
   }
 
-  .login-form .login-btn,
-  .login-form .register-btn {
+  .login-form .login-btn {
     padding: 10px 18px;
     font-size: 0.95rem;
     flex: 1;

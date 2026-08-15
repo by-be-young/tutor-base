@@ -285,7 +285,7 @@ onMounted(async () => {
     }
 })
 
-// 自动登录（initFromStorage 异步恢复会话）完成后同步加载数据
+// 服务端会话异步恢复完成后同步加载数据
 watch(() => authStore.isLoggedIn, async (loggedIn) => {
     if (loggedIn) {
         await blogStore.loadArticleData()

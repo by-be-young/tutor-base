@@ -8,7 +8,7 @@ export const useWrongQuestionsStore = defineStore('wrongQuestions', () => {
     const isLoading = ref(false)
     const error = ref(null)
 
-    // 获取学生标识（数字 id 转为字符串，超级用户保留 'young-super-user'）
+    // 从服务端会话映射的学习者 id 获取错题归属标识
     function getStudentId(user) {
         if (!user?.id) return null
         return String(user.id)

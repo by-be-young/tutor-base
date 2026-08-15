@@ -188,6 +188,43 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
+  /admin/learners/{learnerId}/password:
+    put:
+      operationId: setLearnerPassword
+      summary: 管理员直接设置或重置学习者密码
+      description: 成功后账户转为已激活，并撤销该账户的所有现有会话和未使用激活码。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: learnerId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetLearnerPasswordRequest'
+      responses:
+        '204':
+          description: 密码已设置；响应不包含密码或哈希。
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
 components:
   parameters:
     CsrfHeader:
@@ -291,6 +328,15 @@ components:
         expiresAt:
           type: string
           format: date-time
+    SetLearnerPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password:
+          type: string
+          minLength: 12
+          maxLength: 128
     SystemStatus:
       type: object
       additionalProperties: false
