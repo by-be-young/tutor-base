@@ -156,3 +156,67 @@ export function resolveQuestionText(markdown, questionId) {
     return `${nearestH1(markdown, answer?.index ?? 0)} · 第${display}题`
 }
 
+// ========== Markdown 表格渲染（错题本/错题训练等简版渲染器用） ==========
+
+/** 拆分表格行单元格（去掉首尾管道，逐个去空格） */
+function splitTableCells(row) {
+    return String(row ?? '')
+        .trim()
+        .replace(/^\|/, '')
+        .replace(/\|$/, '')
+        .split('|')
+        .map(c => c.trim())
+}
+
+/** 表格单元格 HTML 转义（保留 $...$ 公式与 ![[图片]] 语法，后续由 KaTeX / 图片解析处理） */
+function escapeTableCell(text) {
+    return String(text ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+}
+
+/**
+ * 将 GFM 风格管道表格（| ... | 表头 + 分隔行 + 数据行）转换为 <table> HTML。
+ * 表格整体合成一行，避免后续「换行转 <br>」破坏结构；
+ * 单元格已转义，可安全注入 v-html。
+ * 识别规则：以 | 开头且以 | 结尾的行；分隔行形如 | :---: |（含连字符）。
+ *
+ * @param {string} text 题干文本
+ * @returns {string} 表格已转为 HTML 的文本
+ */
+export function renderMarkdownTable(text) {
+    const lines = String(text ?? '').split('\n')
+    const out = []
+    let i = 0
+
+    const isTableRow = (line) => /^\|.*\|\s*$/.test(String(line ?? '').trim())
+    const isSeparator = (line) => /^\|[\s:|-]*\|\s*$/.test(String(line ?? '').trim()) && /-/.test(line ?? '')
+
+    while (i < lines.length) {
+        // 表头行 + 紧随的分隔行 → 识别为表格块
+        if (isTableRow(lines[i]) && isSeparator(lines[i + 1])) {
+            const headers = splitTableCells(lines[i])
+            i += 2
+            const rows = []
+            // 数据行；下一行又是分隔行说明是下一个表格的表头，停止收集
+            while (i < lines.length && isTableRow(lines[i]) && !isSeparator(lines[i + 1])) {
+                rows.push(splitTableCells(lines[i]))
+                i++
+            }
+            const thead = `<tr>${headers.map(c => `<th>${escapeTableCell(c)}</th>`).join('')}</tr>`
+            const tbody = rows.length
+                ? `<tbody>${rows.map(r => `<tr>${r.map(c => `<td>${escapeTableCell(c)}</td>`).join('')}</tr>`).join('')}</tbody>`
+                : ''
+            out.push(`<table>${thead}${tbody}</table>`)
+        } else {
+            out.push(lines[i])
+            i++
+        }
+    }
+
+    return out.join('\n')
+}
+

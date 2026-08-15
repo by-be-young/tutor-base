@@ -256,7 +256,7 @@ import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
 import { useKatex } from '@/composables/useKatex'
 import { useImageEmbed } from '@/composables/useImageEmbed'
 import { supabase } from '@/utils/supabase'
-import { resolveQuestionText, resolveQuestionOrder } from '@/utils/questionText'
+import { resolveQuestionText, resolveQuestionOrder, renderMarkdownTable } from '@/utils/questionText'
 
 const authStore = useAuthStore()
 const blogStore = useArticleStore()
@@ -343,9 +343,9 @@ async function resolveAll() {
 }
 
 // ========== 渲染工具 ==========
-/** 题干内容渲染：解析图片嵌入（![[图片]] → <img>），换行转 <br>，$...$ 公式由 KaTeX 渲染 */
+/** 题干内容渲染：markdown 表格 → <table>，图片嵌入（![[图片]] → <img>），换行转 <br>，$...$ 公式由 KaTeX 渲染 */
 function renderQuestionText(text) {
-    return processMarkdown(String(text ?? '')).replace(/\n/g, '<br>')
+    return processMarkdown(renderMarkdownTable(text)).replace(/\n/g, '<br>')
 }
 
 /** 详情文本安全渲染：转义 HTML 防注入，换行转 <br>，$...$ 公式由 KaTeX 渲染 */
@@ -1000,10 +1000,32 @@ watch([filteredQuestions, expandedId, modalVisible], () => {
     cursor: pointer;
 }
 
-.wq-question-text img {
+/* 题干内容为 v-html 注入，须用 :deep() 才能命中 */
+.wq-question-text :deep(img) {
     max-width: 100%;
     border-radius: 8px;
     margin: 4px 0;
+}
+
+/* 题干中的表格 */
+.wq-question-text :deep(table) {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 0.95em;
+}
+
+.wq-question-text :deep(th),
+.wq-question-text :deep(td) {
+    border: 1px solid rgba(100, 145, 128, 0.5);
+    padding: 6px 12px;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.wq-question-text :deep(th) {
+    background: rgba(91, 168, 164, 0.15);
+    font-weight: 600;
 }
 
 /* 标签 */
@@ -1354,10 +1376,32 @@ watch([filteredQuestions, expandedId, modalVisible], () => {
     overflow-y: auto;
 }
 
-.wq-preview img {
+/* 题干预览内容为 v-html 注入，须用 :deep() 才能命中 */
+.wq-preview :deep(img) {
     max-width: 100%;
     border-radius: 8px;
     margin: 4px 0;
+}
+
+/* 题干预览中的表格 */
+.wq-preview :deep(table) {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 0.92em;
+}
+
+.wq-preview :deep(th),
+.wq-preview :deep(td) {
+    border: 1px solid rgba(100, 145, 128, 0.5);
+    padding: 5px 10px;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.wq-preview :deep(th) {
+    background: rgba(91, 168, 164, 0.15);
+    font-weight: 600;
 }
 
 .modal-footer {
