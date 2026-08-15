@@ -156,6 +156,9 @@
                     <div class="wq-card-actions">
                         <span class="wq-date">{{ formatDate(q.updated_at) }}</span>
                         <div class="wq-action-btns">
+                            <button class="wq-action-btn is-redo" @click="handleRedo(q)">
+                                <i class="fas fa-redo"></i> 重做该题
+                            </button>
                             <button class="wq-action-btn" :class="q.mastered ? 'is-unmaster' : 'is-master'"
                                 @click="handleToggleMastered(q)" :disabled="busyIds.has(q.id)">
                                 <i :class="q.mastered ? 'fas fa-undo' : 'fas fa-check-circle'"></i>
@@ -250,6 +253,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useArticleStore } from '@/stores/blogStore'
 import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
@@ -258,6 +262,7 @@ import { useImageEmbed } from '@/composables/useImageEmbed'
 import { supabase } from '@/utils/supabase'
 import { resolveQuestionText, resolveQuestionOrder, renderMarkdownTable } from '@/utils/questionText'
 
+const router = useRouter()
 const authStore = useAuthStore()
 const blogStore = useArticleStore()
 const wrongQuestionsStore = useWrongQuestionsStore()
@@ -451,6 +456,11 @@ async function loadData() {
 // ========== 卡片交互 ==========
 function toggleExpand(id) {
     expandedId.value = expandedId.value === id ? null : id
+}
+
+// 重做该题：跳转到错题训练页，仅训练这一题
+function handleRedo(q) {
+    router.push(`/wrong-training?question=${q.id}`)
 }
 
 function subjectBadgeClass(subject) {
@@ -1197,6 +1207,16 @@ watch([filteredQuestions, expandedId, modalVisible], () => {
 
 .wq-action-btn.is-unmaster:hover {
     background: rgba(240, 244, 242, 0.9);
+}
+
+.wq-action-btn.is-redo {
+    background: rgba(91, 168, 164, 0.14);
+    color: #2f6a66;
+    border-color: rgba(91, 168, 164, 0.3);
+}
+
+.wq-action-btn.is-redo:hover {
+    background: rgba(91, 168, 164, 0.28);
 }
 
 .wq-action-btn.is-edit {
