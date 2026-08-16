@@ -179,9 +179,11 @@ function onPermissionChange() {
 }
 
 async function savePermissions() {
-    const success = await adminStore.savePermissions()
-    if (success) {
-        permissionDirty.value = false
+    try {
+        const success = await adminStore.savePermissions()
+        if (success) permissionDirty.value = false
+    } catch (error) {
+        alert(error.message || '保存失败，请重试')
     }
 }
 
@@ -220,6 +222,9 @@ function closePasswordDialog() {
 
 function passwordFailureMessage(error) {
     if (!(error instanceof IdentityGatewayError)) return '密码设置失败，请稍后重试。'
+    if (['csrf_invalid', 'invalid_csrf'].includes(error.code)) {
+        return '页面安全令牌已失效，请刷新页面后重试。'
+    }
     if (error.status === 400) return '密码不符合要求，请确认长度为 12～128 个字符。'
     if (error.status === 401) return '登录状态已失效，请重新登录后再试。'
     if (error.status === 403) return '当前账户无权设置学生密码。'
@@ -272,7 +277,12 @@ async function handleLogout() {
 // 初始化
 onMounted(async () => {
     await blogStore.loadArticleData()
-    await adminStore.loadStudents()
+    try {
+        await adminStore.loadStudents()
+    } catch (error) {
+        alert(error.message || '加载学生列表失败，请刷新后重试')
+        return
+    }
 
     if (students.value.length > 0) {
         selectedStudentId.value = students.value[0].id

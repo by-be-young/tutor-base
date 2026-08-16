@@ -1,6 +1,7 @@
 package com.tutorbase.administration.learner;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
@@ -12,6 +13,8 @@ import java.util.OptionalLong;
 public interface LearnerQuery {
 
     LearnerPage findAfter(OptionalLong afterId, int limit);
+
+    Optional<Learner> findById(long learnerId);
 
     record Learner(long learnerId, String username, List<Long> contentGrantArticleIds) {
 

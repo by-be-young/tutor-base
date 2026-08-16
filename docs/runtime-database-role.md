@@ -3,11 +3,16 @@
 Java 服务正常运行时不得继续使用 Supabase 的 `postgres` 管理员账户。仓库提供：
 
 - `database/operations/provision_runtime_role.sql`：建立无登录权限组 `tutor_base_runtime` 和登录角色
-  `tutor_base_app`，只授予当前身份、会话和管理员学员查询所需权限。
+  `tutor_base_app`，只授予当前身份、会话、学习者创建及文章授权维护所需权限。
 - `database/audit/runtime_role_checks.sql`：验证危险角色属性、成员关系、表权限、RLS policy 和连接数限制。
 
-权限脚本不会设置密码，也不会撤销旧 Vue 前端目前仍依赖的 `anon` 业务表权限。前端完成 Java API 切换后，
-再通过独立 migration 撤销浏览器直写权限。
+权限脚本不会设置密码，也不会撤销旧 Vue 前端其他尚未迁移模块仍依赖的 `anon` 业务表权限。本阶段的
+`student` 读取、创建和授权维护已经改走 Java API；答题、批阅和错题完成迁移后，再通过独立 migration
+统一撤销浏览器直写权限。
+
+每次部署包含新数据库访问路径的后端版本前，都要先以管理员身份重新运行权限脚本，再运行审计脚本。
+当前版本新增了 `student` 的 `INSERT`、`UPDATE`，`account` 的 `INSERT`，以及相关序列权限；未先更新权限时，
+旧容器仍可健康运行，但新增学习者或保存文章授权会返回服务端错误。
 
 ## 执行顺序
 

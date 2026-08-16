@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalLong;
 
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -21,6 +22,12 @@ final class JdbcLearnerQuery implements LearnerQuery {
             WHERE id > :afterId
             ORDER BY id ASC
             LIMIT :fetchLimit
+            """;
+
+    private static final String FIND_BY_ID_SQL = """
+            SELECT id, username, permissions
+            FROM public.student
+            WHERE id = :learnerId
             """;
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -42,6 +49,13 @@ final class JdbcLearnerQuery implements LearnerQuery {
                 ? OptionalLong.of(items.getLast().learnerId())
                 : OptionalLong.empty();
         return new LearnerPage(items, nextAfterId);
+    }
+
+    @Override
+    public Optional<Learner> findById(long learnerId) {
+        return jdbc.query(FIND_BY_ID_SQL, Map.of("learnerId", learnerId), JdbcLearnerQuery::mapLearner)
+                .stream()
+                .findFirst();
     }
 
     private static Learner mapLearner(ResultSet resultSet, int rowNumber) throws SQLException {

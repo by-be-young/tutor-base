@@ -22,4 +22,24 @@ final class LearnerHttpExceptionHandler {
                 exception.getMessage(),
                 request);
     }
+
+    @ExceptionHandler(LearnerNotFound.class)
+    ProblemDetail learnerNotFound(LearnerNotFound exception, HttpServletRequest request) {
+        return ApiProblem.create(
+                HttpStatus.NOT_FOUND,
+                "resource_not_found",
+                "Learner not found",
+                exception.getMessage(),
+                request);
+    }
+
+    @ExceptionHandler(LearnerUsernameConflict.class)
+    ProblemDetail usernameConflict(LearnerUsernameConflict exception, HttpServletRequest request) {
+        return ApiProblem.create(
+                HttpStatus.CONFLICT,
+                "username_conflict",
+                "Username conflict",
+                exception.getMessage(),
+                request);
+    }
 }
