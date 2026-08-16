@@ -37,7 +37,7 @@
                 <router-link v-if="authStore.isAdministrator" to="/admin" class="nav-btn nav-btn-admin">
                     管理
                 </router-link>
-                <router-link v-if="authStore.isAdministrator" to="/tasks" class="nav-btn nav-btn-tasks"
+                <router-link v-if="authStore.isLoggedIn" to="/tasks" class="nav-btn nav-btn-tasks"
                     :class="{ 'is-active': route.name === 'Tasks' }">
                     <i class="fas fa-list-check"></i> 任务
                 </router-link>
