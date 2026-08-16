@@ -40,7 +40,7 @@
 ```mermaid
 flowchart LR
     G["GitHub Pages / learn.be-young.top"] -->|"static files"| B["Browser / Vue 3"]
-    B -->|"credentialed CORS HTTPS"| C["Cloud / api.be-young.top / Caddy"]
+    B -->|"credentialed CORS HTTPS"| C["Cloud / api.be-young.top / Nginx"]
     C -->|"/api/v1"| J["Java modular monolith"]
     J --> I["Identity & Access"]
     J --> L["Learning & Review"]
@@ -80,7 +80,7 @@ token/PKCE 认证方案，不属于“其他计划不变”的路径。
 | 前端测试 | Vitest + Playwright | 覆盖 gateway contract 和登录/答题/批阅/错题关键旅程 |
 | 可观测性 | Spring Boot Actuator、Micrometer、结构化日志 | 首期暴露 health/readiness；指标系统可按需要接 Prometheus/OTLP |
 | 构建 | Maven Wrapper、分层 Docker image | 版本统一，CI 和服务器不依赖预装 Maven |
-| 边缘与 TLS | Caddy（默认）或现有团队熟悉的 Nginx | 单机部署、HTTPS 和反向代理足够；无需 Kubernetes ingress |
+| 边缘与 TLS | 复用服务器现有 Nginx + Certbot | 单机部署、HTTPS 和反向代理足够；无需新增 Docker Hub 边缘镜像或 Kubernetes ingress |
 | 交付 | GitHub Actions + GHCR + Docker Compose | 与当前 GitHub 工作流连续，适合单台或少量云服务器 |
 
 不建议首期加入 Redis、Kafka、Elasticsearch、GraphQL 或微服务。只有出现第二个应用实例、明确的异步吞吐问题或搜索需求时，再用数据说明是否引入。
@@ -115,7 +115,8 @@ token/PKCE 认证方案，不属于“其他计划不变”的路径。
 |     `- main/resources/db/migration/
 |- deploy/
 |  |- compose.yaml
-|  |- Caddyfile                      # 只代理云端 API 和 TLS
+|  |- nginx/                         # API 独立虚拟主机模板
+|  |- backend.env.example
 |  `- scripts/
 |- docs/
 `- CONTEXT.md
@@ -287,7 +288,7 @@ PUT    /api/v1/admin/submissions/{submissionId}/review
 
 - GitHub Pages 继续托管 Vue build，并绑定 `learn.be-young.top`；构建时只注入
   `VITE_API_BASE_URL=https://api.be-young.top/api/v1`。
-- 一台小型云主机运行 Caddy 和 Java container，对外提供 `api.be-young.top`。
+- 一台小型云主机运行宿主机 Nginx 和 Java container，对外提供 `api.be-young.top`；容器端口只绑定回环地址。
 - PostgreSQL 优先使用同区域托管服务；它比“同机数据库”更容易获得备份、监控和故障恢复。
 - 若预算必须同机运行 PostgreSQL：独立 volume、数据库端口不暴露公网、每日加密备份到异机/对象存储、定期恢复演练，并监控磁盘空间。
 - 防火墙只开放 80/443 和受限管理入口；SSH 禁止密码登录。

@@ -48,7 +48,8 @@ VITE_API_BASE_URL=https://api.be-young.top/api/v1
 | 记录值 | `<云服务器公网 IPv4>` |
 | TTL | 默认或 10 分钟 |
 
-服务器上的 Caddy 为 `api.be-young.top` 自动申请 TLS 证书并代理到 Java container。后端环境变量使用：
+服务器复用现有 Nginx，通过 Certbot 为 `api.be-young.top` 申请 TLS 证书并代理到只监听
+`127.0.0.1:8080` 的 Java container。API-only staging 先使用 `staging-api.be-young.top`。后端环境变量使用：
 
 ```text
 TUTOR_WEB_ALLOWED_ORIGINS=https://learn.be-young.top

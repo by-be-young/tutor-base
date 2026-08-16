@@ -4,13 +4,14 @@ services:
     restart: unless-stopped
     env_file:
       - backend.env
-    expose:
-      - "8080"
-    networks:
-      - internal
+    ports:
+      - "127.0.0.1:8080:8080"
     security_opt:
       - no-new-privileges:true
     read_only: true
+    mem_limit: 768m
+    pids_limit: 256
+    stop_grace_period: 30s
     tmpfs:
       - /tmp:size=64m,mode=1777
     healthcheck:
@@ -24,39 +25,3 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
-
-  caddy:
-    image: caddy:2.10.2-alpine
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_healthy
-    environment:
-      API_DOMAIN: ${API_DOMAIN:?Set API_DOMAIN}
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    networks:
-      - internal
-      - edge
-    security_opt:
-      - no-new-privileges:true
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
-
-networks:
-  internal:
-    internal: true
-  edge:
-
-volumes:
-  caddy_data:
-  caddy_config:

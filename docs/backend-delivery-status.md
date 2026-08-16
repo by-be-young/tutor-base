@@ -13,7 +13,7 @@ Java 后端已经具备并通过自动化测试的能力：
 - 服务端管理员角色鉴权和分页查询学习者。
 - PostgreSQL V1 至 V3、生产 Flyway baseline、管理员自举。
 - Supabase 专用最小权限运行角色和 RLS policy。
-- production 配置门禁、Dockerfile、Compose、Caddy 和 API smoke test。
+- production 配置门禁、Dockerfile、Compose、宿主机 Nginx 反向代理和 API smoke test。
 
 因此现在可以本地验证 Java API，也可以在不切换现有 GitHub Pages 的情况下部署 API-only staging。
 
