@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+  flyway:
+    enabled: ${DATABASE_MIGRATIONS_ENABLED:false}
+
+tutor:
+  identity:
+    csrf-secret: ${TUTOR_CSRF_SECRET}
+    cookie-name: __Host-TUTOR_SESSION
+    cookie-secure: true

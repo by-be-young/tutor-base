@@ -219,4 +219,3 @@ export function renderMarkdownTable(text) {
 
     return out.join('\n')
 }
-

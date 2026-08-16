@@ -682,7 +682,6 @@ function renderReviewSlot(questionId, index) {
     wrapper.className = 'question-card question-card-review'
     wrapper.dataset.questionId = questionId
 
-    // 题号角标（左上角，显示顺序号，与实际 id 无关）
     const numberBadge = createPill(`第 ${index} 题`, 'is-number')
     wrapper.appendChild(numberBadge)
 
@@ -748,7 +747,6 @@ function renderAnswerSlot(questionId, index) {
     wrapper.className = 'question-card question-card-answer'
     wrapper.dataset.questionId = questionId
 
-    // 题号角标（左上角，显示顺序号，与实际 id 无关）
     const numberBadge = createPill(`第 ${index} 题`, 'is-number')
     wrapper.appendChild(numberBadge)
 
@@ -1526,7 +1524,7 @@ watch(
     }
 )
 
-// 自动登录（initFromStorage 异步恢复会话）完成后重新加载内容
+// 服务端会话异步恢复完成后重新加载内容
 watch(() => authStore.isLoggedIn, (loggedIn) => {
     if (loggedIn) loadContent()
 })
@@ -1821,26 +1819,6 @@ onUnmounted(() => {
     border-color: rgba(91, 168, 164, 0.3);
 }
 
-/* 题号角标：review / answer 模式的答题框同样标注题号（与 study 模式一致，左上角） */
-:deep(.question-card:not(.question-card-study) > .question-pill.is-number) {
-    position: absolute;
-    top: -10px;
-    left: 12px;
-    z-index: 1;
-    padding: 1px 10px;
-    min-height: 20px;
-    border-radius: 999px;
-    font-size: 0.68rem;
-    font-weight: 600;
-    line-height: 1.5;
-    background: rgba(91, 168, 164, 0.15);
-    color: #2f6a66;
-    border: 1px solid rgba(91, 168, 164, 0.3);
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-}
-
 /* 状态角标：右上角 */
 :deep(.question-card-study > .question-pill:not(.is-number)) {
     left: auto;
@@ -1930,6 +1908,22 @@ onUnmounted(() => {
     color: #4c6b5b;
     font-size: 0.75rem;
     border: 1px solid rgba(120, 170, 155, 0.10);
+}
+
+:deep(.question-card:not(.question-card-study) > .question-pill.is-number) {
+    position: absolute;
+    top: -10px;
+    left: 12px;
+    z-index: 1;
+    padding: 1px 10px;
+    min-height: 20px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    line-height: 1.5;
+    background: rgba(91, 168, 164, 0.15);
+    color: #2f6a66;
+    border: 1px solid rgba(91, 168, 164, 0.3);
 }
 
 :deep(.question-card-review .question-pill.is-waiting),

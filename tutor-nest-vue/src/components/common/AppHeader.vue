@@ -30,16 +30,14 @@
                 <span class="nav-user-status">
                     {{ authStore.isLoggedIn ? authStore.username : '未登录' }}
                 </span>
-                <!-- 返回管理员（管理员进入学生账号后显示，一键恢复管理员会话） -->
-                <button v-if="authStore.isImpersonating" class="nav-btn nav-btn-back-admin" @click="handleRestoreAdmin">
-                    <i class="fas fa-user-shield"></i> 返回管理员
-                </button>
                 <router-link v-if="authStore.isLoggedIn" to="/wrong-questions" class="nav-btn nav-btn-wrong-questions"
                     :class="{ 'is-active': route.name === 'WrongQuestions' }">
                     <i class="fas fa-book-medical"></i> 错题本
                 </router-link>
-                <!-- 任务系统：仅超级管理员 young 可见 -->
-                <router-link v-if="isSuperAdmin" to="/tasks" class="nav-btn nav-btn-tasks"
+                <router-link v-if="authStore.isAdministrator" to="/admin" class="nav-btn nav-btn-admin">
+                    管理
+                </router-link>
+                <router-link v-if="authStore.isAdministrator" to="/tasks" class="nav-btn nav-btn-tasks"
                     :class="{ 'is-active': route.name === 'Tasks' }">
                     <i class="fas fa-list-check"></i> 任务
                 </router-link>
@@ -62,9 +60,6 @@ import { useAuthStore } from '@/stores/authStore'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
-
-// 超级管理员（young）可见任务系统入口
-const isSuperAdmin = computed(() => authStore.username.toLowerCase() === 'young')
 
 const emit = defineEmits(['login-click'])
 
@@ -115,7 +110,6 @@ const backText = computed(() => {
     return route.query.from === 'admin' ? '管理员' : '学习资料仓库'
 })
 
-// 返回上一级页面（无历史记录时回退到原目标地址）
 function handleBack() {
     if (window.history.state?.back) {
         router.back()
@@ -124,15 +118,12 @@ function handleBack() {
     }
 }
 
-// 从学生账号一键返回管理员
-async function handleRestoreAdmin() {
-    await authStore.restoreAdmin()
-    router.push('/admin')
-}
-
-function handleLogout() {
-    authStore.logout()
-    router.push('/')
+async function handleLogout() {
+    try {
+        await authStore.logout()
+    } finally {
+        await router.push('/')
+    }
 }
 </script>
 
@@ -259,7 +250,6 @@ function handleLogout() {
     font-weight: 600;
 }
 
-/* 任务入口（仅超级管理员可见） */
 .nav-btn-tasks {
     display: inline-flex;
     align-items: center;
@@ -279,21 +269,6 @@ function handleLogout() {
     background: rgba(151, 130, 200, 0.3);
     border-color: rgba(151, 130, 200, 0.45);
     font-weight: 600;
-}
-
-/* 返回管理员（管理员进入学生账号后显示） */
-.nav-btn-back-admin {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(91, 168, 164, 0.16);
-    color: var(--teal-dark);
-    border-color: rgba(91, 168, 164, 0.3);
-}
-
-.nav-btn-back-admin:hover {
-    background: rgba(91, 168, 164, 0.32);
-    transform: translateY(-1px);
 }
 
 .nav-subject-switcher {

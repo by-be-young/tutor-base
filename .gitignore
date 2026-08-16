@@ -1,0 +1,19 @@
+# Dependencies and build output
+/node_modules/
+/backend/target/
+/tutor-nest-vue/dist/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# IDE and operating-system state
+/.idea/
+/.vscode/
+.DS_Store
+Thumbs.db
+
+# Supabase machine-local state
+/supabase/.branches/
+/supabase/.temp/

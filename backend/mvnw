@@ -1,0 +1,41 @@
+#!/bin/sh
+# Maven Wrapper launcher. Maven is downloaded into the user's Maven cache on first use.
+set -eu
+
+wrapper_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+properties_file="$wrapper_dir/.mvn/wrapper/maven-wrapper.properties"
+
+if [ ! -f "$properties_file" ]; then
+  echo "Missing Maven Wrapper properties: $properties_file" >&2
+  exit 1
+fi
+
+distribution_url="$(sed -n 's/^distributionUrl=//p' "$properties_file" | head -n 1 | sed 's#\\:#:#g')"
+if [ -z "$distribution_url" ]; then
+  echo "distributionUrl is not configured in $properties_file" >&2
+  exit 1
+fi
+
+archive_name="${distribution_url##*/}"
+maven_home_name="${archive_name%-bin.zip}"
+cache_root="${MAVEN_USER_HOME:-$HOME/.m2}/wrapper/dists/$maven_home_name"
+maven_home="$cache_root/$maven_home_name"
+
+if [ ! -x "$maven_home/bin/mvn" ]; then
+  mkdir -p "$cache_root"
+  archive_path="$cache_root/$archive_name"
+  if [ ! -f "$archive_path" ]; then
+    if command -v curl >/dev/null 2>&1; then
+      curl --fail --location --silent --show-error "$distribution_url" --output "$archive_path"
+    elif command -v wget >/dev/null 2>&1; then
+      wget --quiet "$distribution_url" --output-document="$archive_path"
+    else
+      echo "curl or wget is required to download Maven." >&2
+      exit 1
+    fi
+  fi
+  rm -rf "$maven_home"
+  unzip -q "$archive_path" -d "$cache_root"
+fi
+
+exec "$maven_home/bin/mvn" "$@"

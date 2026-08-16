@@ -343,7 +343,7 @@ function showToast(message, type = 'info', duration = 3000) {
 }
 
 // ========== 生命周期 ==========
-const isSuperAdmin = computed(() => authStore.username.toLowerCase() === 'young')
+const isSuperAdmin = computed(() => authStore.isAdministrator)
 
 onMounted(() => {
     // 初始停靠右侧：左侧已领取区域不可见，需滚动查看

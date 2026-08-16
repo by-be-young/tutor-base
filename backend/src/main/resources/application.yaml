@@ -1,0 +1,58 @@
+spring:
+  config:
+    import: optional:file:./.env[.properties]
+  application:
+    name: tutor-base-backend
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/tutor_base_dev}
+    username: ${DATABASE_USERNAME:tutor_base_dev}
+    password: ${DATABASE_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${DATABASE_POOL_MAX_SIZE:5}
+      minimum-idle: ${DATABASE_POOL_MIN_IDLE:0}
+      connection-timeout: ${DATABASE_CONNECTION_TIMEOUT_MS:5000}
+  flyway:
+    enabled: ${DATABASE_MIGRATIONS_ENABLED:true}
+    locations: classpath:db/migration
+    validate-migration-naming: true
+    clean-disabled: true
+
+server:
+  forward-headers-strategy: framework
+  error:
+    include-binding-errors: never
+    include-exception: false
+    include-message: never
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+tutor:
+  web:
+    allowed-origins: ${TUTOR_WEB_ALLOWED_ORIGINS:}
+  identity:
+    session-lifetime: ${TUTOR_SESSION_LIFETIME:PT12H}
+    csrf-secret: ${TUTOR_CSRF_SECRET:local-development-secret-change-before-production}
+    cookie-name: ${TUTOR_SESSION_COOKIE_NAME:TUTOR_SESSION}
+    cookie-secure: ${TUTOR_SESSION_COOKIE_SECURE:false}
+    public-mutation-limit: ${TUTOR_PUBLIC_MUTATION_LIMIT:10}
+    public-mutation-window: ${TUTOR_PUBLIC_MUTATION_WINDOW:PT1M}
+    bootstrap:
+      enabled: ${TUTOR_BOOTSTRAP_ENABLED:false}
+      username: ${TUTOR_BOOTSTRAP_USERNAME:young}
+      password: ${TUTOR_BOOTSTRAP_PASSWORD:}

@@ -22,7 +22,7 @@ function handleLoginClick() {
 }
 
 onMounted(() => {
-  authStore.initFromStorage()
+  authStore.restoreSession()
 })
 </script>
 
