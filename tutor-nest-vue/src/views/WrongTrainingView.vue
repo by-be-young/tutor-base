@@ -178,8 +178,8 @@
                     </button>
                 </div>
 
-                <!-- 退出训练 -->
-                <button class="wt-quit" @click="phase = 'setup'">
+                <!-- 退出训练（单题重做模式返回错题本，普通模式回到设置页） -->
+                <button class="wt-quit" @click="quitTraining">
                     <i class="fas fa-times"></i> 退出训练
                 </button>
             </div>
@@ -232,13 +232,17 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useArticleStore } from '@/stores/blogStore'
 import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
 import { useWrongQuestionsResolve } from '@/composables/useWrongQuestionsResolve'
 import { useKatex } from '@/composables/useKatex'
 import { useImageEmbed } from '@/composables/useImageEmbed'
+import { renderMarkdownTable } from '@/utils/questionText'
 
+const route = useRoute()
+const router = useRouter()
 const authStore = useAuthStore()
 const blogStore = useArticleStore()
 const wrongQuestionsStore = useWrongQuestionsStore()
@@ -250,8 +254,9 @@ const { processMarkdown, setBasePath } = useImageEmbed()
 setBasePath('articles/图片/')
 
 // ========== 渲染工具 ==========
+/** 题干内容渲染：markdown 表格 → <table>，图片嵌入（![[图片]] → <img>），换行转 <br>，$...$ 公式由 KaTeX 渲染 */
 function renderQuestionText(text) {
-    return processMarkdown(String(text ?? '')).replace(/\n/g, '<br>')
+    return processMarkdown(renderMarkdownTable(text)).replace(/\n/g, '<br>')
 }
 
 function safeText(text) {
@@ -268,6 +273,9 @@ function safeText(text) {
 const phase = ref('setup')   // setup | training | done
 const subjectFilter = ref('')
 const scope = ref('unmastered')
+
+// 单题重做模式（错题本「重做该题」进入）：?question=错题id，只训练这一题
+const redoQuestionId = computed(() => route.query.question || '')
 
 const subjectOptions = computed(() => {
     const set = new Set()
@@ -316,15 +324,20 @@ const stats = computed(() => {
     return { correct, wrong }
 })
 
-function startTraining() {
-    if (!trainableQuestions.value.length) return
-    trainList.value = trainableQuestions.value.map(q => ({
+// 构造单个训练项
+function makeTrainingItem(q) {
+    return {
         q: { ...q },
         resolved: { ...resolvedOf(q) },
         answer: '',
         status: 'answering',
         masteredDone: false
-    }))
+    }
+}
+
+function startTraining() {
+    if (!trainableQuestions.value.length) return
+    trainList.value = trainableQuestions.value.map(q => makeTrainingItem(q))
     currentIndex.value = 0
     phase.value = 'training'
 }
@@ -431,10 +444,29 @@ function finishTraining() {
 }
 
 function restart() {
+    // 单题重做模式：再练一次 = 重新做同一题
+    if (redoQuestionId.value) {
+        const q = wrongQuestionsStore.questions.find(x => String(x.id) === String(redoQuestionId.value))
+        if (q) {
+            trainList.value = [makeTrainingItem(q)]
+            currentIndex.value = 0
+            phase.value = 'training'
+            return
+        }
+    }
     phase.value = 'setup'
     scope.value = 'unmastered'
     subjectFilter.value = ''
     trainList.value = []
+}
+
+// 退出训练：单题重做模式返回错题本，普通模式回到设置页
+function quitTraining() {
+    if (redoQuestionId.value) {
+        router.push('/wrong-questions')
+    } else {
+        phase.value = 'setup'
+    }
 }
 
 // ========== 数据加载 ==========
@@ -443,6 +475,17 @@ async function loadData() {
     const studentId = wrongQuestionsStore.getStudentId(authStore.currentUser)
     await wrongQuestionsStore.fetchQuestions(studentId)
     await resolveQuestions(wrongQuestionsStore.questions)
+}
+
+// 错题本「重做该题」进入：加载完成后直接开始单题训练（题目不存在则留在设置页）
+function startRedoIfRequested() {
+    const qid = redoQuestionId.value
+    if (!qid) return
+    const q = wrongQuestionsStore.questions.find(x => String(x.id) === String(qid))
+    if (!q) return
+    trainList.value = [makeTrainingItem(q)]
+    currentIndex.value = 0
+    phase.value = 'training'
 }
 
 // 公式渲染（防竞态）：
@@ -512,6 +555,7 @@ function subjectBadgeClass(subject) {
 onMounted(async () => {
     if (authStore.isLoggedIn) {
         await loadData()
+        startRedoIfRequested()
     }
 })
 
@@ -796,10 +840,32 @@ watch([trainList, currentIndex], () => {
     word-break: break-word;
 }
 
-.wt-question-text img {
+/* 题干内容为 v-html 注入，须用 :deep() 才能命中 */
+.wt-question-text :deep(img) {
     max-width: 100%;
     border-radius: 8px;
     margin: 6px 0;
+}
+
+/* 题干中的表格 */
+.wt-question-text :deep(table) {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 0.95em;
+}
+
+.wt-question-text :deep(th),
+.wt-question-text :deep(td) {
+    border: 1px solid rgba(100, 145, 128, 0.5);
+    padding: 6px 12px;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.wt-question-text :deep(th) {
+    background: rgba(91, 168, 164, 0.15);
+    font-weight: 600;
 }
 
 .wt-answer-input {

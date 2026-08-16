@@ -682,6 +682,9 @@ function renderReviewSlot(questionId, index) {
     wrapper.className = 'question-card question-card-review'
     wrapper.dataset.questionId = questionId
 
+    const numberBadge = createPill(`第 ${index} 题`, 'is-number')
+    wrapper.appendChild(numberBadge)
+
     const submission = submissionMap.value.get(questionId)
     const answerKey = answerKeyMap.value.get(questionId)
 
@@ -743,6 +746,9 @@ function renderAnswerSlot(questionId, index) {
     const wrapper = document.createElement('div')
     wrapper.className = 'question-card question-card-answer'
     wrapper.dataset.questionId = questionId
+
+    const numberBadge = createPill(`第 ${index} 题`, 'is-number')
+    wrapper.appendChild(numberBadge)
 
     const key = answerKeyMap.value.get(questionId) || { answer_text: '', auto_grade: false }
 
@@ -1902,6 +1908,22 @@ onUnmounted(() => {
     color: #4c6b5b;
     font-size: 0.75rem;
     border: 1px solid rgba(120, 170, 155, 0.10);
+}
+
+:deep(.question-card:not(.question-card-study) > .question-pill.is-number) {
+    position: absolute;
+    top: -10px;
+    left: 12px;
+    z-index: 1;
+    padding: 1px 10px;
+    min-height: 20px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    line-height: 1.5;
+    background: rgba(91, 168, 164, 0.15);
+    color: #2f6a66;
+    border: 1px solid rgba(91, 168, 164, 0.3);
 }
 
 :deep(.question-card-review .question-pill.is-waiting),

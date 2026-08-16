@@ -29,12 +29,17 @@
 6. DNS 生效并且 GitHub 证书签发后，在 Pages 设置中启用 Enforce HTTPS。
 7. 不添加 `*.be-young.top` 泛域名记录，避免未使用子域被接管。
 
-当前 Pages workflow 使用 Vite base `/tutor-base/`。在 custom domain 真正启用前保留该值，避免破坏现有
-`by-be-young.github.io/tutor-base/`；切换当天再改为 `/`，并设置：
+当前仓库只维护一个 Pages 站点。`main` 更新后，`.github/workflows/deploy.yml` 自动构建并发布前端。
+工作流读取 GitHub Pages 返回的 `base_path`：未绑定自定义域名时使用 `/tutor-base/`，绑定
+`learn.be-young.top` 后自动使用 `/`，不需要手工修改 Vite base。
+
+当前联调阶段连接已经部署的测试 API：
 
 ```text
-VITE_API_BASE_URL=https://api.be-young.top/api/v1
+VITE_API_BASE_URL=https://staging-api.be-young.top/api/v1
 ```
+
+Java API 切换到正式域名后，再把工作流中的地址改为 `https://api.be-young.top/api/v1`。
 
 ## API 域名：购买并初始化服务器后配置
 
@@ -52,10 +57,13 @@ VITE_API_BASE_URL=https://api.be-young.top/api/v1
 `127.0.0.1:8080` 的 Java container。API-only staging 先使用 `staging-api.be-young.top`。后端环境变量使用：
 
 ```text
-TUTOR_WEB_ALLOWED_ORIGINS=https://learn.be-young.top
+TUTOR_WEB_ALLOWED_ORIGINS=https://learn.be-young.top,https://by-be-young.github.io
 ```
 
 只允许完整的 HTTPS origin；不要填写裸域名、路径、尾随 `/` 或 `*`。
+
+使用默认 `by-be-young.github.io` 地址只能做页面加载和基础接口检查。密码登录依赖服务端 Cookie，浏览器可能拦截
+跨站 Cookie，因此完整验收必须使用 `https://learn.be-young.top`。
 
 ## 验证命令
 
