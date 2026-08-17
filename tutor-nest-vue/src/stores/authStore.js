@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { identityGateway } from '@/gateways/identityGateway'
-import { supabase } from '@/utils/supabase'
+import { learnerGateway } from '@/gateways/learnerGateway'
 
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref(null)
@@ -30,16 +30,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function loadLearningPermissions(session) {
     if (session.roles.includes('ADMINISTRATOR')) return loadAllArticleIds()
     if (!session.learnerId) return []
-
-    // 过渡兼容层：学习功能尚未迁移到 Java API，临时只读 Supabase 权限。
-    // 此结果只控制现有文章导航，绝不能用于身份或管理员授权；GET /articles 上线后删除。
-    const { data, error } = await supabase
-      .from('student')
-      .select('permissions')
-      .eq('id', session.learnerId)
-      .maybeSingle()
-    if (error || !data) return []
-    return Array.isArray(data.permissions) ? data.permissions : []
+    return learnerGateway.getCurrentContentGrants()
   }
 
   function normalizeSession(session) {

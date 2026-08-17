@@ -151,6 +151,26 @@ paths:
           $ref: '#/components/responses/Problem'
         '409':
           $ref: '#/components/responses/Problem'
+  /me/content-grants:
+    get:
+      operationId: getCurrentContentGrants
+      summary: 获取当前学习者获准访问的文章 ID
+      description: 学习者身份只从服务端会话取得，不接受客户端传入学习者 ID。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 当前学习者的完整文章授权列表。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentGrants'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
   /admin/learners:
     get:
       operationId: listLearners
@@ -187,6 +207,70 @@ paths:
         '403':
           $ref: '#/components/responses/Problem'
         '503':
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: createLearner
+      summary: 新增学习者及其待设置密码账户
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLearnerRequest'
+      responses:
+        '201':
+          description: 学习者已创建，初始文章授权为空。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearnerSummary'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /admin/learners/{learnerId}/content-grants:
+    put:
+      operationId: replaceLearnerContentGrants
+      summary: 完整替换一个学习者的文章授权
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: learnerId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceContentGrantsRequest'
+      responses:
+        '200':
+          description: 返回替换后的学习者及文章授权。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearnerSummary'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
           $ref: '#/components/responses/Problem'
   /admin/learners/{learnerId}/password:
     put:
@@ -393,6 +477,40 @@ components:
           items:
             type: integer
             format: int64
+            minimum: 1
+    CreateLearnerRequest:
+      type: object
+      additionalProperties: false
+      required: [username]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 100
+    ReplaceContentGrantsRequest:
+      type: object
+      additionalProperties: false
+      required: [articleIds]
+      properties:
+        articleIds:
+          type: array
+          maxItems: 5000
+          items:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 2147483647
+    ContentGrants:
+      type: object
+      additionalProperties: false
+      required: [articleIds]
+      properties:
+        articleIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+            minimum: 1
     ApiProblem:
       type: object
       required:

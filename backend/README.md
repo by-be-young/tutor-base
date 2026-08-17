@@ -356,3 +356,26 @@ docker run --rm -p 8080:8080 tutor-base-backend:dev
 ```
 
 机器可读的接口契约位于 `api/openapi.yaml`。新增或修改接口时，必须同步更新契约和 MockMvc 测试。
+
+## 学习者与文章授权接口
+
+本阶段已把前端对 `student` 表的直接访问收口到 Java 后端：
+
+- `GET /api/v1/me/content-grants`：登录学习者查询自己的文章授权，身份仅从服务端会话取得。
+- `GET /api/v1/admin/learners`：管理员分页查询学习者与授权。
+- `POST /api/v1/admin/learners`：管理员新增学习者，同时创建待设置密码账户。
+- `PUT /api/v1/admin/learners/{learnerId}/content-grants`：管理员完整替换文章授权。
+- `PUT /api/v1/admin/learners/{learnerId}/password`：管理员设置或重置学习者密码。
+
+部署该版本前，必须先重新运行 `../database/operations/provision_runtime_role.sql`，再执行
+`../database/audit/runtime_role_checks.sql`，确认所有 `anomaly_count` 都为 `0`，最后更新后端容器。
+
+本地自动验证新增学习者与文章授权的完整 HTTP 契约：
+
+```powershell
+cd D:\newdir\cc\tutor-base\backend
+.\mvnw.cmd '-Dtest=LearnerContentGrantHttpContractTest' test
+```
+
+手工联调时依次验证：管理员登录、新增学习者、设置密码、勾选并保存文章授权；随后用该学习者登录，确认
+只显示获授权文章。此阶段答题、批阅和错题仍使用 Supabase，属于预期状态。

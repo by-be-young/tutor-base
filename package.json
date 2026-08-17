@@ -7,6 +7,7 @@
     "frontend:sync": "node tutor-nest-vue/scripts/sync-articles-data.js",
     "predev": "npm run frontend:sync",
     "dev": "vite tutor-nest-vue",
+    "test:frontend": "node --test tutor-nest-vue/test/*.test.js",
     "prebuild": "npm run frontend:sync",
     "build": "vite build tutor-nest-vue",
     "preview": "vite preview tutor-nest-vue"

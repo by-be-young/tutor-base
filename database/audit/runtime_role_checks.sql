@@ -1,7 +1,10 @@
 WITH expected_privilege(table_name, privilege_type) AS (
     VALUES
         ('student', 'SELECT'),
+        ('student', 'INSERT'),
+        ('student', 'UPDATE'),
         ('account', 'SELECT'),
+        ('account', 'INSERT'),
         ('account', 'UPDATE'),
         ('account_activation', 'SELECT'),
         ('account_activation', 'INSERT'),
@@ -10,9 +13,19 @@ WITH expected_privilege(table_name, privilege_type) AS (
         ('account_session', 'INSERT'),
         ('account_session', 'UPDATE'),
         ('account_session', 'DELETE')
+), expected_sequence(sequence_name) AS (
+    VALUES
+        ('student_id_seq'),
+        ('account_id_seq'),
+        ('account_activation_id_seq'),
+        ('account_session_id_seq')
 ), expected_policy(table_name, policy_name) AS (
     VALUES
+        ('student', 'tutor_base_runtime_student_select'),
+        ('student', 'tutor_base_runtime_student_insert'),
+        ('student', 'tutor_base_runtime_student_update'),
         ('account', 'tutor_base_runtime_account_select'),
+        ('account', 'tutor_base_runtime_account_insert'),
         ('account', 'tutor_base_runtime_account_update'),
         ('account_activation', 'tutor_base_runtime_activation_select'),
         ('account_activation', 'tutor_base_runtime_activation_insert'),
@@ -43,10 +56,16 @@ WITH expected_privilege(table_name, privilege_type) AS (
         'tutor_base_app', format('public.%I', table_name), privilege_type)
 
     UNION ALL
+    SELECT 'required sequence privileges missing', count(*)
+    FROM expected_sequence
+    WHERE NOT has_sequence_privilege(
+        'tutor_base_app', format('public.%I', sequence_name), 'USAGE')
+
+    UNION ALL
     SELECT 'dangerous table privileges granted', count(*)
     FROM (VALUES
-        ('student', 'INSERT'), ('student', 'UPDATE'), ('student', 'DELETE'), ('student', 'TRUNCATE'),
-        ('account', 'INSERT'), ('account', 'DELETE'), ('account', 'TRUNCATE'),
+        ('student', 'DELETE'), ('student', 'TRUNCATE'),
+        ('account', 'DELETE'), ('account', 'TRUNCATE'),
         ('account_activation', 'DELETE'), ('account_activation', 'TRUNCATE'),
         ('account_session', 'TRUNCATE'),
         ('article_answer_keys', 'SELECT'), ('article_answer_keys', 'INSERT'),

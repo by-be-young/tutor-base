@@ -13,7 +13,9 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 
 import com.tutorbase.shared.http.TraceIdFilter;
+import com.tutorbase.administration.learner.LearnerAdministration;
 import com.tutorbase.administration.learner.LearnerQuery;
+import com.tutorbase.learning.access.ContentGrantQuery;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,6 +53,12 @@ class SystemHttpContractTest {
 
     @MockitoBean
     private LearnerQuery learnerQuery;
+
+    @MockitoBean
+    private LearnerAdministration learnerAdministration;
+
+    @MockitoBean
+    private ContentGrantQuery contentGrantQuery;
 
     @MockitoBean
     private JdbcClient jdbcClient;
