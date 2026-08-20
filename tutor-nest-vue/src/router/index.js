@@ -30,7 +30,7 @@ const routes = [
     path: '/tasks',
     name: 'Tasks',
     component: () => import('@/views/TasksView.vue'),
-    meta: { requiresAuth: true, requiredRole: 'ADMINISTRATOR' }
+    meta: { requiresAuth: true }
   },
   {
     path: '/wrong-questions',

@@ -1,52 +1,66 @@
 <!--
-  TasksView.vue - 任务系统（演示版）
+  TasksView.vue - 任务中心
   ----------------------------------------------------------------------------
   功能说明：
-    1. 仅超级管理员 young 可从导航栏进入
-    2. 完成任务 +100 积分（演示模式：young 积分固定 5000，不会消耗也不会变多）
-    3. 奖励进度条：每 200 积分获得一张普通卡片；每 1000 积分获得一张随机稀有卡片
-       （稀有卡片随机抽取，可获得已有卡片）
-    4. 演示模式：不涉及数据库与后端；领取状态仅保存在内存中，
-       刷新页面后恢复为「未领取」，不会进入统计
-    5. 状态颜色：待领取（金色发光） / 已领取（绿色） / 未达到条件（灰色锁定）
+    1. 所有登录用户均可从导航栏进入任务中心
+    2. 积分真实存储（Supabase user_points 表）；具体任务的完成逻辑尚未实现，
+       管理员（administrator）可直接点击「完成」领取任务积分，其他用户默认「未完成」
+    3. 点击「完成」后该任务标识变为「已领取」，+100 积分
+    4. 奖励进度条：每 200 积分获得一张普通卡片；每 1000 积分获得一张随机稀有卡片
+    5. 里程碑卡片领取后写入 Supabase card_collection 表，收藏室中持久可见
+    6. 收藏室：按卡组陈列已获得的卡片（每个卡组 1 稀有 + 6 普通）
+    7. 状态颜色：待领取（金色发光） / 已领取（绿色） / 未达到条件（灰色锁定）
 -->
 <template>
     <div class="task-container">
-        <!-- 非 young 访问提示 -->
-        <div v-if="!isSuperAdmin" class="empty-tip">
-            该功能仅超级管理员可见，当前账号无权访问。
+        <!-- 头部 -->
+        <div class="task-header">
+            <h1 class="task-title">任务中心</h1>
+            <p class="task-subtitle">
+                完成任务赚取积分，积分可兑换卡片奖励：每 200 积分获得一张普通卡片，每 1000 积分获得一张随机稀有卡片。
+                <template v-if="!isAdministrator">具体任务的完成功能尚未开放，当前积分固定不变。</template>
+            </p>
         </div>
 
-        <template v-else>
-            <!-- 头部 -->
-            <div class="task-header">
-                <h1 class="task-title">任务中心</h1>
-                <p class="task-subtitle">
-                    完成任务赚取积分，积分可兑换卡片奖励：每 200 积分获得一张普通卡片，每 1000 积分获得一张随机稀有卡片。
-                </p>
+        <!-- 统计栏 -->
+        <div class="task-stats">
+            <div class="task-stat-card is-points">
+                <div class="task-stat-number">{{ tasksStore.points }}</div>
+                <div class="task-stat-label">当前积分</div>
             </div>
-
-            <!-- 统计栏 -->
-            <div class="task-stats">
-                <div class="task-stat-card is-points">
-                    <div class="task-stat-number">{{ POINTS }}</div>
-                    <div class="task-stat-label">当前积分 <span class="stat-badge">固定</span></div>
-                </div>
-                <div class="task-stat-card">
-                    <div class="task-stat-number">{{ reachedCount }}/{{ milestones.length }}</div>
-                    <div class="task-stat-label">已达成里程碑</div>
-                </div>
-                <div class="task-stat-card is-claimed">
-                    <div class="task-stat-number">{{ claimedIds.size }}</div>
-                    <div class="task-stat-label">本次会话已领取卡片</div>
-                </div>
+            <div class="task-stat-card">
+                <div class="task-stat-number">{{ reachedCount }}/{{ milestones.length }}</div>
+                <div class="task-stat-label">已达成里程碑</div>
             </div>
+            <div class="task-stat-card is-claimed">
+                <div class="task-stat-number">{{ tasksStore.collection.length }}</div>
+                <div class="task-stat-label">已收集卡片</div>
+            </div>
+        </div>
 
-            <!-- 任务列表（演示） -->
+        <!-- 标签页：任务列表 / 收藏室 -->
+        <div class="task-tabs">
+            <button class="task-tab" :class="{ 'is-active': activeTab === 'tasks' }" @click="activeTab = 'tasks'">
+                <i class="fas fa-list-check"></i> 任务列表
+            </button>
+            <button class="task-tab" :class="{ 'is-active': activeTab === 'collection' }" @click="activeTab = 'collection'">
+                <i class="fas fa-book-open"></i> 收藏室
+                <span class="tab-count">{{ tasksStore.collection.length }}</span>
+            </button>
+        </div>
+
+        <div v-if="tasksStore.isLoading" class="loading-tip">
+            <i class="fas fa-spinner fa-spin"></i> 正在加载任务数据…
+        </div>
+
+        <!-- ========== 任务列表 ========== -->
+        <template v-if="activeTab === 'tasks' && !tasksStore.isLoading">
             <section class="task-section">
                 <div class="section-head">
                     <h2 class="section-title"><i class="fas fa-list-check"></i> 任务列表</h2>
-                    <span class="section-note">完成任务 +100 积分（演示模式：young 积分固定 5000，不会变化）</span>
+                    <span class="section-note">
+                        完成任务 +100 积分（{{ isAdministrator ? '管理员可直接点击「完成」领取' : '具体任务尚未开放' }}）
+                    </span>
                 </div>
                 <div class="task-list">
                     <div v-for="t in mockTasks" :key="t.id" class="task-item">
@@ -57,10 +71,22 @@
                             <span class="task-name">{{ t.name }}</span>
                             <span class="task-desc">{{ t.desc }}</span>
                         </div>
-                        <span class="task-points">+100 积分</span>
-                        <button class="task-done-btn" @click="handleCompleteTask">
-                            <i class="fas fa-check"></i> 完成
+                        <span class="task-points">+{{ TASK_POINTS }} 积分</span>
+
+                        <!-- 已领取 -->
+                        <span v-if="tasksStore.claimedTaskIds.has(t.id)" class="task-status is-claimed">
+                            <i class="fas fa-check"></i> 已领取
+                        </span>
+                        <!-- 管理员：可点击完成 -->
+                        <button v-else-if="isAdministrator" class="task-done-btn"
+                            :disabled="claimingTaskId === t.id" @click="handleCompleteTask(t)">
+                            <i class="fas fa-check"></i>
+                            {{ claimingTaskId === t.id ? '领取中…' : '完成' }}
                         </button>
+                        <!-- 其他用户：默认未完成 -->
+                        <span v-else class="task-status is-pending" title="完成任务获取积分的功能暂未开放">
+                            <i class="fas fa-hourglass-half"></i> 未完成
+                        </span>
                     </div>
                 </div>
             </section>
@@ -102,6 +128,11 @@
             </section>
         </template>
 
+        <!-- ========== 收藏室 ========== -->
+        <section v-else-if="activeTab === 'collection' && !tasksStore.isLoading" class="task-section is-room">
+            <CollectionRoom />
+        </section>
+
         <!-- 领取卡片弹窗 -->
         <div v-if="claimVisible" class="claim-overlay" @click.self="closeClaim">
             <div class="claim-panel">
@@ -121,10 +152,11 @@
                             <span class="back-question">?</span>
                             <span class="back-text">揭晓卡片中…</span>
                         </div>
-                        <!-- 正面（卡片：纯色，无图片） -->
+                        <!-- 正面（卡片：纯色 + 图标） -->
                         <div class="claim-face claim-front"
                             :class="{ 'is-rare': currentReward?.milestone.isRare }"
                             :style="{ background: cardGradient(currentReward?.card) }">
+                            <i v-if="currentReward?.card" :class="currentReward.card.icon" class="front-icon"></i>
                             <span v-if="currentReward?.card" class="card-type"
                                 :class="{ 'is-rare': currentReward.milestone.isRare }">
                                 {{ currentReward.milestone.isRare ? '✦ 稀有卡片' : '普通卡片' }}
@@ -139,8 +171,8 @@
                     <button v-if="!flipped" class="claim-btn is-disabled" disabled>
                         <i class="fas fa-spinner fa-spin"></i> 揭晓中…
                     </button>
-                    <button v-else class="claim-btn is-take" @click="confirmClaim">
-                        <i class="fas fa-hand-holding-heart"></i> 收下卡片
+                    <button v-else class="claim-btn is-take" :disabled="claimingMilestone" @click="confirmClaim">
+                        <i class="fas fa-hand-holding-heart"></i> {{ claimingMilestone ? '收集中…' : '收下卡片' }}
                     </button>
                 </div>
             </div>
@@ -151,40 +183,20 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
+import { useTasksStore } from '@/stores/tasksStore'
+import { buildMilestones } from '@/data/cardCatalog'
+import CollectionRoom from '@/components/tasks/CollectionRoom.vue'
 
 const authStore = useAuthStore()
+const tasksStore = useTasksStore()
 
-// ========== 演示数据 ==========
-// 超级管理员 young：固定 5000 积分，不会消耗也不会变多
-const POINTS = 5000
-const STEP = 200
-const MAX_DISPLAY = 6000 // 进度条展示至 6000，超出 5000 的里程碑用于演示「未达到条件」
+const isAdministrator = computed(() => authStore.isAdministrator)
 
-// 普通卡片（演示数据；正式版由管理员面板指定）
-const FIXED_POOL = [
-    { name: '翠叶徽章', colors: ['#8fcfb8', '#4e9e83'] },
-    { name: '青玉书签', colors: ['#7bc8c4', '#3a8f8b'] },
-    { name: '鎏金护符', colors: ['#e5c96b', '#b3923a'] },
-    { name: '墨蓝锦囊', colors: ['#7ba3d9', '#45699f'] },
-    { name: '珊瑚印章', colors: ['#e58f8f', '#b35656'] },
-    { name: '紫藤徽记', colors: ['#c3a5e0', '#7d5ca8'] },
-    { name: '琥珀宝珠', colors: ['#e0b072', '#a97a38'] },
-    { name: '苔绿石片', colors: ['#9cc48a', '#5f8f4e'] },
-    { name: '霜白羽笔', colors: ['#c9d8d4', '#7e9d95'] },
-    { name: '赤陶火印', colors: ['#d99b6c', '#a06a3f'] }
-]
+// ========== 常量 ==========
+const TASK_POINTS = 100
+const MAX_DISPLAY = 6000 // 进度条展示至 6000，超出当前积分的里程碑用于演示「未达到条件」
 
-// 稀有卡片池：领取时随机抽取（可获得已有卡片）
-const RARE_POOL = [
-    { name: '金色传说·时光罗盘', colors: ['#f2d66b', '#c9a227'] },
-    { name: '紫晶史诗·智慧之冠', colors: ['#b79aef', '#7a55c9'] },
-    { name: '绯红神话·炼金之焰', colors: ['#f08a7a', '#c0483f'] },
-    { name: '翠玉传奇·守护之灵', colors: ['#7fe0b0', '#2f9e76'] },
-    { name: '冰蓝神话·极光之翼', colors: ['#8fd4f0', '#3f8fb8'] },
-    { name: '曜黑史诗·永夜之眼', colors: ['#8f9bb3', '#3f4a63'] }
-]
-
-// 演示任务列表
+// 任务列表（任务的具体逻辑尚未实现；管理员点击「完成」直接领取积分）
 const mockTasks = [
     { id: 1, name: '阅读一篇文章', desc: '完整阅读任意一篇学习资料', icon: 'fas fa-book-open', color: '#5BA8A4' },
     { id: 2, name: '完成一次英语训练', desc: '完成任意一组英语练习题', icon: 'fas fa-dumbbell', color: '#b6862a' },
@@ -194,48 +206,30 @@ const mockTasks = [
 
 // ========== 里程碑 ==========
 // 生成 200 ~ 6000 的里程碑；每 1000 积分为稀有卡片节点，其余为普通卡片节点
-function buildMilestones() {
-    const list = []
-    for (let pts = STEP; pts <= MAX_DISPLAY; pts += STEP) {
-        const isRare = pts % 1000 === 0
-        list.push({
-            pts,
-            isRare,
-            reached: pts <= POINTS,
-            // 普通卡片预置（管理员面板未实现，先用演示池循环分配）
-            card: isRare ? null : FIXED_POOL[((pts / STEP) - 1) % FIXED_POOL.length]
-        })
-    }
-    return list
-}
-
-const milestones = buildMilestones()
-const reachedCount = computed(() => milestones.filter(m => m.reached).length)
-
-// 已领取的里程碑积分（仅内存保存，刷新后恢复未领取）
-const claimedIds = ref(new Set())
+const milestones = buildMilestones(MAX_DISPLAY)
+const reachedCount = computed(() => milestones.filter(m => m.pts <= tasksStore.points).length)
 
 // ========== 里程碑状态 ==========
 function milestoneClass(m) {
-    if (!m.reached) return 'is-locked'
-    if (claimedIds.value.has(m.pts)) return 'is-claimed'
+    if (m.pts > tasksStore.points) return 'is-locked'
+    if (tasksStore.claimedMilestones.has(m.pts)) return 'is-claimed'
     return 'is-claimable'
 }
 
 function milestoneIcon(m) {
-    if (!m.reached) return 'fas fa-lock'
-    if (claimedIds.value.has(m.pts)) return 'fas fa-check'
+    if (m.pts > tasksStore.points) return 'fas fa-lock'
+    if (tasksStore.claimedMilestones.has(m.pts)) return 'fas fa-check'
     return m.isRare ? 'fas fa-star' : 'fas fa-gift'
 }
 
 function milestoneLabel(m) {
-    if (!m.reached) return '未达到'
-    if (claimedIds.value.has(m.pts)) return '已领取'
+    if (m.pts > tasksStore.points) return '未达到'
+    if (tasksStore.claimedMilestones.has(m.pts)) return '已领取'
     return m.isRare ? '稀有·待领取' : '待领取'
 }
 
 function connectorClass(m) {
-    return m.reached ? 'is-reached' : 'is-locked'
+    return m.pts <= tasksStore.points ? 'is-reached' : 'is-locked'
 }
 
 // ========== 进度条滚动 ==========
@@ -252,19 +246,34 @@ function scrollToLatest() {
     })
 }
 
+// ========== 任务（管理员领取积分） ==========
+const claimingTaskId = ref(null)
+
+async function handleCompleteTask(task) {
+    if (claimingTaskId.value) return
+    claimingTaskId.value = task.id
+    try {
+        const next = await tasksStore.claimTask(authStore.currentUser, task.id, TASK_POINTS)
+        showToast(`任务「${task.name}」完成，+${TASK_POINTS} 积分（当前 ${next} 积分）`, 'success')
+        scrollToLatest()
+    } catch (e) {
+        showToast(e.message, 'error')
+    } finally {
+        claimingTaskId.value = null
+    }
+}
+
 // ========== 领取卡片 ==========
 const claimVisible = ref(false)
 const flipped = ref(false)
 const currentReward = ref(null)
+const claimingMilestone = ref(false)
 let flipTimer = null
 
 function openClaim(m) {
-    if (!m.reached || claimedIds.value.has(m.pts)) return
-    // 普通卡片为预置卡；稀有卡片随机抽取（可获得已有卡片）
-    const card = m.isRare
-        ? RARE_POOL[Math.floor(Math.random() * RARE_POOL.length)]
-        : m.card
-    currentReward.value = { milestone: m, card }
+    if (m.pts > tasksStore.points || tasksStore.claimedMilestones.has(m.pts)) return
+    // 里程碑 → 卡片由目录确定性映射（同一里程碑所有人获得同一张卡）
+    currentReward.value = { milestone: m, card: m.card }
     flipped.value = false
     claimVisible.value = true
     // 先展示背面，再翻转揭晓
@@ -273,22 +282,23 @@ function openClaim(m) {
     }, 900)
 }
 
-function confirmClaim() {
-    if (!currentReward.value || !flipped.value) return
-    const { milestone, card } = currentReward.value
-    claimedIds.value.add(milestone.pts)
-    claimVisible.value = false
-    showToast(
-        milestone.isRare
-            ? `✨ 稀有卡片「${card.name}」已领取（演示：刷新后恢复未领取）`
-            : `已领取卡片「${card.name}」（演示：刷新后恢复未领取）`,
-        'success'
-    )
-    scrollToLatest()
+async function confirmClaim() {
+    if (!currentReward.value || !flipped.value || claimingMilestone.value) return
+    claimingMilestone.value = true
+    try {
+        const card = await tasksStore.claimMilestone(authStore.currentUser, currentReward.value.milestone)
+        claimVisible.value = false
+        showToast(`卡片「${card.name}」已收入收藏室`, 'success')
+        scrollToLatest()
+    } catch (e) {
+        showToast(e.message, 'error')
+    } finally {
+        claimingMilestone.value = false
+    }
 }
 
 function closeClaim() {
-    if (!flipped.value) return // 揭晓动画进行中不允许关闭
+    if (!flipped.value || claimingMilestone.value) return // 揭晓动画进行中不允许关闭
     claimVisible.value = false
 }
 
@@ -309,10 +319,8 @@ const sparklePositions = [
     { left: '84%', top: '28%' }
 ]
 
-// ========== 任务（演示） ==========
-function handleCompleteTask() {
-    showToast('演示模式：完成任务 +100 积分，但 young 积分固定为 5000，不会变化', 'info', 3500)
-}
+// ========== 标签页 ==========
+const activeTab = ref('tasks')
 
 // ========== Toast（与错题本保持一致） ==========
 let toastTimer = null
@@ -343,9 +351,8 @@ function showToast(message, type = 'info', duration = 3000) {
 }
 
 // ========== 生命周期 ==========
-const isSuperAdmin = computed(() => authStore.isAdministrator)
-
 onMounted(() => {
+    tasksStore.load(authStore.currentUser)
     // 初始停靠右侧：左侧已领取区域不可见，需滚动查看
     scrollToLatest()
 })
@@ -362,14 +369,6 @@ onBeforeUnmount(() => {
     margin: 0 auto;
     padding: 30px 32px 100px;
     width: 100%;
-}
-
-.empty-tip {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--gray);
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 24px;
 }
 
 /* ========== 头部 ========== */
@@ -448,14 +447,54 @@ onBeforeUnmount(() => {
     gap: 6px;
 }
 
-.stat-badge {
-    font-size: 0.7rem;
+/* ========== 标签页 ========== */
+.task-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.task-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 22px;
+    border-radius: 30px;
+    border: 1px solid rgba(151, 130, 200, 0.22);
+    background: rgba(255, 255, 255, 0.35);
+    color: #5d4a8a;
+    font-size: 0.92rem;
     font-weight: 600;
-    color: #8a6d1a;
-    background: rgba(217, 186, 75, 0.18);
-    border: 1px solid rgba(217, 186, 75, 0.3);
-    padding: 0 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.task-tab:hover {
+    background: rgba(151, 130, 200, 0.14);
+    transform: translateY(-1px);
+}
+
+.task-tab.is-active {
+    background: linear-gradient(135deg, rgba(151, 130, 200, 0.85), rgba(123, 104, 175, 0.9));
+    border-color: transparent;
+    color: white;
+    box-shadow: 0 6px 16px rgba(151, 130, 200, 0.3);
+}
+
+.tab-count {
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.22);
+    padding: 1px 9px;
     border-radius: 999px;
+}
+
+.loading-tip {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--gray);
+    font-size: 0.95rem;
 }
 
 /* ========== 区块 ========== */
@@ -466,6 +505,10 @@ onBeforeUnmount(() => {
     backdrop-filter: blur(8px);
     border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.task-section.is-room {
+    padding: 24px 26px;
 }
 
 .section-head {
@@ -578,6 +621,36 @@ onBeforeUnmount(() => {
 .task-done-btn:hover {
     background: rgba(205, 237, 221, 0.9);
     transform: translateY(-1px);
+}
+
+.task-done-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+    transform: none;
+}
+
+/* 任务状态标识：已领取 / 未完成 */
+.task-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.task-status.is-claimed {
+    background: rgba(205, 237, 221, 0.6);
+    color: #2f7b57;
+    border: 1px solid rgba(80, 176, 122, 0.25);
+}
+
+.task-status.is-pending {
+    background: rgba(120, 170, 155, 0.1);
+    color: #7c9086;
+    border: 1px solid rgba(120, 170, 155, 0.2);
 }
 
 /* ========== 奖励进度条 ========== */
@@ -930,7 +1003,7 @@ onBeforeUnmount(() => {
     letter-spacing: 2px;
 }
 
-/* 正面：卡片（纯色，无图片） */
+/* 正面：卡片（纯色 + 图标） */
 .claim-front {
     transform: rotateY(180deg);
     display: flex;
@@ -957,6 +1030,11 @@ onBeforeUnmount(() => {
 .claim-front.is-rare {
     border: 3px solid rgba(242, 214, 107, 0.9);
     box-shadow: 0 0 30px rgba(242, 214, 107, 0.5), 0 14px 40px rgba(0, 0, 0, 0.25);
+}
+
+.front-icon {
+    font-size: 3.2rem;
+    text-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
 
 .card-type {
@@ -1060,6 +1138,12 @@ onBeforeUnmount(() => {
 .claim-btn.is-take:hover {
     transform: translateY(-2px);
     box-shadow: 0 10px 22px rgba(217, 186, 75, 0.4);
+}
+
+.claim-btn.is-take:disabled {
+    opacity: 0.65;
+    cursor: wait;
+    transform: none;
 }
 
 /* ========== Toast（与错题本保持一致） ========== */
