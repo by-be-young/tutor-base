@@ -72,12 +72,20 @@
         </div>
       </div>
 
-      <!-- 登录表单（未登录时显示） -->
-      <form v-else class="login-form" @submit.prevent="handleLogin">
+      <!-- 登录/注册表单（未登录时显示） -->
+      <form v-else class="login-form" @submit.prevent="mode === 'login' ? handleLogin() : handleRegister()">
         <input v-model="username" type="text" autocomplete="username" placeholder="用户名" required autofocus
           ref="usernameInput" />
-        <input v-model="password" type="password" autocomplete="current-password" placeholder="密码" required />
-        <button type="submit" class="login-btn">登录</button>
+        <input v-model="password" type="password"
+          :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" placeholder="密码"
+          minlength="6" maxlength="128" required />
+        <input v-if="mode === 'register'" v-model="confirmPassword" type="password" autocomplete="new-password"
+          placeholder="确认密码" minlength="6" maxlength="128" required />
+        <button type="submit" class="login-btn">{{ mode === 'login' ? '登录' : '注册' }}</button>
+        <button type="button" class="mode-toggle" @click="toggleMode">
+          {{ mode === 'login' ? '还没有账号？立即注册' : '已有账号？直接登录' }}
+        </button>
+        <p v-if="mode === 'register'" class="form-hint">密码长度须为 6～128 个字符</p>
         <div v-if="error" class="login-error">{{ error }}</div>
       </form>
     </div>
@@ -99,6 +107,8 @@ const wrongQuestionsStore = useWrongQuestionsStore()
 // 本地状态
 const username = ref('')
 const password = ref('')
+const confirmPassword = ref('')
+const mode = ref('login')
 const error = ref('')
 const scrollContainer = ref(null)
 const usernameInput = ref(null)
@@ -195,6 +205,49 @@ async function handleLogin() {
   }
 }
 
+async function handleRegister() {
+  error.value = ''
+  const trimmedUsername = username.value.trim()
+
+  if (!trimmedUsername) {
+    error.value = '请输入用户名'
+    await nextTick()
+    usernameInput.value?.focus()
+    return
+  }
+  if (password.value.length < 6 || password.value.length > 128) {
+    error.value = '密码长度须为 6～128 个字符'
+    return
+  }
+  if (password.value !== confirmPassword.value) {
+    error.value = '两次输入的密码不一致'
+    return
+  }
+
+  try {
+    await authStore.register(trimmedUsername, password.value)
+    password.value = ''
+    confirmPassword.value = ''
+    await loadArticlesData()
+    const redirect = router.currentRoute.value.query.redirect
+    if (typeof redirect === 'string' && redirect.startsWith('/')) {
+      await router.push(redirect)
+    }
+  } catch (err) {
+    error.value = err.code === 'username_conflict'
+      ? '该用户名已被注册，请换一个'
+      : (err.message || '注册失败，请重试')
+  }
+}
+
+function toggleMode() {
+  mode.value = mode.value === 'login' ? 'register' : 'login'
+  error.value = ''
+  if (mode.value === 'register') {
+    confirmPassword.value = ''
+  }
+}
+
 async function loadArticlesData() {
   try {
     await blogStore.loadArticleData()
@@ -218,6 +271,8 @@ watch(() => authStore.isLoggedIn, async (loggedIn) => {
   if (loggedIn) {
     await loadArticlesData()
     await loadWrongQuestions()
+  } else {
+    mode.value = 'login'
   }
 })
 
@@ -248,9 +303,14 @@ onMounted(async () => {
 
 })
 
-// 暴露方法给父组件（导航栏的登录按钮）
+// 暴露方法给父组件（导航栏的登录/注册按钮）
 defineExpose({
   focusUsername: () => {
+    usernameInput.value?.focus()
+  },
+  switchToRegister: () => {
+    mode.value = 'register'
+    error.value = ''
     usernameInput.value?.focus()
   }
 })
@@ -681,6 +741,31 @@ defineExpose({
   font-size: 0.9rem;
   margin-top: 6px;
   min-height: 1.2em;
+}
+
+.mode-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--teal-dark, #5BA8A4);
+  font-size: 0.85rem;
+  font-family: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 2px 6px;
+  transition: color 0.2s;
+}
+
+.mode-toggle:hover {
+  color: #2d4a3a;
+}
+
+.form-hint {
+  width: 100%;
+  text-align: center;
+  color: rgba(90, 122, 106, 0.6);
+  font-size: 0.8rem;
+  margin-top: -2px;
 }
 
 /* 响应式 */

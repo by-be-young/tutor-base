@@ -65,6 +65,13 @@ export const useAuthStore = defineStore('auth', () => {
     return applySession(await identityGateway.login(username, password))
   }
 
+  async function register(usernameValue, password) {
+    await ensureInitialized()
+    const username = usernameValue?.trim()
+    if (!username || !password) throw new Error('请输入用户名和密码')
+    return applySession(await identityGateway.register(username, password))
+  }
+
   async function logout() {
     try {
       await identityGateway.logout()
@@ -101,6 +108,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAdministrator,
     getPermissionIds,
     login,
+    register,
     logout,
     restoreSession,
     ensureInitialized

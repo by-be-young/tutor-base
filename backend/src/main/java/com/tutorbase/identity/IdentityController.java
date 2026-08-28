@@ -12,9 +12,11 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.CacheControl;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -78,6 +80,33 @@ final class IdentityController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/accounts")
+    ResponseEntity<SessionResponse> register(
+            @Valid @RequestBody RegisterRequest body,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        rateLimiter.check("register", request.getRemoteAddr());
+        IdentityService.LoginResult result = identity.register(
+                body.username(), body.password(), sessions.cookie(request));
+        setCookie(response, result.token());
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(SessionResponse.from(result.principal()));
+    }
+
+    @PutMapping("/password")
+    ResponseEntity<Void> changePassword(
+            @Valid @RequestBody ChangePasswordRequest body,
+            @AuthenticationPrincipal AccountPrincipal principal,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        identity.changePassword(
+                principal.accountId(), sessions.cookie(request), body.currentPassword(), body.newPassword());
+        return ResponseEntity.noContent()
+                .cacheControl(CacheControl.noStore())
+                .build();
+    }
+
     @PostMapping("/account-activations/complete")
     ResponseEntity<Void> activate(@Valid @RequestBody ActivationRequest body, HttpServletRequest request) {
         rateLimiter.check("activation", request.getRemoteAddr());
@@ -104,9 +133,17 @@ final class IdentityController {
                         @NotBlank @Size(max = 128) String password) {
     }
 
+    record RegisterRequest(@NotBlank @Size(max = 100) String username,
+                           @NotBlank @Size(min = 6, max = 128) String password) {
+    }
+
+    record ChangePasswordRequest(@NotBlank @Size(max = 128) String currentPassword,
+                                 @NotBlank @Size(min = 6, max = 128) String newPassword) {
+    }
+
     record ActivationRequest(@NotBlank @Size(max = 100) String username,
                              @NotBlank @Size(max = 256) String activationCode,
-                             @NotBlank @Size(min = 12, max = 128) String password) {
+                             @NotBlank @Size(min = 6, max = 128) String password) {
     }
 
     record SessionResponse(long accountId, Long learnerId, String username, List<String> roles) {

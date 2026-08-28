@@ -1,7 +1,7 @@
 <!-- src/App.vue -->
 <template>
   <div id="app">
-    <AppHeader @login-click="handleLoginClick" />
+    <AppHeader @login-click="handleLoginClick" @register-click="handleRegisterClick" />
     <router-view ref="homeView" />
   </div>
 </template>
@@ -18,6 +18,13 @@ function handleLoginClick() {
   // 触发首页的输入框聚焦
   if (homeView.value?.focusUsername) {
     homeView.value.focusUsername()
+  }
+}
+
+function handleRegisterClick() {
+  // 切换到首页注册表单
+  if (homeView.value?.switchToRegister) {
+    homeView.value.switchToRegister()
   }
 }
 

@@ -93,14 +93,14 @@
                 <p class="password-dialog-student">学生：{{ passwordTarget?.username }}</p>
 
                 <label for="student-new-password">新密码</label>
-                <input id="student-new-password" v-model="newPassword" type="password" minlength="12"
+                <input id="student-new-password" v-model="newPassword" type="password" minlength="6"
                     maxlength="128" autocomplete="new-password" :disabled="passwordSaving" autofocus />
 
                 <label for="student-confirm-password">确认新密码</label>
-                <input id="student-confirm-password" v-model="confirmPassword" type="password" minlength="12"
+                <input id="student-confirm-password" v-model="confirmPassword" type="password" minlength="6"
                     maxlength="128" autocomplete="new-password" :disabled="passwordSaving" />
 
-                <p class="password-dialog-hint">密码长度须为 12～128 个字符，两次输入必须一致。</p>
+                <p class="password-dialog-hint">密码长度须为 6～128 个字符，两次输入必须一致。</p>
                 <p v-if="passwordError" class="password-error" role="alert">{{ passwordError }}</p>
 
                 <div class="password-dialog-actions">
@@ -225,7 +225,7 @@ function passwordFailureMessage(error) {
     if (['csrf_invalid', 'invalid_csrf'].includes(error.code)) {
         return '页面安全令牌已失效，请刷新页面后重试。'
     }
-    if (error.status === 400) return '密码不符合要求，请确认长度为 12～128 个字符。'
+    if (error.status === 400) return '密码不符合要求，请确认长度为 6～128 个字符。'
     if (error.status === 401) return '登录状态已失效，请重新登录后再试。'
     if (error.status === 403) return '当前账户无权设置学生密码。'
     if (error.status === 404) return '未找到该学生，请刷新页面后重试。'
@@ -238,8 +238,8 @@ async function submitPassword() {
     passwordError.value = ''
     const password = newPassword.value
 
-    if (password.length < 12 || password.length > 128) {
-        passwordError.value = '密码长度须为 12～128 个字符。'
+    if (password.length < 6 || password.length > 128) {
+        passwordError.value = '密码长度须为 6～128 个字符。'
         return
     }
     if (password !== confirmPassword.value) {

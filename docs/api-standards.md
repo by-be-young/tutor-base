@@ -74,7 +74,7 @@
 | 429 | `rate_limited` | 公开认证操作超过来源地址短时频率限制；按 `Retry-After` 重试 |
 | 404 | `resource_not_found` | 在授权范围内资源不存在 |
 | 409 | `state_conflict` | 当前状态不允许该操作 |
-| 409 | `username_taken` | 激活/创建账户时用户名冲突 |
+| 409 | `username_conflict` | 注册或创建账户时用户名已被占用（不公开具体用户名） |
 | 412 | `version_conflict` | `If-Match` 与当前资源版本不符 |
 | 429 | `rate_limited` | 请求频率超过限制 |
 | 500 | `internal_error` | 未分类服务端错误，不返回内部异常 |
@@ -103,10 +103,14 @@
 | Method | Path | Auth | 语义 |
 | --- | --- | --- | --- |
 | GET | `/csrf` | public | 为受信任的 GitHub Pages origin 返回当前 CSRF token |
+| POST | `/accounts` | public | 注册学习者账户并直接建立 session；新账户无任何内容授权 |
 | POST | `/account-activations/complete` | activation token | 设置初始密码并激活现有账户 |
 | POST | `/sessions` | public | 用户名/密码登录并创建 session |
 | GET | `/session` | account | 返回当前 Account 投影，并刷新 CSRF cookie |
 | DELETE | `/session` | account | 注销当前 session |
+| PUT | `/password` | account | 校验当前密码后修改密码；撤销除当前会话外的所有会话 |
+
+所有密码（注册、激活、改密、管理员重置）长度约束统一为 6～128 个字符。
 
 ### Learning Access and Catalog
 

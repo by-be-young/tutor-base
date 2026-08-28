@@ -237,9 +237,16 @@ class IdentityHttpContractTest {
                         .cookie(adminCookie)
                         .header("X-CSRF-TOKEN", admin.csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"password\":\"too-short\"}"))
+                        .content("{\"password\":\"short\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("validation_failed"));
+
+        mockMvc.perform(put("/api/v1/admin/learners/5/password")
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"Eight-char\"}"))
+                .andExpect(status().isNoContent());
 
         mockMvc.perform(put("/api/v1/admin/learners/999/password")
                         .cookie(adminCookie)
@@ -328,6 +335,175 @@ class IdentityHttpContractTest {
         Cookie renewed = login(csrf(null), "Alice", "New-password-2026");
         mockMvc.perform(get("/api/v1/session").cookie(renewed))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void givenNewUsernameWhenRegisteringThenAccountIsActiveAndSessionIsEstablished() throws Exception {
+        BrowserSession anonymous = csrf(null);
+        MvcResult registered = mockMvc.perform(post("/api/v1/accounts")
+                        .cookie(anonymous.cookie())
+                        .header("X-CSRF-TOKEN", anonymous.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "username", "  Bob  ", "password", "Learner-password-2026"))))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(jsonPath("$.username").value("Bob"))
+                .andExpect(jsonPath("$.learnerId").isNumber())
+                .andExpect(jsonPath("$.roles[0]").value("LEARNER"))
+                .andReturn();
+
+        Cookie registeredCookie = requireCookie(registered);
+        assertThat(registeredCookie.getValue()).isNotEqualTo(anonymous.cookie().getValue());
+        assertThat(jdbc.queryForObject(
+                "SELECT permissions = '{}'::integer[] FROM public.student WHERE username = 'Bob'", Boolean.class))
+                .isTrue();
+        assertThat(jdbc.queryForObject("""
+                SELECT status FROM public.account
+                WHERE learner_id = (SELECT id FROM public.student WHERE username = 'Bob')
+                """, String.class)).isEqualTo("active");
+        assertThat(jdbc.queryForObject("""
+                SELECT activated_at IS NOT NULL FROM public.account
+                WHERE learner_id = (SELECT id FROM public.student WHERE username = 'Bob')
+                """, Boolean.class)).isTrue();
+
+        mockMvc.perform(get("/api/v1/session").cookie(registeredCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("Bob"));
+        mockMvc.perform(get("/api/v1/me/content-grants").cookie(registeredCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articleIds.length()").value(0));
+    }
+
+    @Test
+    void givenCaseVariantOrTakenUsernameWhenRegisteringThenConflictAndNoOrphanRow() throws Exception {
+        BrowserSession anonymous = csrf(null);
+        long studentsBefore = jdbc.queryForObject("SELECT count(*) FROM public.student", Long.class);
+
+        // 大小写变体：student 插入成功，但 account username_normalized 唯一索引冲突，事务整体回滚
+        mockMvc.perform(post("/api/v1/accounts")
+                        .cookie(anonymous.cookie())
+                        .header("X-CSRF-TOKEN", anonymous.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "username", "ALICE", "password", "Learner-password-2026"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("username_conflict"));
+
+        // 完全同名：student username 唯一约束直接冲突
+        mockMvc.perform(post("/api/v1/accounts")
+                        .cookie(anonymous.cookie())
+                        .header("X-CSRF-TOKEN", anonymous.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "username", "Alice", "password", "Learner-password-2026"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("username_conflict"));
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.student", Long.class))
+                .isEqualTo(studentsBefore);
+    }
+
+    @Test
+    void givenWeakOversizedPasswordOrMissingCsrfWhenRegisteringThenRejected() throws Exception {
+        BrowserSession anonymous = csrf(null);
+        mockMvc.perform(post("/api/v1/accounts")
+                        .cookie(anonymous.cookie())
+                        .header("X-CSRF-TOKEN", anonymous.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"Carol\",\"password\":\"short\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_failed"));
+
+        mockMvc.perform(post("/api/v1/accounts")
+                        .cookie(anonymous.cookie())
+                        .header("X-CSRF-TOKEN", anonymous.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "username", "Carol", "password", "x".repeat(129)))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_failed"));
+
+        mockMvc.perform(post("/api/v1/accounts")
+                        .cookie(anonymous.cookie())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"Carol\",\"password\":\"Learner-password-2026\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("csrf_invalid"));
+    }
+
+    @Test
+    void givenTwoSessionsWhenChangingPasswordThenCurrentSessionSurvivesAndOthersRevoked() throws Exception {
+        setActivePassword(5, "Old-password-2026");
+        Cookie firstSession = login(csrf(null), "Alice", "Old-password-2026");
+        Cookie secondSession = login(csrf(null), "Alice", "Old-password-2026");
+        BrowserSession changing = csrf(secondSession);
+
+        mockMvc.perform(put("/api/v1/password")
+                        .cookie(secondSession)
+                        .header("X-CSRF-TOKEN", changing.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "currentPassword", "Old-password-2026",
+                                "newPassword", "New-password-2026"))))
+                .andExpect(status().isNoContent());
+
+        // 发起改密的会话保持有效，另一会话被撤销
+        mockMvc.perform(get("/api/v1/session").cookie(secondSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("Alice"));
+        mockMvc.perform(get("/api/v1/session").cookie(firstSession))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("unauthenticated"));
+
+        invalidLogin(csrf(null), "Alice", "Old-password-2026");
+        Cookie renewed = login(csrf(null), "Alice", "New-password-2026");
+        mockMvc.perform(get("/api/v1/session").cookie(renewed))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void givenWrongCurrentPasswordWhenChangingPasswordThenUnauthorized() throws Exception {
+        setActivePassword(5, "Learner-password-2026");
+        Cookie learnerCookie = login(csrf(null), "Alice", "Learner-password-2026");
+        BrowserSession learner = csrf(learnerCookie);
+
+        mockMvc.perform(put("/api/v1/password")
+                        .cookie(learnerCookie)
+                        .header("X-CSRF-TOKEN", learner.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "currentPassword", "wrong-password",
+                                "newPassword", "New-password-2026"))))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("invalid_credentials"));
+    }
+
+    @Test
+    void givenWeakNewPasswordOrAnonymousWhenChangingPasswordThenRejected() throws Exception {
+        BrowserSession anonymous = csrf(null);
+        mockMvc.perform(put("/api/v1/password")
+                        .cookie(anonymous.cookie())
+                        .header("X-CSRF-TOKEN", anonymous.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "currentPassword", "whatever",
+                                "newPassword", "New-password-2026"))))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("unauthenticated"));
+
+        setActivePassword(5, "Learner-password-2026");
+        Cookie learnerCookie = login(csrf(null), "Alice", "Learner-password-2026");
+        BrowserSession learner = csrf(learnerCookie);
+        mockMvc.perform(put("/api/v1/password")
+                        .cookie(learnerCookie)
+                        .header("X-CSRF-TOKEN", learner.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "currentPassword", "Learner-password-2026",
+                                "newPassword", "short"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_failed"));
     }
 
     private String invalidLogin(BrowserSession browser, String username, String password) throws Exception {

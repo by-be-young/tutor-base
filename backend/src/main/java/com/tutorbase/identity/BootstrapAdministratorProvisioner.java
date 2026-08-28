@@ -28,8 +28,8 @@ final class BootstrapAdministratorProvisioner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments arguments) {
         IdentityProperties.Bootstrap bootstrap = properties.bootstrap();
-        if (bootstrap.password() == null || bootstrap.password().length() < 12) {
-            throw new IllegalStateException("Bootstrap password must contain at least 12 characters");
+        if (bootstrap.password() == null || bootstrap.password().length() < 6) {
+            throw new IllegalStateException("Bootstrap password must contain at least 6 characters");
         }
         identity.bootstrapAdministrator(bootstrap.username(), bootstrap.password());
         LOGGER.info("One-time administrator provisioning completed; disable and clear bootstrap configuration now");

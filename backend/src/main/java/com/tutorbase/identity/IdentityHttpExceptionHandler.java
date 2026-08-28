@@ -38,6 +38,12 @@ final class IdentityHttpExceptionHandler {
                 "The activation credential is invalid, expired, consumed, or the account is not pending.", request);
     }
 
+    @ExceptionHandler(IdentityService.UsernameConflict.class)
+    ProblemDetail usernameConflict(IdentityService.UsernameConflict exception, HttpServletRequest request) {
+        return ApiProblem.create(HttpStatus.CONFLICT, "username_conflict", "Username conflict",
+                "The requested username is already taken.", request);
+    }
+
     @ExceptionHandler(IdentityService.AccountNotFound.class)
     ProblemDetail accountNotFound(IdentityService.AccountNotFound exception, HttpServletRequest request) {
         return ApiProblem.create(HttpStatus.NOT_FOUND, "resource_not_found", "Account not found",

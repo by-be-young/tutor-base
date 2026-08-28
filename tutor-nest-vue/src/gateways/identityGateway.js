@@ -22,6 +22,23 @@ export const identityGateway = {
     }
   },
 
+  async register(username, password) {
+    const session = await backendClient.request('/accounts', {
+      method: 'POST',
+      body: { username, password }
+    })
+    // 注册会直接建立会话并轮换 Cookie，旧 CSRF token 与新 Cookie 不再匹配。
+    backendClient.clearCsrfToken()
+    return session
+  },
+
+  async changePassword(currentPassword, newPassword) {
+    return backendClient.request('/password', {
+      method: 'PUT',
+      body: { currentPassword, newPassword }
+    })
+  },
+
   async logout() {
     try {
       await backendClient.request('/session', { method: 'DELETE' })

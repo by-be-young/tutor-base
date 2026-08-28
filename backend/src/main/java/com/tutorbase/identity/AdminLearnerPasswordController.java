@@ -37,6 +37,6 @@ class AdminLearnerPasswordController {
         return ResponseEntity.noContent().build();
     }
 
-    record SetLearnerPasswordRequest(@NotBlank @Size(min = 12, max = 128) String password) {
+    record SetLearnerPasswordRequest(@NotBlank @Size(min = 6, max = 128) String password) {
     }
 }

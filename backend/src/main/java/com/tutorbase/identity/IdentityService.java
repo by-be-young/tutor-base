@@ -60,6 +60,33 @@ class IdentityService {
     }
 
     @Transactional
+    LoginResult register(String username, String password, String previousToken) {
+        String trimmedUsername = username.strip();
+        String normalized = trimmedUsername.toLowerCase(java.util.Locale.ROOT);
+        String passwordHash = passwords.encode(password);
+        Instant now = clock.instant();
+        try {
+            store.registerStudentAndAccount(trimmedUsername, normalized, passwordHash, now);
+        } catch (org.springframework.dao.DataIntegrityViolationException exception) {
+            throw new UsernameConflict(exception);
+        }
+        IdentityStore.AccountRow account = store.accountByUsername(normalized).orElseThrow(AccountNotFound::new);
+        revoke(previousToken);
+        return new LoginResult(createSession(account.id()), principal(account));
+    }
+
+    @Transactional
+    void changePassword(long accountId, String currentToken, String currentPassword, String newPassword) {
+        IdentityStore.LockedAccountRow locked = store.lockAccount(accountId).orElseThrow(AccountNotFound::new);
+        if (!passwords.matches(currentPassword, locked.passwordHash())) {
+            throw new InvalidCredentials();
+        }
+        Instant now = clock.instant();
+        store.updatePassword(accountId, passwords.encode(newPassword), now);
+        store.revokeOtherSessions(accountId, hash(currentToken), now);
+    }
+
+    @Transactional
     void activate(String username, String activationCode, String password) {
         String normalized = normalize(username);
         String encoded = passwords.encode(password);
@@ -177,5 +204,11 @@ class IdentityService {
     }
 
     static final class AccountStateConflict extends RuntimeException {
+    }
+
+    static final class UsernameConflict extends RuntimeException {
+        UsernameConflict(Throwable cause) {
+            super(cause);
+        }
     }
 }

@@ -114,6 +114,60 @@ final class IdentityStore {
                 .param("createdBy", createdBy).param("now", dbTime(now)).query(Long.class).single();
     }
 
+    void registerStudentAndAccount(String trimmedUsername, String normalizedUsername, String passwordHash,
+            Instant now) {
+        long learnerId = jdbc.sql("""
+                INSERT INTO public.student (username, permissions)
+                VALUES (:username, '{}'::integer[])
+                RETURNING id
+                """).param("username", trimmedUsername)
+                .query(Long.class)
+                .single();
+        jdbc.sql("""
+                INSERT INTO public.account (learner_id, username, username_normalized, password_hash,
+                                            status, role, activated_at)
+                VALUES (:learnerId, :username, :normalizedUsername, :passwordHash,
+                        'active', 'learner', :now)
+                """).param("learnerId", learnerId)
+                .param("username", trimmedUsername)
+                .param("normalizedUsername", normalizedUsername)
+                .param("passwordHash", passwordHash)
+                .param("now", dbTime(now))
+                .update();
+    }
+
+    Optional<LockedAccountRow> lockAccount(long accountId) {
+        return jdbc.sql("""
+                SELECT id, password_hash, status
+                FROM public.account WHERE id = :accountId FOR UPDATE
+                """).param("accountId", accountId)
+                .query(LockedAccountRow::from)
+                .optional();
+    }
+
+    void updatePassword(long accountId, String passwordHash, Instant now) {
+        jdbc.sql("""
+                UPDATE public.account
+                SET password_hash = :passwordHash,
+                    activated_at = COALESCE(activated_at, :now)
+                WHERE id = :accountId
+                """).param("passwordHash", passwordHash)
+                .param("now", dbTime(now))
+                .param("accountId", accountId)
+                .update();
+    }
+
+    void revokeOtherSessions(long accountId, byte[] currentTokenHash, Instant now) {
+        jdbc.sql("""
+                UPDATE public.account_session
+                SET revoked_at = :now
+                WHERE account_id = :accountId AND revoked_at IS NULL AND token_hash <> :currentTokenHash
+                """).param("now", dbTime(now))
+                .param("accountId", accountId)
+                .param("currentTokenHash", currentTokenHash)
+                .update();
+    }
+
     PasswordChangeResult setLearnerPassword(long learnerId, String passwordHash, Instant now) {
         String result = jdbc.sql("""
                 WITH target AS (
@@ -172,6 +226,12 @@ final class IdentityStore {
     }
 
     record AccountRow(long id, Long learnerId, String username, String passwordHash, String status, String role) {
+    }
+
+    record LockedAccountRow(long id, String passwordHash, String status) {
+        static LockedAccountRow from(ResultSet rs, int rowNumber) throws SQLException {
+            return new LockedAccountRow(rs.getLong("id"), rs.getString("password_hash"), rs.getString("status"));
+        }
     }
 
     record SessionRow(long id, AccountPrincipal principal) {

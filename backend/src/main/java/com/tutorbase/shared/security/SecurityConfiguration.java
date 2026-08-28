@@ -46,6 +46,7 @@ public class SecurityConfiguration {
                                 "/api/v1/system/status",
                                 "/api/v1/csrf",
                                 "/api/v1/sessions",
+                                "/api/v1/accounts",
                                 "/api/v1/account-activations/complete",
                                 "/actuator/health/liveness",
                                 "/actuator/health/readiness")

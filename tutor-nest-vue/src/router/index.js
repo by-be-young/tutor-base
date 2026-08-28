@@ -45,6 +45,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/settings/password',
+    name: 'PasswordChange',
+    component: () => import('@/views/PasswordChangeView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/chemistry',
     name: 'Chemistry',
     redirect: '/category?subject=化学'
