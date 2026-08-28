@@ -70,6 +70,7 @@
 | 401 | `invalid_credentials` | 登录凭据无效，用户名是否存在不公开 |
 | 401 | `invalid_activation_token` | 激活码无效、过期、已使用或账户已不再待激活 |
 | 403 | `forbidden` | 已认证但角色/内容授权不足 |
+| 403 | `learner_context_required` | 当前账户未关联学习者身份（无 `learnerId`） |
 | 403 | `csrf_invalid` | CSRF token 缺失或无效；前端可重新获取一次后重试 |
 | 429 | `rate_limited` | 公开认证操作超过来源地址短时频率限制；按 `Retry-After` 重试 |
 | 404 | `resource_not_found` | 在授权范围内资源不存在 |
@@ -136,6 +137,17 @@
 | POST | `/wrong-book/entries` | learner | 手动收集一道题；支持 Idempotency-Key |
 | PATCH | `/wrong-book/entries/{entryId}` | owner | 修改错因、笔记或掌握状态 |
 | DELETE | `/wrong-book/entries/{entryId}` | owner | 按来源语义软删除或硬删除条目 |
+
+### Check-in
+
+| Method | Path | Auth | 语义 |
+| --- | --- | --- | --- |
+| GET | `/checkins?year=&month=` | learner | 返回指定自然月（Asia/Shanghai）的签到日期、本月次数、今日状态与奖励规则 |
+| POST | `/checkins` | learner | 执行当日签到；同日重复调用幂等返回 `alreadyCheckedIn`，不重复加分；第 7、14 次签到额外 +100 积分 |
+
+- 「今日」以服务端 Asia/Shanghai 时区判定；月度统计按自然月（每月 1 日重置）。
+- 签到记录与积分由服务端写入 `public.daily_check_in` / `public.user_points`，客户端不得直接写表。
+- 当前账户无 `learnerId`（如未关联学习者的管理员）调用返回 `403 learner_context_required`。
 
 ### Administration
 

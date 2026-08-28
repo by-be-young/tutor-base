@@ -32,7 +32,9 @@ class FlywayMigrationTest {
             "wrong_questions",
             "account",
             "account_activation",
-            "account_session");
+            "account_session",
+            "daily_check_in",
+            "user_points");
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
@@ -47,8 +49,8 @@ class FlywayMigrationTest {
 
         MigrateResult result = flyway.migrate();
 
-        assertThat(result.migrationsExecuted).isEqualTo(3);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("3");
+        assertThat(result.migrationsExecuted).isEqualTo(4);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("4");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
         try (Connection connection = POSTGRES.createConnection("")) {
@@ -62,6 +64,11 @@ class FlywayMigrationTest {
             assertThat(readQuestionIdDataType(connection, "article_question_submissions")).isEqualTo("text");
             assertThat(hasConstraint(connection, "account_activation_state_check")).isTrue();
             assertThat(hasConstraint(connection, "account_activation_expiry_check")).isTrue();
+            assertThat(hasConstraint(connection, "daily_check_in_student_date_unique")).isTrue();
+            assertThat(hasConstraint(connection, "daily_check_in_student_id_fkey")).isTrue();
+            assertThat(hasConstraint(connection, "daily_check_in_points_awarded_check")).isTrue();
+            assertThat(hasConstraint(connection, "daily_check_in_bonus_days_check")).isTrue();
+            assertThat(isColumnNullable(connection, "daily_check_in", "bonus_days")).isTrue();
 
             execute(connection, Files.readString(
                     Path.of("..", "database", "audit", "post_v3_identity_checks.sql")));

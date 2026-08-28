@@ -96,6 +96,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
+import { useCheckinStore } from '@/stores/checkinStore'
 import { useArticleStore } from '@/stores/blogStore'
 import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
 
@@ -193,6 +194,8 @@ async function handleLogin() {
   try {
     await authStore.login(trimmedUsername, password.value)
     password.value = ''
+    // 仅显式登录后弹出签到弹窗；会话恢复（刷新页面）不触发
+    useCheckinStore().openAfterLogin()
     await loadArticlesData()
     const redirect = router.currentRoute.value.query.redirect
     if (typeof redirect === 'string' && redirect.startsWith('/')) {

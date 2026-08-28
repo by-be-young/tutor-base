@@ -171,6 +171,60 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+  /checkins:
+    get:
+      operationId: getMonthCheckIns
+      summary: 查询指定自然月（Asia/Shanghai）的签到概览
+      description: 返回该月已签到日期、本月签到次数、今日是否已签，以及签到奖励规则。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 2000
+            maximum: 2100
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+      responses:
+        '200':
+          description: 该月的签到概览。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckInMonthOverview'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: checkInToday
+      summary: 执行当日签到（幂等）
+      description: 同日重复调用返回已签到状态，不重复发放积分；第 7、14 次签到额外奖励。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      responses:
+        '200':
+          description: 签到结果；alreadyCheckedIn 为 true 表示当日已签（含并发重复请求）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckInResult'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
   /admin/learners:
     get:
       operationId: listLearners
@@ -511,6 +565,64 @@ components:
             type: integer
             format: int64
             minimum: 1
+    CheckInMonthOverview:
+      type: object
+      additionalProperties: false
+      required: [year, month, dates, monthCount, todayCheckedIn, today, pointsPerCheckIn, bonusMilestones]
+      properties:
+        year:
+          type: integer
+        month:
+          type: integer
+        dates:
+          type: array
+          description: 该月已签到的日期（ISO date）。
+          items:
+            type: string
+            format: date
+        monthCount:
+          type: integer
+          description: 该月已签到次数。
+        todayCheckedIn:
+          type: boolean
+          description: 服务端 Asia/Shanghai 今日是否已签到。
+        today:
+          type: string
+          format: date
+          description: 服务端 Asia/Shanghai 今日日期。
+        pointsPerCheckIn:
+          type: integer
+          const: 100
+          description: 每次签到基础积分。
+        bonusMilestones:
+          type: array
+          description: 额外奖励的月度签到次数节点。
+          items:
+            type: integer
+            enum: [7, 14]
+    CheckInResult:
+      type: object
+      additionalProperties: false
+      required: [date, pointsAwarded, bonusDays, monthCount, alreadyCheckedIn, totalPoints]
+      properties:
+        date:
+          type: string
+          format: date
+        pointsAwarded:
+          type: integer
+          description: 本次实际发放积分（含额外奖励）。
+        bonusDays:
+          type: [integer, 'null']
+          description: 命中第 7/14 次奖励时返回 7 或 14，否则为 null。
+        monthCount:
+          type: integer
+          description: 签到后的本月签到次数。
+        alreadyCheckedIn:
+          type: boolean
+          description: 是否在本次请求前已签到（幂等重复或并发请求）。
+        totalPoints:
+          type: integer
+          description: 签到后的累计积分。
     ApiProblem:
       type: object
       required:

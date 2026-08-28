@@ -3,13 +3,13 @@
   ----------------------------------------------------------------------------
   功能说明：
     1. 所有登录用户均可从导航栏进入任务中心
-    2. 积分真实存储（Supabase user_points 表）；具体任务的完成逻辑尚未实现，
-       管理员（administrator）可直接点击「完成」领取任务积分，其他用户默认「未完成」
-    3. 点击「完成」后该任务标识变为「已领取」，+100 积分
-    4. 奖励进度条：每 200 积分获得一张普通卡片；每 1000 积分获得一张随机稀有卡片
-    5. 里程碑卡片领取后写入 Supabase card_collection 表，收藏室中持久可见
-    6. 收藏室：按卡组陈列已获得的卡片（每个卡组 1 稀有 + 6 普通）
-    7. 状态颜色：待领取（金色发光） / 已领取（绿色） / 未达到条件（灰色锁定）
+    2. 任务列表仅保留「每日签到」：签到记录、月度统计与积分发放由后端
+       /api/v1/checkins 承担（写入 Supabase user_points 表）；未签到时按钮
+       显示「去签到」并可打开签到弹窗，已签到显示「今日已签到」
+    3. 奖励进度条：每 200 积分获得一张普通卡片；每 1000 积分获得一张随机稀有卡片
+    4. 里程碑卡片领取后写入 Supabase card_collection 表，收藏室中持久可见
+    5. 收藏室：按卡组陈列已获得的卡片（每个卡组 1 稀有 + 6 普通）
+    6. 状态颜色：待领取（金色发光） / 已领取（绿色） / 未达到条件（灰色锁定）
 -->
 <template>
     <div class="task-container">
@@ -17,8 +17,7 @@
         <div class="task-header">
             <h1 class="task-title">任务中心</h1>
             <p class="task-subtitle">
-                完成任务赚取积分，积分可兑换卡片奖励：每 200 积分获得一张普通卡片，每 1000 积分获得一张随机稀有卡片。
-                <template v-if="!isAdministrator">具体任务的完成功能尚未开放，当前积分固定不变。</template>
+                每日签到赚取积分，积分可兑换卡片奖励：每 200 积分获得一张普通卡片，每 1000 积分获得一张随机稀有卡片。
             </p>
         </div>
 
@@ -59,7 +58,7 @@
                 <div class="section-head">
                     <h2 class="section-title"><i class="fas fa-list-check"></i> 任务列表</h2>
                     <span class="section-note">
-                        完成任务 +100 积分（{{ isAdministrator ? '管理员可直接点击「完成」领取' : '具体任务尚未开放' }}）
+                        每日签到 +100 积分；本月第 7、14 次签到额外 +100 积分
                     </span>
                 </div>
                 <div class="task-list">
@@ -73,19 +72,13 @@
                         </div>
                         <span class="task-points">+{{ TASK_POINTS }} 积分</span>
 
-                        <!-- 已领取 -->
-                        <span v-if="tasksStore.claimedTaskIds.has(t.id)" class="task-status is-claimed">
-                            <i class="fas fa-check"></i> 已领取
-                        </span>
-                        <!-- 管理员：可点击完成 -->
-                        <button v-else-if="isAdministrator" class="task-done-btn"
-                            :disabled="claimingTaskId === t.id" @click="handleCompleteTask(t)">
-                            <i class="fas fa-check"></i>
-                            {{ claimingTaskId === t.id ? '领取中…' : '完成' }}
+                        <!-- 今日未签到：可打开签到弹窗 -->
+                        <button v-if="!checkinStore.todayCheckedIn" class="task-done-btn" @click="checkinStore.openModal()">
+                            <i class="fas fa-calendar-check"></i> 去签到
                         </button>
-                        <!-- 其他用户：默认未完成 -->
-                        <span v-else class="task-status is-pending" title="完成任务获取积分的功能暂未开放">
-                            <i class="fas fa-hourglass-half"></i> 未完成
+                        <!-- 今日已签到 -->
+                        <span v-else class="task-status is-claimed">
+                            <i class="fas fa-check"></i> 今日已签到
                         </span>
                     </div>
                 </div>
@@ -183,24 +176,21 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
+import { useCheckinStore } from '@/stores/checkinStore'
 import { useTasksStore } from '@/stores/tasksStore'
 import { buildMilestones } from '@/data/cardCatalog'
 import CollectionRoom from '@/components/tasks/CollectionRoom.vue'
 
 const authStore = useAuthStore()
+const checkinStore = useCheckinStore()
 const tasksStore = useTasksStore()
-
-const isAdministrator = computed(() => authStore.isAdministrator)
 
 // ========== 常量 ==========
 const TASK_POINTS = 100
 const MAX_DISPLAY = 6000 // 进度条展示至 6000，超出当前积分的里程碑用于演示「未达到条件」
 
-// 任务列表（任务的具体逻辑尚未实现；管理员点击「完成」直接领取积分）
+// 任务列表（仅保留每日签到；签到状态与积分由后端 /api/v1/checkins 提供）
 const mockTasks = [
-    { id: 1, name: '阅读一篇文章', desc: '完整阅读任意一篇学习资料', icon: 'fas fa-book-open', color: '#5BA8A4' },
-    { id: 2, name: '完成一次英语训练', desc: '完成任意一组英语练习题', icon: 'fas fa-dumbbell', color: '#b6862a' },
-    { id: 3, name: '收集错题', desc: '向错题本添加 3 道错题', icon: 'fas fa-book-medical', color: '#b65661' },
     { id: 4, name: '每日签到', desc: '登录并完成当日签到', icon: 'fas fa-calendar-check', color: '#7d5ca8' }
 ]
 
@@ -244,23 +234,6 @@ function scrollToLatest() {
     nextTick(() => {
         trackScroll.value?.scrollTo({ left: trackScroll.value.scrollWidth, behavior: 'smooth' })
     })
-}
-
-// ========== 任务（管理员领取积分） ==========
-const claimingTaskId = ref(null)
-
-async function handleCompleteTask(task) {
-    if (claimingTaskId.value) return
-    claimingTaskId.value = task.id
-    try {
-        const next = await tasksStore.claimTask(authStore.currentUser, task.id, TASK_POINTS)
-        showToast(`任务「${task.name}」完成，+${TASK_POINTS} 积分（当前 ${next} 积分）`, 'success')
-        scrollToLatest()
-    } catch (e) {
-        showToast(e.message, 'error')
-    } finally {
-        claimingTaskId.value = null
-    }
 }
 
 // ========== 领取卡片 ==========
@@ -353,6 +326,7 @@ function showToast(message, type = 'info', duration = 3000) {
 // ========== 生命周期 ==========
 onMounted(() => {
     tasksStore.load(authStore.currentUser)
+    checkinStore.loadMonth() // 首屏即显示今日签到状态（去签到 / 今日已签到）
     // 初始停靠右侧：左侧已领取区域不可见，需滚动查看
     scrollToLatest()
 })

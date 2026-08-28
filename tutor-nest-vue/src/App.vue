@@ -3,12 +3,15 @@
   <div id="app">
     <AppHeader @login-click="handleLoginClick" @register-click="handleRegisterClick" />
     <router-view ref="homeView" />
+    <!-- 签到弹窗挂载在全局：登录后跳转任意页面（如 /tasks）弹窗不消失 -->
+    <CheckInModal />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import AppHeader from '@/components/common/AppHeader.vue'
+import CheckInModal from '@/components/tasks/CheckInModal.vue'
 import { useAuthStore } from '@/stores/authStore'
 
 const authStore = useAuthStore()

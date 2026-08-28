@@ -119,6 +119,11 @@ export const useTasksStore = defineStore('tasks', () => {
         return new Set(collection.value.map(row => row.card_key))
     }
 
+    /** 后端（每日签到等）发放积分后同步本地显示 */
+    function syncPoints(next) {
+        points.value = next
+    }
+
     return {
         points,
         claimedTaskIds,
@@ -130,6 +135,7 @@ export const useTasksStore = defineStore('tasks', () => {
         load,
         claimTask,
         claimMilestone,
-        obtainedCardKeys
+        obtainedCardKeys,
+        syncPoints
     }
 })
