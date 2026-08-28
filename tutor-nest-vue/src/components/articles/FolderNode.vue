@@ -11,7 +11,8 @@
         </div>
         <div class="tree-children" v-show="isExpanded" :style="{ paddingLeft: '20px' }">
             <template v-for="child in node.children" :key="child.name">
-                <FolderNode v-if="!child.isFile" :node="child" :depth="depth + 1" :status-map="statusMap" />
+                <FolderNode v-if="!child.isFile" :node="child" :depth="depth + 1" :status-map="statusMap"
+                    @file-click="$emit('file-click', $event)" />
                 <FileNode v-else :node="child" :depth="depth + 1" :status-map="statusMap"
                     @click="$emit('file-click', child.blogId)" />
             </template>
