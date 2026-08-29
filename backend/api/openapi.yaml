@@ -363,6 +363,43 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
+  /admin/learners/{learnerId}/impersonate:
+    post:
+      operationId: impersonateLearner
+      summary: 管理员免密进入学习者账户
+      description: >-
+        为该学习者创建新会话并轮换 Set-Cookie 会话 Cookie；管理员的既有会话
+        不会被撤销。仅可进入 role=learner 且已激活的账户。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: learnerId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '200':
+          description: 已切换为该学习者会话，并返回其安全投影。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSession'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
 components:
   parameters:
     CsrfHeader:

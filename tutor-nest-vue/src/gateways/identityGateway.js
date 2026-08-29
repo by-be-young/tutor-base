@@ -52,5 +52,14 @@ export const identityGateway = {
       method: 'PUT',
       body: { password }
     })
+  },
+
+  async impersonateLearner(learnerId) {
+    const session = await backendClient.request(`/admin/learners/${encodeURIComponent(learnerId)}/impersonate`, {
+      method: 'POST'
+    })
+    // 进入学生账号会轮换会话 Cookie，旧 CSRF token 与新 Cookie 不再匹配。
+    backendClient.clearCsrfToken()
+    return session
   }
 }

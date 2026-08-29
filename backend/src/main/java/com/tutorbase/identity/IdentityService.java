@@ -136,6 +136,15 @@ class IdentityService {
         }
     }
 
+    @Transactional
+    LoginResult impersonate(long learnerId) {
+        IdentityStore.AccountRow account = store.accountByLearnerId(learnerId).orElseThrow(AccountNotFound::new);
+        if (!"active".equals(account.status())) {
+            throw new AccountStateConflict();
+        }
+        return new LoginResult(createSession(account.id()), principal(account));
+    }
+
     void revoke(String token) {
         if (token != null && !token.isBlank()) {
             store.revoke(hash(token), clock.instant());

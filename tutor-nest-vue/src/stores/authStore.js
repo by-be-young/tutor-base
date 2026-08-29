@@ -80,6 +80,11 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function impersonateLearner(learnerId) {
+    await ensureInitialized()
+    return applySession(await identityGateway.impersonateLearner(learnerId))
+  }
+
   async function restoreSession() {
     if (initializationPromise) return initializationPromise
     initializationPromise = (async () => {
@@ -110,6 +115,7 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     register,
     logout,
+    impersonateLearner,
     restoreSession,
     ensureInitialized
   }

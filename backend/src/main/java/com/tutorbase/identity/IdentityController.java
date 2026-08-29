@@ -1,6 +1,5 @@
 package com.tutorbase.identity;
 
-import java.time.Duration;
 import java.util.List;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -8,10 +7,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.CacheControl;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -45,7 +42,7 @@ final class IdentityController {
         String token = sessions.cookie(request);
         if (request.getAttribute(IdentityService.SESSION_ATTRIBUTE) == null) {
             token = identity.newAnonymousSession();
-            setCookie(response, token);
+            SessionCookies.session(response, sessions, properties, token);
         }
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
@@ -60,7 +57,7 @@ final class IdentityController {
         rateLimiter.check("login", request.getRemoteAddr());
         IdentityService.LoginResult result = identity.login(
                 body.username(), body.password(), sessions.cookie(request));
-        setCookie(response, result.token());
+        SessionCookies.session(response, sessions, properties, result.token());
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(SessionResponse.from(result.principal()));
@@ -76,7 +73,7 @@ final class IdentityController {
     @DeleteMapping("/session")
     ResponseEntity<Void> logout(HttpServletRequest request, HttpServletResponse response) {
         identity.revoke(sessions.cookie(request));
-        clearCookie(response);
+        SessionCookies.clear(response, sessions, properties);
         return ResponseEntity.noContent().build();
     }
 
@@ -88,7 +85,7 @@ final class IdentityController {
         rateLimiter.check("register", request.getRemoteAddr());
         IdentityService.LoginResult result = identity.register(
                 body.username(), body.password(), sessions.cookie(request));
-        setCookie(response, result.token());
+        SessionCookies.session(response, sessions, properties, result.token());
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(SessionResponse.from(result.principal()));
@@ -112,18 +109,6 @@ final class IdentityController {
         rateLimiter.check("activation", request.getRemoteAddr());
         identity.activate(body.username(), body.activationCode(), body.password());
         return ResponseEntity.noContent().build();
-    }
-
-    private void setCookie(HttpServletResponse response, String token) {
-        response.addHeader("Set-Cookie", ResponseCookie.from(sessions.cookieName(), token)
-                .httpOnly(true).secure(properties.cookieSecure()).sameSite("Lax").path("/")
-                .maxAge(properties.sessionLifetime()).build().toString());
-    }
-
-    private void clearCookie(HttpServletResponse response) {
-        response.addHeader("Set-Cookie", ResponseCookie.from(sessions.cookieName(), "")
-                .httpOnly(true).secure(properties.cookieSecure()).sameSite("Lax").path("/")
-                .maxAge(Duration.ZERO).build().toString());
     }
 
     record CsrfResponse(String token, String headerName) {

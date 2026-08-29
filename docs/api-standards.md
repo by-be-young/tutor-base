@@ -20,6 +20,8 @@
 - 服务端通过 API host-only 的 `__Host-TUTOR_SESSION` opaque cookie 识别 session；cookie 使用
   `HttpOnly; Secure; Path=/; SameSite=Lax`，不设置 `Domain`，前端不得读取或保存该值。
 - 登录成功后服务端轮换 session ID，并返回当前 Account 的安全投影。
+- 凡服务端轮换 session（登录、注册、管理员进入学生账号）都会 Set-Cookie 新会话，
+  旧 CSRF token（与旧 Cookie 绑定）随之失效；前端收到轮换响应后必须丢弃内存 CSRF token。
 - 前端跨 origin 请求统一使用 `credentials: 'include'`。
 - 前端先从精确白名单保护的 `GET /csrf` 取得 token 并只保存在内存；`POST/PUT/PATCH/DELETE`
   通过 `X-CSRF-TOKEN` header 回传。CSRF token 不写入 localStorage，也不向其他 origin 暴露。
@@ -155,6 +157,7 @@
 | --- | --- | --- | --- |
 | GET | `/admin/learners` | administrator | 按学习者 ID 游标查询学习者及内容授权；账户状态在身份迁移后增加 |
 | PUT | `/admin/learners/{learnerId}/password` | administrator | 直接设置或重置学习者密码，并撤销其旧会话和未使用激活码 |
+| POST | `/admin/learners/{learnerId}/impersonate` | administrator | 免密进入学习者账户：创建新会话并轮换 Cookie；仅限 `role=learner` 且已激活的账户，不撤销管理员既有会话 |
 | POST | `/admin/account-activations` | administrator | 兼容接口：为待激活账户生成一次性激活码；当前前端不使用 |
 
 ## 7. System Status contract（第一阶段）

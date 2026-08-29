@@ -26,6 +26,14 @@ final class IdentityStore {
                 """).param("username", username).query(IdentityStore::account).optional();
     }
 
+    // 仅查询学习者账户：管理员的 learner 行（role = 'administrator'）不可被免密进入
+    Optional<AccountRow> accountByLearnerId(long learnerId) {
+        return jdbc.sql("""
+                SELECT id, learner_id, username, password_hash, status, role
+                FROM public.account WHERE learner_id = :learnerId AND role = 'learner'
+                """).param("learnerId", learnerId).query(IdentityStore::account).optional();
+    }
+
     Optional<SessionRow> session(byte[] tokenHash, Instant now) {
         return jdbc.sql("""
                 SELECT s.id, s.account_id, a.learner_id, a.username, a.role

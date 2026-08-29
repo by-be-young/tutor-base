@@ -11,7 +11,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice(assignableTypes = {
         IdentityController.class,
         AdminAccountActivationController.class,
-        AdminLearnerPasswordController.class
+        AdminLearnerPasswordController.class,
+        AdminLearnerImpersonationController.class
 })
 final class IdentityHttpExceptionHandler {
     @ExceptionHandler(IdentityRateLimiter.RateLimited.class)

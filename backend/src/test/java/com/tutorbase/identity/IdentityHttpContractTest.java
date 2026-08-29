@@ -506,6 +506,121 @@ class IdentityHttpContractTest {
                 .andExpect(jsonPath("$.code").value("validation_failed"));
     }
 
+    @Test
+    void givenAdministratorWhenImpersonatingActiveLearnerThenSessionRotatesWithoutRevokingAdministrator()
+            throws Exception {
+        setActivePassword(5, "Learner-password-2026");
+        Cookie adminCookie = login(csrf(null), "young", "Admin-password-2026");
+        BrowserSession admin = csrf(adminCookie);
+
+        MvcResult impersonated = mockMvc.perform(post("/api/v1/admin/learners/5/impersonate")
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(jsonPath("$.learnerId").value(5))
+                .andExpect(jsonPath("$.username").value("Alice"))
+                .andExpect(jsonPath("$.roles[0]").value("LEARNER"))
+                .andReturn();
+
+        Cookie learnerCookie = requireCookie(impersonated);
+        assertThat(learnerCookie.getValue()).isNotEqualTo(adminCookie.getValue());
+
+        // 新会话具备学习者身份
+        mockMvc.perform(get("/api/v1/session").cookie(learnerCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.learnerId").value(5))
+                .andExpect(jsonPath("$.roles[0]").value("LEARNER"));
+
+        // 新会话无管理员权限
+        mockMvc.perform(get("/api/v1/admin/learners").cookie(learnerCookie))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("forbidden"));
+
+        // 管理员会话未被撤销
+        mockMvc.perform(get("/api/v1/session").cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roles[0]").value("ADMINISTRATOR"));
+
+        // 数据库恰好两条会话，均未撤销
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.account_session", Long.class)).isEqualTo(2);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM public.account_session WHERE revoked_at IS NULL", Long.class)).isEqualTo(2);
+    }
+
+    @Test
+    void givenAdministratorWhenImpersonatingUnknownOwnOrNonActiveLearnerThenRejected() throws Exception {
+        Cookie adminCookie = login(csrf(null), "young", "Admin-password-2026");
+        BrowserSession admin = csrf(adminCookie);
+        String url = "/api/v1/admin/learners/%d/impersonate";
+
+        // 不存在的学习者
+        mockMvc.perform(post(url.formatted(999))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("resource_not_found"));
+
+        // 管理员自身的 learner 行（role = 'administrator'）不可进入
+        mockMvc.perform(post(url.formatted(2))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("resource_not_found"));
+
+        // 待激活账户
+        mockMvc.perform(post(url.formatted(5))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("state_conflict"));
+
+        // 已禁用账户
+        setActivePassword(5, "Learner-password-2026");
+        jdbc.update("UPDATE public.account SET status = 'disabled' WHERE learner_id = 5");
+        mockMvc.perform(post(url.formatted(5))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("state_conflict"));
+    }
+
+    @Test
+    void givenAnonymousLearnerMissingCsrfOrInvalidIdWhenImpersonatingThenRejected() throws Exception {
+        BrowserSession anonymous = csrf(null);
+        setActivePassword(5, "Learner-password-2026");
+
+        // 匿名
+        mockMvc.perform(post("/api/v1/admin/learners/5/impersonate")
+                        .cookie(anonymous.cookie())
+                        .header("X-CSRF-TOKEN", anonymous.csrfToken()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("unauthenticated"));
+
+        // 学习者角色
+        Cookie learnerCookie = login(csrf(null), "Alice", "Learner-password-2026");
+        BrowserSession learner = csrf(learnerCookie);
+        mockMvc.perform(post("/api/v1/admin/learners/5/impersonate")
+                        .cookie(learnerCookie)
+                        .header("X-CSRF-TOKEN", learner.csrfToken()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("forbidden"));
+
+        // 缺 CSRF token
+        Cookie adminCookie = login(csrf(null), "young", "Admin-password-2026");
+        mockMvc.perform(post("/api/v1/admin/learners/5/impersonate").cookie(adminCookie))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("csrf_invalid"));
+
+        // learnerId 必须为正数
+        BrowserSession admin = csrf(adminCookie);
+        mockMvc.perform(post("/api/v1/admin/learners/0/impersonate")
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_failed"));
+    }
+
     private String invalidLogin(BrowserSession browser, String username, String password) throws Exception {
         return mockMvc.perform(post("/api/v1/sessions")
                         .cookie(browser.cookie())
