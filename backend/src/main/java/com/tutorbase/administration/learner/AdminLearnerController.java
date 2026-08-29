@@ -73,14 +73,14 @@ public class AdminLearnerController {
             int limit = Integer.parseInt(value);
             if (limit < 1 || limit > MAX_LIMIT) {
                 throw new InvalidLearnerPageRequest(
-                        "limit", "validation_failed", "limit must be between 1 and 100.");
+                        "limit", "validation_failed", "limit 参数必须在 1～100 之间。");
             }
             return limit;
         } catch (NumberFormatException exception) {
             throw new InvalidLearnerPageRequest(
                     "limit",
                     "validation_failed",
-                    "limit must be an integer between 1 and 100.",
+                    "limit 参数必须为 1～100 之间的整数。",
                     exception);
         }
     }

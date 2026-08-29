@@ -13,8 +13,8 @@ final class LearnerHttpExceptionHandler {
     @ExceptionHandler(InvalidLearnerPageRequest.class)
     ProblemDetail invalidPageRequest(InvalidLearnerPageRequest exception, HttpServletRequest request) {
         String title = exception.code().equals("malformed_request")
-                ? "Malformed request"
-                : "Request validation failed";
+                ? "请求格式错误"
+                : "请求参数校验失败";
         return ApiProblem.create(
                 HttpStatus.BAD_REQUEST,
                 exception.code(),
@@ -28,7 +28,7 @@ final class LearnerHttpExceptionHandler {
         return ApiProblem.create(
                 HttpStatus.NOT_FOUND,
                 "resource_not_found",
-                "Learner not found",
+                "学习者不存在",
                 exception.getMessage(),
                 request);
     }
@@ -38,7 +38,7 @@ final class LearnerHttpExceptionHandler {
         return ApiProblem.create(
                 HttpStatus.CONFLICT,
                 "username_conflict",
-                "Username conflict",
+                "用户名已被占用",
                 exception.getMessage(),
                 request);
     }

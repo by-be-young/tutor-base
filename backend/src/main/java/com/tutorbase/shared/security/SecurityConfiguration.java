@@ -60,16 +60,16 @@ public class SecurityConfiguration {
                                 response,
                                 HttpStatus.UNAUTHORIZED,
                                 "unauthenticated",
-                                "Authentication required",
-                                "A valid session is required."))
+                                "未登录或登录已过期",
+                                "请先登录后再访问。"))
                         .accessDeniedHandler((request, response, exception) -> writeProblem(
                                 objectMapper,
                                 request,
                                 response,
                                 HttpStatus.FORBIDDEN,
                                 "forbidden",
-                                "Access denied",
-                                "The current account cannot access this resource.")))
+                                "无访问权限",
+                                "当前账户无权访问该资源。")))
                 .build();
     }
 

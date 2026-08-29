@@ -48,9 +48,9 @@
 ```json
 {
   "type": "https://api.be-young.top/problems/validation-failed",
-  "title": "Request validation failed",
+  "title": "请求参数校验失败",
   "status": 400,
-  "detail": "One or more fields are invalid.",
+  "detail": "请求中的部分字段不合法。",
   "instance": "/api/v1/sessions",
   "code": "validation_failed",
   "traceId": "01J...",

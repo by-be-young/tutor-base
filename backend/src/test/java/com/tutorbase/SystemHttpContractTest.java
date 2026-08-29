@@ -123,9 +123,9 @@ class SystemHttpContractTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.type").value("https://api.be-young.top/problems/unauthenticated"))
-                .andExpect(jsonPath("$.title").value("Authentication required"))
+                .andExpect(jsonPath("$.title").value("未登录或登录已过期"))
                 .andExpect(jsonPath("$.status").value(401))
-                .andExpect(jsonPath("$.detail").value("A valid session is required."))
+                .andExpect(jsonPath("$.detail").value("请先登录后再访问。"))
                 .andExpect(jsonPath("$.instance").value("/api/v1/not-implemented"))
                 .andExpect(jsonPath("$.code").value("unauthenticated"))
                 .andExpect(jsonPath("$.traceId").isNotEmpty());

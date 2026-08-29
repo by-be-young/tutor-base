@@ -15,8 +15,8 @@ final class CheckInHttpExceptionHandler {
         return ApiProblem.create(
                 HttpStatus.FORBIDDEN,
                 "learner_context_required",
-                "Learner context required",
-                "The current account is not linked to a learner.",
+                "账户未关联学习者",
+                "当前账户未关联学习者身份，无法执行该操作。",
                 request);
     }
 }

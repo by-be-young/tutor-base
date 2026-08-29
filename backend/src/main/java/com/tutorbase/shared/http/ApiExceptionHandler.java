@@ -27,8 +27,8 @@ final class ApiExceptionHandler {
         return ApiProblem.create(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 "dependency_unavailable",
-                "Dependency unavailable",
-                "A required dependency is temporarily unavailable.",
+                "服务暂时不可用",
+                "依赖的服务暂时不可用，请稍后重试。",
                 request);
     }
 
@@ -37,8 +37,8 @@ final class ApiExceptionHandler {
         return ApiProblem.create(
                 HttpStatus.BAD_REQUEST,
                 "validation_failed",
-                "Request validation failed",
-                "One or more request fields are invalid.",
+                "请求参数校验失败",
+                "请求中的部分字段不合法。",
                 request);
     }
 
@@ -47,8 +47,8 @@ final class ApiExceptionHandler {
         return ApiProblem.create(
                 HttpStatus.BAD_REQUEST,
                 "validation_failed",
-                "Request validation failed",
-                "One or more request fields are invalid.",
+                "请求参数校验失败",
+                "请求中的部分字段不合法。",
                 request);
     }
 
@@ -57,8 +57,8 @@ final class ApiExceptionHandler {
         return ApiProblem.create(
                 HttpStatus.BAD_REQUEST,
                 "malformed_request",
-                "Malformed request",
-                "The request body could not be read.",
+                "请求格式错误",
+                "无法读取请求内容。",
                 request);
     }
 
@@ -67,8 +67,8 @@ final class ApiExceptionHandler {
         return ApiProblem.create(
                 HttpStatus.NOT_FOUND,
                 "resource_not_found",
-                "Resource not found",
-                "The requested resource does not exist.",
+                "资源不存在",
+                "请求的资源不存在。",
                 request);
     }
 
@@ -78,8 +78,8 @@ final class ApiExceptionHandler {
         return ApiProblem.create(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "internal_error",
-                "Internal server error",
-                "The server could not complete the request.",
+                "服务器内部错误",
+                "服务器暂时无法完成该请求，请稍后重试。",
                 request);
     }
 }

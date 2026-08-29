@@ -45,7 +45,7 @@ public final class SessionCsrfFilter extends OncePerRequestFilter {
         response.setStatus(HttpStatus.FORBIDDEN.value());
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
         objectMapper.writeValue(response.getOutputStream(), ApiProblem.create(
-                HttpStatus.FORBIDDEN, "csrf_invalid", "Invalid CSRF token",
-                "Fetch a fresh CSRF token before retrying the request.", request));
+                HttpStatus.FORBIDDEN, "csrf_invalid", "安全令牌无效",
+                "页面已过期，请刷新后重试。", request));
     }
 }

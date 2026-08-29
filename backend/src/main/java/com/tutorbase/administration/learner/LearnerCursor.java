@@ -27,7 +27,7 @@ final class LearnerCursor {
             return OptionalLong.of(id);
         } catch (IllegalArgumentException exception) {
             throw new InvalidLearnerPageRequest(
-                    "cursor", "malformed_request", "The cursor is invalid.", exception);
+                    "cursor", "malformed_request", "游标参数无效。", exception);
         }
     }
 

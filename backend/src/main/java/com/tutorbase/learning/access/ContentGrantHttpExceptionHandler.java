@@ -15,8 +15,8 @@ final class ContentGrantHttpExceptionHandler {
         return ApiProblem.create(
                 HttpStatus.FORBIDDEN,
                 "learner_context_required",
-                "Learner context required",
-                "The current account is not linked to a learner.",
+                "账户未关联学习者",
+                "当前账户未关联学习者身份，无法执行该操作。",
                 request);
     }
 
@@ -25,8 +25,8 @@ final class ContentGrantHttpExceptionHandler {
         return ApiProblem.create(
                 HttpStatus.NOT_FOUND,
                 "resource_not_found",
-                "Learner not found",
-                "The learner linked to the current account does not exist.",
+                "学习者不存在",
+                "当前账户关联的学习者不存在。",
                 request);
     }
 }
