@@ -70,7 +70,10 @@ export const useAdminStore = defineStore('admin', () => {
       currentStudent.value.id,
       currentStudent.value.permissions
     )
-    currentStudent.value.permissions = Array.isArray(saved.articleIds) ? [...saved.articleIds] : []
+    // 后端 LearnerResponse 的字段是 contentGrantArticleIds；取不到时保留本地已保存的列表，避免误清空
+    currentStudent.value.permissions = Array.isArray(saved.contentGrantArticleIds)
+      ? [...saved.contentGrantArticleIds]
+      : [...currentStudent.value.permissions]
     permissionDirty.value = false
     return true
   }
