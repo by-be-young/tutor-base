@@ -24,7 +24,7 @@
                     </span>
                     <span class="set-info">
                         <span class="set-name">{{ set.name }}</span>
-                        <span class="set-theme">{{ set.theme }} · 1 稀有 + 6 普通</span>
+                        <span class="set-theme">{{ set.theme }} · {{ set.style }} · 1 稀有 + 6 普通</span>
                         <span class="set-progress">
                             <span class="progress-bar">
                                 <span class="progress-fill" :style="{ width: progress(set) + '%' }"></span>
@@ -72,7 +72,7 @@
                     <CardVisual :card="rareCard(activeSet)" rarity="rare" large
                         class="rare-visual" />
                     <span class="rare-hint">
-                        {{ rareCard(activeSet) ? '已获得' : '每 1000 积分里程碑获得一张稀有卡，按卡组轮换' }}
+                        {{ rareCard(activeSet) ? '已获得' : '每 1000 积分里程碑随机获得一张稀有卡' }}
                     </span>
                 </div>
 

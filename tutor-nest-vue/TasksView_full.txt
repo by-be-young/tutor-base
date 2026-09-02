@@ -1,0 +1,1205 @@
+Read "D:\家教网站-vue\tutor-base\tutor-nest-vue\src\views\TasksView.vue":
+
+     1	<!--
+     2	  TasksView.vue - 任务中心
+     3	  ----------------------------------------------------------------------------
+     4	  功能说明：
+     5	    1. 所有登录用户均可从导航栏进入任务中心
+     6	    2. 任务列表仅保留「每日签到」：签到记录、月度统计与积分发放由后端
+     7	       /api/v1/checkins 承担（写入 Supabase user_points 表）；未签到时按钮
+     8	       显示「去签到」并可打开签到弹窗，已签到显示「今日已签到」
+     9	    3. 奖励进度条：每 200 积分获得一张普通卡片；每 1000 积分获得一张随机稀有卡片
+    10	    4. 里程碑卡片领取后写入 Supabase card_collection 表，收藏室中持久可见
+    11	    5. 收藏室：按卡组陈列已获得的卡片（每个卡组 1 稀有 + 6 普通）
+    12	    6. 状态颜色：待领取（金色发光） / 已领取（绿色） / 未达到条件（灰色锁定）
+    13	-->
+    14	<template>
+    15	    <div class="task-container">
+    16	        <!-- 头部 -->
+    17	        <div class="task-header">
+    18	            <h1 class="task-title">任务中心</h1>
+    19	            <p class="task-subtitle">
+    20	                每日签到赚取积分，积分可兑换卡片奖励：每 200 积分获得一张普通卡片，每 1000 积分获得一张随机稀有卡片。
+    21	            </p>
+    22	        </div>
+    23	
+    24	        <!-- 统计栏 -->
+    25	        <div class="task-stats">
+    26	            <div class="task-stat-card is-points">
+    27	                <div class="task-stat-number">{{ tasksStore.points }}</div>
+    28	                <div class="task-stat-label">当前积分</div>
+    29	            </div>
+    30	            <div class="task-stat-card">
+    31	                <div class="task-stat-number">{{ reachedCount }}/{{ milestones.length }}</div>
+    32	                <div class="task-stat-label">已达成里程碑</div>
+    33	            </div>
+    34	            <div class="task-stat-card is-claimed">
+    35	                <div class="task-stat-number">{{ tasksStore.collection.length }}</div>
+    36	                <div class="task-stat-label">已收集卡片</div>
+    37	            </div>
+    38	        </div>
+    39	
+    40	        <!-- 标签页：任务列表 / 收藏室 -->
+    41	        <div class="task-tabs">
+    42	            <button class="task-tab" :class="{ 'is-active': activeTab === 'tasks' }" @click="activeTab = 'tasks'">
+    43	                <i class="fas fa-list-check"></i> 任务列表
+    44	            </button>
+    45	            <button class="task-tab" :class="{ 'is-active': activeTab === 'collection' }" @click="activeTab = 'collection'">
+    46	                <i class="fas fa-book-open"></i> 收藏室
+    47	                <span class="tab-count">{{ tasksStore.collection.length }}</span>
+    48	            </button>
+    49	        </div>
+    50	
+    51	        <div v-if="tasksStore.isLoading" class="loading-tip">
+    52	            <i class="fas fa-spinner fa-spin"></i> 正在加载任务数据…
+    53	        </div>
+    54	
+    55	        <!-- ========== 任务列表 ========== -->
+    56	        <template v-if="activeTab === 'tasks' && !tasksStore.isLoading">
+    57	            <section class="task-section">
+    58	                <div class="section-head">
+    59	                    <h2 class="section-title"><i class="fas fa-list-check"></i> 任务列表</h2>
+    60	                    <span class="section-note">
+    61	                        每日签到 +100 积分；本月第 7、14 次签到额外 +100 积分
+    62	                    </span>
+    63	                </div>
+    64	                <div class="task-list">
+    65	                    <div v-for="t in mockTasks" :key="t.id" class="task-item">
+    66	                        <span class="task-icon" :style="{ background: t.color + '22', color: t.color }">
+    67	                            <i :class="t.icon"></i>
+    68	                        </span>
+    69	                        <div class="task-info">
+    70	                            <span class="task-name">{{ t.name }}</span>
+    71	                            <span class="task-desc">{{ t.desc }}</span>
+    72	                        </div>
+    73	                        <span class="task-points">+{{ TASK_POINTS }} 积分</span>
+    74	
+    75	                        <!-- 今日未签到：可打开签到弹窗 -->
+    76	                        <button v-if="!checkinStore.todayCheckedIn" class="task-done-btn" @click="checkinStore.openModal()">
+    77	                            <i class="fas fa-calendar-check"></i> 去签到
+    78	                        </button>
+    79	                        <!-- 今日已签到 -->
+    80	                        <span v-else class="task-status is-claimed">
+    81	                            <i class="fas fa-check"></i> 今日已签到
+    82	                        </span>
+    83	                    </div>
+    84	                </div>
+    85	            </section>
+    86	
+    87	            <!-- 奖励进度条 -->
+    88	            <section class="task-section">
+    89	                <div class="section-head">
+    90	                    <h2 class="section-title"><i class="fas fa-trophy"></i> 奖励进度条</h2>
+    91	                    <button class="view-claimed-btn" title="滚动查看左侧已领取的部分" @click="scrollToClaimed">
+    92	                        <i class="fas fa-arrow-left"></i> 查看已领取
+    93	                    </button>
+    94	                </div>
+    95	
+    96	                <!-- 状态图例 -->
+    97	                <div class="legend">
+    98	                    <span class="legend-chip is-claimable"><i class="fas fa-gift"></i> 待领取</span>
+    99	                    <span class="legend-chip is-claimed"><i class="fas fa-check"></i> 已领取</span>
+   100	                    <span class="legend-chip is-locked"><i class="fas fa-lock"></i> 未达到条件</span>
+   101	                </div>
+   102	
+   103	                <!-- 可横向滚动的进度条：已领取的部分位于左侧，大部分被隐藏，可滚动查看 -->
+   104	                <div class="reward-track-scroll" ref="trackScroll">
+   105	                    <div class="reward-track">
+   106	                        <template v-for="(m, i) in milestones" :key="m.pts">
+   107	                            <div v-if="i > 0" class="connector" :class="connectorClass(m)"></div>
+   108	                            <div class="milestone-cell" :class="milestoneClass(m)" @click="openClaim(m)">
+   109	                                <div class="milestone-card" :class="{ 'is-rare': m.isRare }">
+   110	                                    <i :class="milestoneIcon(m)"></i>
+   111	                                </div>
+   112	                                <span class="milestone-pts">{{ m.pts }}</span>
+   113	                                <span class="milestone-label">{{ milestoneLabel(m) }}</span>
+   114	                            </div>
+   115	                        </template>
+   116	                    </div>
+   117	                </div>
+   118	                <p class="scroll-hint">
+   119	                    <i class="fas fa-arrows-left-right"></i> 可左右滚动查看全部里程碑；已领取的部分位于左侧。
+   120	                </p>
+   121	            </section>
+   122	        </template>
+   123	
+   124	        <!-- ========== 收藏室 ========== -->
+   125	        <section v-else-if="activeTab === 'collection' && !tasksStore.isLoading" class="task-section is-room">
+   126	            <CollectionRoom />
+   127	        </section>
+   128	
+   129	        <!-- 领取卡片弹窗 -->
+   130	        <div v-if="claimVisible" class="claim-overlay" @click.self="closeClaim">
+   131	            <div class="claim-panel">
+   132	                <button class="claim-close" @click="closeClaim"><i class="fas fa-times"></i></button>
+   133	
+   134	                <!-- 稀有卡片散落星光 -->
+   135	                <div v-if="flipped && currentReward?.milestone.isRare" class="sparkles">
+   136	                    <span v-for="(s, n) in sparklePositions" :key="n" class="sparkle"
+   137	                        :style="{ left: s.left, top: s.top, animationDelay: (n * 0.18) + 's' }"></span>
+   138	                </div>
+   139	
+   140	                <!-- 卡片翻转动画 -->
+   141	                <div class="claim-scene" :class="{ 'is-flipped': flipped }">
+   142	                    <div class="claim-inner">
+   143	                        <!-- 背面（揭晓前） -->
+   144	                        <div class="claim-face claim-back">
+   145	                            <span class="back-question">?</span>
+   146	                            <span class="back-text">揭晓卡片中…</span>
+   147	                        </div>
+   148	                        <!-- 正面（卡片：纯色 + 图标） -->
+   149	                        <div class="claim-face claim-front"
+   150	                            :class="{ 'is-rare': currentReward?.milestone.isRare }"
+   151	                            :style="{ background: cardGradient(currentReward?.card) }">
+   152	                            <i v-if="currentReward?.card" :class="currentReward.card.icon" class="front-icon"></i>
+   153	                            <span v-if="currentReward?.card" class="card-type"
+   154	                                :class="{ 'is-rare': currentReward.milestone.isRare }">
+   155	                                {{ currentReward.milestone.isRare ? '✦ 稀有卡片' : '普通卡片' }}
+   156	                            </span>
+   157	                            <span v-if="currentReward?.card" class="card-name">{{ currentReward.card.name }}</span>
+   158	                            <span class="card-points">达成 {{ currentReward?.milestone.pts }} 积分奖励</span>
+   159	                        </div>
+   160	                    </div>
+   161	                </div>
+   162	
+   163	                <div class="claim-footer">
+   164	                    <button v-if="!flipped" class="claim-btn is-disabled" disabled>
+   165	                        <i class="fas fa-spinner fa-spin"></i> 揭晓中…
+   166	                    </button>
+   167	                    <button v-else class="claim-btn is-take" :disabled="claimingMilestone" @click="confirmClaim">
+   168	                        <i class="fas fa-hand-holding-heart"></i> {{ claimingMilestone ? '收集中…' : '收下卡片' }}
+   169	                    </button>
+   170	                </div>
+   171	            </div>
+   172	        </div>
+   173	    </div>
+   174	</template>
+   175	
+   176	<script setup>
+   177	import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+   178	import { useAuthStore } from '@/stores/authStore'
+   179	import { useCheckinStore } from '@/stores/checkinStore'
+   180	import { useTasksStore } from '@/stores/tasksStore'
+   181	import { buildMilestones } from '@/data/cardCatalog'
+   182	import CollectionRoom from '@/components/tasks/CollectionRoom.vue'
+   183	
+   184	const authStore = useAuthStore()
+   185	const checkinStore = useCheckinStore()
+   186	const tasksStore = useTasksStore()
+   187	
+   188	// ========== 常量 ==========
+   189	const TASK_POINTS = 100
+   190	const MAX_DISPLAY = 6000 // 进度条展示至 6000，超出当前积分的里程碑用于演示「未达到条件」
+   191	
+   192	// 任务列表（仅保留每日签到；签到状态与积分由后端 /api/v1/checkins 提供）
+   193	const mockTasks = [
+   194	    { id: 4, name: '每日签到', desc: '登录并完成当日签到', icon: 'fas fa-calendar-check', color: '#7d5ca8' }
+   195	]
+   196	
+   197	// ========== 里程碑 ==========
+   198	// 生成 200 ~ 6000 的里程碑；每 1000 积分为稀有卡片节点，其余为普通卡片节点
+   199	const milestones = buildMilestones(MAX_DISPLAY)
+   200	const reachedCount = computed(() => milestones.filter(m => m.pts <= tasksStore.points).length)
+   201	
+   202	// ========== 里程碑状态 ==========
+   203	function milestoneClass(m) {
+   204	    if (m.pts > tasksStore.points) return 'is-locked'
+   205	    if (tasksStore.claimedMilestones.has(m.pts)) return 'is-claimed'
+   206	    return 'is-claimable'
+   207	}
+   208	
+   209	function milestoneIcon(m) {
+   210	    if (m.pts > tasksStore.points) return 'fas fa-lock'
+   211	    if (tasksStore.claimedMilestones.has(m.pts)) return 'fas fa-check'
+   212	    return m.isRare ? 'fas fa-star' : 'fas fa-gift'
+   213	}
+   214	
+   215	function milestoneLabel(m) {
+   216	    if (m.pts > tasksStore.points) return '未达到'
+   217	    if (tasksStore.claimedMilestones.has(m.pts)) return '已领取'
+   218	    return m.isRare ? '稀有·待领取' : '待领取'
+   219	}
+   220	
+   221	function connectorClass(m) {
+   222	    return m.pts <= tasksStore.points ? 'is-reached' : 'is-locked'
+   223	}
+   224	
+   225	// ========== 进度条滚动 ==========
+   226	// 默认/领取后停靠右侧：已领取的部分被隐藏到左侧，可通过「查看已领取」或手动滚动查看
+   227	const trackScroll = ref(null)
+   228	
+   229	function scrollToClaimed() {
+   230	    trackScroll.value?.scrollTo({ left: 0, behavior: 'smooth' })
+   231	}
+   232	
+   233	function scrollToLatest() {
+   234	    nextTick(() => {
+   235	        trackScroll.value?.scrollTo({ left: trackScroll.value.scrollWidth, behavior: 'smooth' })
+   236	    })
+   237	}
+   238	
+   239	// ========== 领取卡片 ==========
+   240	const claimVisible = ref(false)
+   241	const flipped = ref(false)
+   242	const currentReward = ref(null)
+   243	const claimingMilestone = ref(false)
+   244	let flipTimer = null
+   245	
+   246	function openClaim(m) {
+   247	    if (m.pts > tasksStore.points || tasksStore.claimedMilestones.has(m.pts)) return
+   248	    // 里程碑 → 卡片由目录确定性映射（同一里程碑所有人获得同一张卡）
+   249	    currentReward.value = { milestone: m, card: m.card }
+   250	    flipped.value = false
+   251	    claimVisible.value = true
+   252	    // 先展示背面，再翻转揭晓
+   253	    flipTimer = setTimeout(() => {
+   254	        flipped.value = true
+   255	    }, 900)
+   256	}
+   257	
+   258	async function confirmClaim() {
+   259	    if (!currentReward.value || !flipped.value || claimingMilestone.value) return
+   260	    claimingMilestone.value = true
+   261	    try {
+   262	        const card = await tasksStore.claimMilestone(authStore.currentUser, currentReward.value.milestone)
+   263	        claimVisible.value = false
+   264	        showToast(`卡片「${card.name}」已收入收藏室`, 'success')
+   265	        scrollToLatest()
+   266	    } catch (e) {
+   267	        showToast(e.message, 'error')
+   268	    } finally {
+   269	        claimingMilestone.value = false
+   270	    }
+   271	}
+   272	
+   273	function closeClaim() {
+   274	    if (!flipped.value || claimingMilestone.value) return // 揭晓动画进行中不允许关闭
+   275	    claimVisible.value = false
+   276	}
+   277	
+   278	function cardGradient(card) {
+   279	    if (!card) return 'linear-gradient(160deg, #5ba8a4, #3a7d79)'
+   280	    return `linear-gradient(160deg, ${card.colors[0]}, ${card.colors[1]})`
+   281	}
+   282	
+   283	// 稀有卡片周围散落的星光位置
+   284	const sparklePositions = [
+   285	    { left: '-10%', top: '-16%' },
+   286	    { left: '86%', top: '-10%' },
+   287	    { left: '-6%', top: '66%' },
+   288	    { left: '90%', top: '58%' },
+   289	    { left: '38%', top: '-24%' },
+   290	    { left: '56%', top: '102%' },
+   291	    { left: '4%', top: '24%' },
+   292	    { left: '84%', top: '28%' }
+   293	]
+   294	
+   295	// ========== 标签页 ==========
+   296	const activeTab = ref('tasks')
+   297	
+   298	// ========== Toast（与错题本保持一致） ==========
+   299	let toastTimer = null
+   300	function showToast(message, type = 'info', duration = 3000) {
+   301	    const existing = document.querySelector('.custom-toast')
+   302	    if (existing) {
+   303	        existing.remove()
+   304	        if (toastTimer) {
+   305	            clearTimeout(toastTimer)
+   306	            toastTimer = null
+   307	        }
+   308	    }
+   309	
+   310	    const toast = document.createElement('div')
+   311	    toast.className = `custom-toast toast-${type}`
+   312	    toast.textContent = message
+   313	    document.body.appendChild(toast)
+   314	
+   315	    requestAnimationFrame(() => toast.classList.add('toast-visible'))
+   316	
+   317	    toastTimer = setTimeout(() => {
+   318	        toast.classList.remove('toast-visible')
+   319	        setTimeout(() => {
+   320	            if (toast.parentNode) toast.parentNode.removeChild(toast)
+   321	            toastTimer = null
+   322	        }, 300)
+   323	    }, duration)
+   324	}
+   325	
+   326	// ========== 生命周期 ==========
+   327	onMounted(() => {
+   328	    tasksStore.load(authStore.currentUser)
+   329	    checkinStore.loadMonth() // 首屏即显示今日签到状态（去签到 / 今日已签到）
+   330	    // 初始停靠右侧：左侧已领取区域不可见，需滚动查看
+   331	    scrollToLatest()
+   332	})
+   333	
+   334	onBeforeUnmount(() => {
+   335	    if (flipTimer) clearTimeout(flipTimer)
+   336	    if (toastTimer) clearTimeout(toastTimer)
+   337	})
+   338	</script>
+   339	
+   340	<style scoped>
+   341	.task-container {
+   342	    max-width: 1200px;
+   343	    margin: 0 auto;
+   344	    padding: 30px 32px 100px;
+   345	    width: 100%;
+   346	}
+   347	
+   348	/* ========== 头部 ========== */
+   349	.task-header {
+   350	    margin-bottom: 24px;
+   351	}
+   352	
+   353	.task-title {
+   354	    font-size: 2.2rem;
+   355	    font-weight: 700;
+   356	    color: #2d4a3a;
+   357	    margin-bottom: 6px;
+   358	    display: flex;
+   359	    align-items: center;
+   360	    gap: 12px;
+   361	}
+   362	
+   363	.task-title::before {
+   364	    content: '\f0ae';
+   365	    font-family: 'Font Awesome 6 Free';
+   366	    font-weight: 900;
+   367	    font-size: 1.8rem;
+   368	    color: #9782c8;
+   369	}
+   370	
+   371	.task-subtitle {
+   372	    color: var(--gray);
+   373	    font-size: 0.95rem;
+   374	}
+   375	
+   376	/* ========== 统计栏 ========== */
+   377	.task-stats {
+   378	    display: flex;
+   379	    gap: 20px;
+   380	    margin-bottom: 20px;
+   381	}
+   382	
+   383	.task-stat-card {
+   384	    flex: 1;
+   385	    background: rgba(255, 255, 255, 0.45);
+   386	    backdrop-filter: blur(8px);
+   387	    border-radius: 18px;
+   388	    padding: 18px 24px;
+   389	    text-align: center;
+   390	    border: 1px solid rgba(255, 255, 255, 0.5);
+   391	    box-shadow: 0 4px 16px var(--shadow);
+   392	    transition: transform 0.25s ease;
+   393	}
+   394	
+   395	.task-stat-card:hover {
+   396	    transform: translateY(-2px);
+   397	}
+   398	
+   399	.task-stat-number {
+   400	    font-size: 2.1rem;
+   401	    font-weight: 700;
+   402	    color: #2d4a3a;
+   403	    line-height: 1.2;
+   404	}
+   405	
+   406	.task-stat-card.is-points .task-stat-number {
+   407	    color: #b6862a;
+   408	}
+   409	
+   410	.task-stat-card.is-claimed .task-stat-number {
+   411	    color: #2f7b57;
+   412	}
+   413	
+   414	.task-stat-label {
+   415	    font-size: 0.9rem;
+   416	    color: var(--gray);
+   417	    margin-top: 4px;
+   418	    display: flex;
+   419	    align-items: center;
+   420	    justify-content: center;
+   421	    gap: 6px;
+   422	}
+   423	
+   424	/* ========== 标签页 ========== */
+   425	.task-tabs {
+   426	    display: flex;
+   427	    gap: 10px;
+   428	    margin-bottom: 20px;
+   429	}
+   430	
+   431	.task-tab {
+   432	    display: inline-flex;
+   433	    align-items: center;
+   434	    gap: 8px;
+   435	    padding: 9px 22px;
+   436	    border-radius: 30px;
+   437	    border: 1px solid rgba(151, 130, 200, 0.22);
+   438	    background: rgba(255, 255, 255, 0.35);
+   439	    color: #5d4a8a;
+   440	    font-size: 0.92rem;
+   441	    font-weight: 600;
+   442	    cursor: pointer;
+   443	    transition: all 0.2s ease;
+   444	    font-family: inherit;
+   445	}
+   446	
+   447	.task-tab:hover {
+   448	    background: rgba(151, 130, 200, 0.14);
+   449	    transform: translateY(-1px);
+   450	}
+   451	
+   452	.task-tab.is-active {
+   453	    background: linear-gradient(135deg, rgba(151, 130, 200, 0.85), rgba(123, 104, 175, 0.9));
+   454	    border-color: transparent;
+   455	    color: white;
+   456	    box-shadow: 0 6px 16px rgba(151, 130, 200, 0.3);
+   457	}
+   458	
+   459	.tab-count {
+   460	    font-size: 0.75rem;
+   461	    font-weight: 700;
+   462	    background: rgba(255, 255, 255, 0.22);
+   463	    padding: 1px 9px;
+   464	    border-radius: 999px;
+   465	}
+   466	
+   467	.loading-tip {
+   468	    text-align: center;
+   469	    padding: 60px 20px;
+   470	    color: var(--gray);
+   471	    font-size: 0.95rem;
+   472	}
+   473	
+   474	/* ========== 区块 ========== */
+   475	.task-section {
+   476	    margin-bottom: 24px;
+   477	    padding: 20px 22px;
+   478	    background: rgba(255, 255, 255, 0.3);
+   479	    backdrop-filter: blur(8px);
+   480	    border-radius: 20px;
+   481	    border: 1px solid rgba(255, 255, 255, 0.4);
+   482	}
+   483	
+   484	.task-section.is-room {
+   485	    padding: 24px 26px;
+   486	}
+   487	
+   488	.section-head {
+   489	    display: flex;
+   490	    align-items: center;
+   491	    justify-content: space-between;
+   492	    gap: 12px;
+   493	    flex-wrap: wrap;
+   494	    margin-bottom: 14px;
+   495	}
+   496	
+   497	.section-title {
+   498	    font-size: 1.15rem;
+   499	    font-weight: 700;
+   500	    color: #2d4a3a;
+   501	    display: flex;
+   502	    align-items: center;
+   503	    gap: 8px;
+   504	}
+   505	
+   506	.section-title i {
+   507	    color: #9782c8;
+   508	}
+   509	
+   510	.section-note {
+   511	    font-size: 0.8rem;
+   512	    color: var(--gray);
+   513	}
+   514	
+   515	/* ========== 任务列表 ========== */
+   516	.task-list {
+   517	    display: flex;
+   518	    flex-direction: column;
+   519	    gap: 10px;
+   520	}
+   521	
+   522	.task-item {
+   523	    display: flex;
+   524	    align-items: center;
+   525	    gap: 14px;
+   526	    padding: 12px 16px;
+   527	    background: rgba(255, 255, 255, 0.5);
+   528	    border-radius: 14px;
+   529	    border: 1px solid rgba(255, 255, 255, 0.5);
+   530	    transition: transform 0.2s ease, box-shadow 0.2s ease;
+   531	}
+   532	
+   533	.task-item:hover {
+   534	    transform: translateY(-1px);
+   535	    box-shadow: 0 6px 18px var(--shadow);
+   536	}
+   537	
+   538	.task-icon {
+   539	    width: 42px;
+   540	    height: 42px;
+   541	    border-radius: 12px;
+   542	    display: flex;
+   543	    align-items: center;
+   544	    justify-content: center;
+   545	    font-size: 1.1rem;
+   546	    flex-shrink: 0;
+   547	}
+   548	
+   549	.task-info {
+   550	    display: flex;
+   551	    flex-direction: column;
+   552	    gap: 2px;
+   553	    flex: 1;
+   554	    min-width: 0;
+   555	}
+   556	
+   557	.task-name {
+   558	    font-size: 0.98rem;
+   559	    font-weight: 600;
+   560	    color: #2d4a3a;
+   561	}
+   562	
+   563	.task-desc {
+   564	    font-size: 0.82rem;
+   565	    color: var(--gray);
+   566	}
+   567	
+   568	.task-points {
+   569	    font-size: 0.85rem;
+   570	    font-weight: 700;
+   571	    color: #b6862a;
+   572	    background: rgba(217, 186, 75, 0.15);
+   573	    border: 1px solid rgba(217, 186, 75, 0.25);
+   574	    padding: 3px 12px;
+   575	    border-radius: 999px;
+   576	    white-space: nowrap;
+   577	}
+   578	
+   579	.task-done-btn {
+   580	    display: inline-flex;
+   581	    align-items: center;
+   582	    gap: 6px;
+   583	    padding: 6px 18px;
+   584	    border-radius: 999px;
+   585	    border: 1px solid rgba(80, 176, 122, 0.25);
+   586	    background: rgba(205, 237, 221, 0.6);
+   587	    color: #2f7b57;
+   588	    font-size: 0.85rem;
+   589	    font-weight: 600;
+   590	    cursor: pointer;
+   591	    transition: all 0.2s ease;
+   592	    font-family: inherit;
+   593	}
+   594	
+   595	.task-done-btn:hover {
+   596	    background: rgba(205, 237, 221, 0.9);
+   597	    transform: translateY(-1px);
+   598	}
+   599	
+   600	.task-done-btn:disabled {
+   601	    opacity: 0.6;
+   602	    cursor: wait;
+   603	    transform: none;
+   604	}
+   605	
+   606	/* 任务状态标识：已领取 / 未完成 */
+   607	.task-status {
+   608	    display: inline-flex;
+   609	    align-items: center;
+   610	    gap: 6px;
+   611	    padding: 6px 16px;
+   612	    border-radius: 999px;
+   613	    font-size: 0.85rem;
+   614	    font-weight: 600;
+   615	    white-space: nowrap;
+   616	}
+   617	
+   618	.task-status.is-claimed {
+   619	    background: rgba(205, 237, 221, 0.6);
+   620	    color: #2f7b57;
+   621	    border: 1px solid rgba(80, 176, 122, 0.25);
+   622	}
+   623	
+   624	.task-status.is-pending {
+   625	    background: rgba(120, 170, 155, 0.1);
+   626	    color: #7c9086;
+   627	    border: 1px solid rgba(120, 170, 155, 0.2);
+   628	}
+   629	
+   630	/* ========== 奖励进度条 ========== */
+   631	.view-claimed-btn {
+   632	    display: inline-flex;
+   633	    align-items: center;
+   634	    gap: 6px;
+   635	    padding: 6px 16px;
+   636	    border-radius: 999px;
+   637	    border: 1px solid rgba(151, 130, 200, 0.25);
+   638	    background: rgba(151, 130, 200, 0.12);
+   639	    color: #5d4a8a;
+   640	    font-size: 0.85rem;
+   641	    font-weight: 600;
+   642	    cursor: pointer;
+   643	    transition: all 0.2s ease;
+   644	    font-family: inherit;
+   645	}
+   646	
+   647	.view-claimed-btn:hover {
+   648	    background: rgba(151, 130, 200, 0.24);
+   649	    transform: translateY(-1px);
+   650	}
+   651	
+   652	.legend {
+   653	    display: flex;
+   654	    gap: 12px;
+   655	    flex-wrap: wrap;
+   656	    margin-bottom: 12px;
+   657	}
+   658	
+   659	.legend-chip {
+   660	    display: inline-flex;
+   661	    align-items: center;
+   662	    gap: 6px;
+   663	    font-size: 0.78rem;
+   664	    font-weight: 600;
+   665	    padding: 3px 12px;
+   666	    border-radius: 999px;
+   667	}
+   668	
+   669	.legend-chip.is-claimable {
+   670	    background: rgba(217, 186, 75, 0.18);
+   671	    color: #8a6d1a;
+   672	    border: 1px solid rgba(217, 186, 75, 0.3);
+   673	}
+   674	
+   675	.legend-chip.is-claimed {
+   676	    background: rgba(205, 237, 221, 0.6);
+   677	    color: #2f7b57;
+   678	    border: 1px solid rgba(80, 176, 122, 0.25);
+   679	}
+   680	
+   681	.legend-chip.is-locked {
+   682	    background: rgba(120, 170, 155, 0.1);
+   683	    color: #7c9086;
+   684	    border: 1px solid rgba(120, 170, 155, 0.2);
+   685	}
+   686	
+   687	/* 滚动容器：已领取的里程碑位于左侧，超出可视区域（被隐藏），可滚动查看 */
+   688	.reward-track-scroll {
+   689	    overflow-x: auto;
+   690	    padding: 14px 10px;
+   691	    background: rgba(255, 255, 255, 0.35);
+   692	    border-radius: 16px;
+   693	    border: 1px solid rgba(255, 255, 255, 0.5);
+   694	    scrollbar-width: thin;
+   695	    scrollbar-color: rgba(91, 168, 164, 0.5) rgba(255, 255, 255, 0.3);
+   696	}
+   697	
+   698	.reward-track {
+   699	    display: flex;
+   700	    align-items: center;
+   701	    width: max-content;
+   702	    padding: 6px 4px;
+   703	}
+   704	
+   705	.connector {
+   706	    width: 44px;
+   707	    height: 5px;
+   708	    border-radius: 3px;
+   709	    flex-shrink: 0;
+   710	}
+   711	
+   712	.connector.is-reached {
+   713	    background: rgba(91, 168, 164, 0.45);
+   714	}
+   715	
+   716	.connector.is-locked {
+   717	    background: rgba(120, 170, 155, 0.15);
+   718	}
+   719	
+   720	.milestone-cell {
+   721	    display: flex;
+   722	    flex-direction: column;
+   723	    align-items: center;
+   724	    gap: 6px;
+   725	    width: 100px;
+   726	    flex-shrink: 0;
+   727	    cursor: default;
+   728	}
+   729	
+   730	.milestone-cell.is-claimable {
+   731	    cursor: pointer;
+   732	}
+   733	
+   734	.milestone-card {
+   735	    width: 64px;
+   736	    height: 64px;
+   737	    border-radius: 16px;
+   738	    display: flex;
+   739	    align-items: center;
+   740	    justify-content: center;
+   741	    font-size: 1.3rem;
+   742	    color: white;
+   743	    position: relative;
+   744	    transition: transform 0.2s ease;
+   745	}
+   746	
+   747	/* 待领取：金色发光 + 呼吸动画 */
+   748	.milestone-cell.is-claimable .milestone-card {
+   749	    background: linear-gradient(160deg, #e5c96b, #b3923a);
+   750	    box-shadow: 0 0 14px rgba(217, 186, 75, 0.45);
+   751	    animation: claimPulse 1.8s ease-in-out infinite;
+   752	}
+   753	
+   754	.milestone-cell.is-claimable:hover .milestone-card {
+   755	    transform: scale(1.08);
+   756	}
+   757	
+   758	/* 待领取的稀有卡片：更强的金色光芒 */
+   759	.milestone-cell.is-claimable.is-rare .milestone-card {
+   760	    background: linear-gradient(160deg, #f2d66b, #c9a227);
+   761	    box-shadow: 0 0 22px rgba(242, 214, 107, 0.65);
+   762	    animation: rarePulse 1.4s ease-in-out infinite;
+   763	}
+   764	
+   765	.milestone-cell.is-claimable.is-rare .milestone-card i {
+   766	    color: #fff6d8;
+   767	    text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+   768	}
+   769	
+   770	@keyframes claimPulse {
+   771	    0%,
+   772	    100% {
+   773	        box-shadow: 0 0 10px rgba(217, 186, 75, 0.35);
+   774	    }
+   775	
+   776	    50% {
+   777	        box-shadow: 0 0 20px rgba(217, 186, 75, 0.6);
+   778	    }
+   779	}
+   780	
+   781	@keyframes rarePulse {
+   782	    0%,
+   783	    100% {
+   784	        box-shadow: 0 0 14px rgba(242, 214, 107, 0.5);
+   785	        transform: scale(1);
+   786	    }
+   787	
+   788	    50% {
+   789	        box-shadow: 0 0 30px rgba(242, 214, 107, 0.9);
+   790	        transform: scale(1.05);
+   791	    }
+   792	}
+   793	
+   794	/* 已领取：绿色 */
+   795	.milestone-cell.is-claimed .milestone-card {
+   796	    background: linear-gradient(160deg, #b8e0d4, #7fb8a8);
+   797	    color: #2f6b50;
+   798	}
+   799	
+   800	/* 未达到条件：灰色锁定 */
+   801	.milestone-cell.is-locked .milestone-card {
+   802	    background: rgba(120, 170, 155, 0.12);
+   803	    color: rgba(90, 122, 106, 0.55);
+   804	    border: 1px dashed rgba(120, 170, 155, 0.35);
+   805	}
+   806	
+   807	.milestone-pts {
+   808	    font-size: 0.82rem;
+   809	    font-weight: 700;
+   810	    color: #345143;
+   811	}
+   812	
+   813	.milestone-cell.is-locked .milestone-pts {
+   814	    color: #93a89d;
+   815	}
+   816	
+   817	.milestone-label {
+   818	    font-size: 0.7rem;
+   819	    font-weight: 600;
+   820	}
+   821	
+   822	.milestone-cell.is-claimable .milestone-label {
+   823	    color: #8a6d1a;
+   824	}
+   825	
+   826	.milestone-cell.is-claimed .milestone-label {
+   827	    color: #2f7b57;
+   828	}
+   829	
+   830	.milestone-cell.is-locked .milestone-label {
+   831	    color: #93a89d;
+   832	}
+   833	
+   834	.scroll-hint {
+   835	    margin-top: 10px;
+   836	    font-size: 0.78rem;
+   837	    color: var(--gray);
+   838	    display: flex;
+   839	    align-items: center;
+   840	    gap: 6px;
+   841	}
+   842	
+   843	/* ========== 领取弹窗 ========== */
+   844	.claim-overlay {
+   845	    position: fixed;
+   846	    top: 0;
+   847	    left: 0;
+   848	    width: 100%;
+   849	    height: 100%;
+   850	    background: rgba(0, 0, 0, 0.4);
+   851	    z-index: 2000;
+   852	    display: flex;
+   853	    align-items: center;
+   854	    justify-content: center;
+   855	    padding: 20px;
+   856	    animation: fadeInOverlay 0.25s ease;
+   857	}
+   858	
+   859	@keyframes fadeInOverlay {
+   860	    from {
+   861	        opacity: 0;
+   862	    }
+   863	
+   864	    to {
+   865	        opacity: 1;
+   866	    }
+   867	}
+   868	
+   869	.claim-panel {
+   870	    position: relative;
+   871	    width: 100%;
+   872	    max-width: 400px;
+   873	    background: #fbfaf6;
+   874	    border-radius: 24px;
+   875	    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
+   876	    padding: 36px 24px 24px;
+   877	    animation: fadeInPanel 0.3s ease;
+   878	}
+   879	
+   880	@keyframes fadeInPanel {
+   881	    from {
+   882	        opacity: 0;
+   883	        transform: translateY(20px) scale(0.97);
+   884	    }
+   885	
+   886	    to {
+   887	        opacity: 1;
+   888	        transform: translateY(0) scale(1);
+   889	    }
+   890	}
+   891	
+   892	.claim-close {
+   893	    position: absolute;
+   894	    top: 14px;
+   895	    right: 14px;
+   896	    width: 34px;
+   897	    height: 34px;
+   898	    border-radius: 50%;
+   899	    border: none;
+   900	    background: rgba(120, 170, 155, 0.08);
+   901	    color: #4c6b5b;
+   902	    cursor: pointer;
+   903	    font-size: 0.95rem;
+   904	    transition: background 0.2s ease;
+   905	}
+   906	
+   907	.claim-close:hover {
+   908	    background: rgba(120, 170, 155, 0.2);
+   909	}
+   910	
+   911	/* 卡片 3D 翻转 */
+   912	.claim-scene {
+   913	    position: relative;
+   914	    width: 230px;
+   915	    height: 300px;
+   916	    margin: 4px auto 0;
+   917	    perspective: 1000px;
+   918	}
+   919	
+   920	.claim-inner {
+   921	    position: relative;
+   922	    width: 100%;
+   923	    height: 100%;
+   924	    transform-style: preserve-3d;
+   925	    transition: transform 0.8s cubic-bezier(0.4, 1.1, 0.5, 1);
+   926	}
+   927	
+   928	.claim-scene.is-flipped .claim-inner {
+   929	    transform: rotateY(180deg);
+   930	}
+   931	
+   932	.claim-face {
+   933	    position: absolute;
+   934	    inset: 0;
+   935	    backface-visibility: hidden;
+   936	    -webkit-backface-visibility: hidden;
+   937	    border-radius: 20px;
+   938	    overflow: hidden;
+   939	}
+   940	
+   941	/* 背面：揭晓前 */
+   942	.claim-back {
+   943	    background: linear-gradient(160deg, #5ba8a4, #3a7d79);
+   944	    display: flex;
+   945	    flex-direction: column;
+   946	    align-items: center;
+   947	    justify-content: center;
+   948	    gap: 14px;
+   949	    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.2);
+   950	}
+   951	
+   952	.claim-back::after {
+   953	    content: '';
+   954	    position: absolute;
+   955	    inset: 0;
+   956	    background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.18) 45%, transparent 60%);
+   957	    transform: translateX(-120%);
+   958	    animation: sweep 1.8s ease-in-out infinite;
+   959	}
+   960	
+   961	@keyframes sweep {
+   962	    to {
+   963	        transform: translateX(120%);
+   964	    }
+   965	}
+   966	
+   967	.back-question {
+   968	    font-size: 4rem;
+   969	    font-weight: 700;
+   970	    color: rgba(255, 255, 255, 0.9);
+   971	    text-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+   972	}
+   973	
+   974	.back-text {
+   975	    font-size: 0.9rem;
+   976	    color: rgba(255, 255, 255, 0.85);
+   977	    letter-spacing: 2px;
+   978	}
+   979	
+   980	/* 正面：卡片（纯色 + 图标） */
+   981	.claim-front {
+   982	    transform: rotateY(180deg);
+   983	    display: flex;
+   984	    flex-direction: column;
+   985	    align-items: center;
+   986	    justify-content: center;
+   987	    gap: 14px;
+   988	    color: white;
+   989	    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.25);
+   990	    padding: 20px;
+   991	    text-align: center;
+   992	}
+   993	
+   994	.claim-front::after {
+   995	    content: '';
+   996	    position: absolute;
+   997	    inset: 0;
+   998	    background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.25) 45%, transparent 60%);
+   999	    transform: translateX(-120%);
+  1000	    animation: sweep 1.6s ease-in-out 0.8s infinite;
+  1001	}
+  1002	
+  1003	/* 稀有卡片：金色描边 + 光晕 */
+  1004	.claim-front.is-rare {
+  1005	    border: 3px solid rgba(242, 214, 107, 0.9);
+  1006	    box-shadow: 0 0 30px rgba(242, 214, 107, 0.5), 0 14px 40px rgba(0, 0, 0, 0.25);
+  1007	}
+  1008	
+  1009	.front-icon {
+  1010	    font-size: 3.2rem;
+  1011	    text-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  1012	}
+  1013	
+  1014	.card-type {
+  1015	    font-size: 0.8rem;
+  1016	    font-weight: 700;
+  1017	    letter-spacing: 1px;
+  1018	    background: rgba(0, 0, 0, 0.22);
+  1019	    padding: 4px 14px;
+  1020	    border-radius: 999px;
+  1021	}
+  1022	
+  1023	.card-type.is-rare {
+  1024	    background: rgba(0, 0, 0, 0.18);
+  1025	    color: #ffe9a8;
+  1026	    border: 1px solid rgba(242, 214, 107, 0.7);
+  1027	}
+  1028	
+  1029	.card-name {
+  1030	    font-size: 1.15rem;
+  1031	    font-weight: 700;
+  1032	    line-height: 1.4;
+  1033	    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  1034	}
+  1035	
+  1036	.card-points {
+  1037	    font-size: 0.8rem;
+  1038	    color: rgba(255, 255, 255, 0.9);
+  1039	}
+  1040	
+  1041	/* 稀有卡片散落的星光 */
+  1042	.sparkles {
+  1043	    position: absolute;
+  1044	    top: 50%;
+  1045	    left: 50%;
+  1046	    width: 0;
+  1047	    height: 0;
+  1048	    z-index: 1;
+  1049	    pointer-events: none;
+  1050	}
+  1051	
+  1052	.sparkle {
+  1053	    position: absolute;
+  1054	    width: 10px;
+  1055	    height: 10px;
+  1056	    background: #ffe9a8;
+  1057	    border-radius: 2px;
+  1058	    transform: rotate(45deg);
+  1059	    box-shadow: 0 0 10px rgba(255, 233, 168, 0.9);
+  1060	    animation: sparkleFloat 1.4s ease-in-out infinite;
+  1061	}
+  1062	
+  1063	@keyframes sparkleFloat {
+  1064	    0% {
+  1065	        opacity: 0;
+  1066	        transform: rotate(45deg) scale(0.4);
+  1067	    }
+  1068	
+  1069	    50% {
+  1070	        opacity: 1;
+  1071	        transform: rotate(45deg) scale(1.2);
+  1072	    }
+  1073	
+  1074	    100% {
+  1075	        opacity: 0;
+  1076	        transform: rotate(45deg) scale(0.5);
+  1077	    }
+  1078	}
+  1079	
+  1080	.claim-footer {
+  1081	    display: flex;
+  1082	    justify-content: center;
+  1083	    margin-top: 22px;
+  1084	}
+  1085	
+  1086	.claim-btn {
+  1087	    display: inline-flex;
+  1088	    align-items: center;
+  1089	    gap: 8px;
+  1090	    padding: 10px 34px;
+  1091	    border-radius: 30px;
+  1092	    border: none;
+  1093	    font-size: 0.98rem;
+  1094	    font-weight: 700;
+  1095	    cursor: pointer;
+  1096	    transition: all 0.2s ease;
+  1097	    font-family: inherit;
+  1098	}
+  1099	
+  1100	.claim-btn.is-disabled {
+  1101	    background: rgba(120, 170, 155, 0.12);
+  1102	    color: #7c9086;
+  1103	    cursor: not-allowed;
+  1104	}
+  1105	
+  1106	.claim-btn.is-take {
+  1107	    background: linear-gradient(135deg, rgba(255, 248, 214, 0.98), rgba(243, 227, 162, 0.92));
+  1108	    color: #705d13;
+  1109	    box-shadow: 0 6px 16px rgba(217, 186, 75, 0.3);
+  1110	}
+  1111	
+  1112	.claim-btn.is-take:hover {
+  1113	    transform: translateY(-2px);
+  1114	    box-shadow: 0 10px 22px rgba(217, 186, 75, 0.4);
+  1115	}
+  1116	
+  1117	.claim-btn.is-take:disabled {
+  1118	    opacity: 0.65;
+  1119	    cursor: wait;
+  1120	    transform: none;
+  1121	}
+  1122	
+  1123	/* ========== Toast（与错题本保持一致） ========== */
+  1124	:global(.custom-toast) {
+  1125	    position: fixed;
+  1126	    top: 30px;
+  1127	    left: 50%;
+  1128	    transform: translateX(-50%) translateY(-20px);
+  1129	    padding: 8px 25px;
+  1130	    border-radius: 14px;
+  1131	    background: rgba(255, 255, 255, 0.92);
+  1132	    backdrop-filter: blur(12px);
+  1133	    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  1134	    font-size: 1.05rem;
+  1135	    font-weight: 500;
+  1136	    color: #2d4a3a;
+  1137	    z-index: 9999;
+  1138	    opacity: 0;
+  1139	    transition: opacity 0.3s ease, transform 0.3s ease;
+  1140	    border: 1px solid rgba(255, 255, 255, 0.6);
+  1141	}
+  1142	
+  1143	:global(.custom-toast.toast-visible) {
+  1144	    opacity: 1;
+  1145	    transform: translateX(-50%) translateY(0);
+  1146	}
+  1147	
+  1148	:global(.custom-toast.toast-success) {
+  1149	    border: 4px solid #4caf50;
+  1150	    color: #1e4a2a;
+  1151	}
+  1152	
+  1153	:global(.custom-toast.toast-error) {
+  1154	    border: 4px solid #ef5350;
+  1155	    color: #7a2a2a;
+  1156	}
+  1157	
+  1158	:global(.custom-toast.toast-info) {
+  1159	    border: 4px solid #42a5f5;
+  1160	    color: #1a3a5a;
+  1161	}
+  1162	
+  1163	/* ========== 响应式 ========== */
+  1164	@media (min-width: 1024px) {
+  1165	    .task-container {
+  1166	        padding: 50px 60px 120px;
+  1167	    }
+  1168	
+  1169	    .task-title {
+  1170	        font-size: 2.6rem;
+  1171	    }
+  1172	}
+  1173	
+  1174	@media (max-width: 640px) {
+  1175	    .task-container {
+  1176	        padding: 16px 14px 90px;
+  1177	    }
+  1178	
+  1179	    .task-title {
+  1180	        font-size: 1.6rem;
+  1181	    }
+  1182	
+  1183	    .task-stats {
+  1184	        gap: 10px;
+  1185	    }
+  1186	
+  1187	    .task-stat-card {
+  1188	        padding: 14px 8px;
+  1189	    }
+  1190	
+  1191	    .task-stat-number {
+  1192	        font-size: 1.5rem;
+  1193	    }
+  1194	
+  1195	    .task-item {
+  1196	        flex-wrap: wrap;
+  1197	    }
+  1198	
+  1199	    .task-points {
+  1200	        margin-left: 56px;
+  1201	    }
+  1202	}
+  1203	</style>

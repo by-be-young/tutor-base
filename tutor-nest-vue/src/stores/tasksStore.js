@@ -6,7 +6,6 @@
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import { supabase } from '@/utils/supabase'
-import { milestoneCard } from '@/data/cardCatalog'
 
 export const useTasksStore = defineStore('tasks', () => {
     const points = ref(0)
@@ -93,14 +92,15 @@ export const useTasksStore = defineStore('tasks', () => {
      * 领取里程碑卡片：写入 card_collection（同一里程碑只能领取一次）
      * @param {object} user 当前身份会话
      * @param {object} milestone 里程碑 { pts, isRare, ... }
+     * @param {object} draw 随机抽卡结果 { setKey, rarity, cardKey, card }
      * @returns {Promise<object>} 领取到的卡片
      */
-    async function claimMilestone(user, milestone) {
+    async function claimMilestone(user, milestone, draw) {
         const sid = getStudentId(user)
         if (!sid) throw new Error('当前账号未关联学习者身份，无法领取卡片')
         if (claimedMilestones.has(milestone.pts)) throw new Error('该里程碑已领取过卡片')
 
-        const { setKey, rarity, cardKey, card } = milestoneCard(milestone.pts)
+        const { setKey, rarity, cardKey, card } = draw
         const { error } = await supabase
             .from('card_collection')
             .insert({ student_id: sid, milestone_points: milestone.pts, card_key: cardKey, set_key: setKey, rarity })
