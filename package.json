@@ -7,19 +7,23 @@
     "frontend:sync": "node tutor-nest-vue/scripts/sync-articles-data.js",
     "predev": "npm run frontend:sync",
     "dev": "vite tutor-nest-vue",
-    "test:frontend": "node --test tutor-nest-vue/test/*.test.js",
+    "test:frontend": "node --test --test-concurrency=1 tutor-nest-vue/test/*.test.js",
+    "test:openapi": "redocly lint backend/api/openapi.yaml",
+    "test:secrets": "node scripts/ci/scan-tracked-secrets.mjs",
+    "test:e2e": "playwright test",
     "prebuild": "npm run frontend:sync",
     "build": "vite build tutor-nest-vue",
     "preview": "vite preview tutor-nest-vue"
   },
   "dependencies": {
-    "@supabase/supabase-js": "2.110.9",
     "marked": "^11.0.0",
     "pinia": "^2.1.7",
     "vue": "^3.4.0",
     "vue-router": "^4.2.5"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@redocly/cli": "2.50.0",
     "@vitejs/plugin-vue": "^5.0.0",
     "supabase": "2.114.0",
     "vite": "^5.0.0"

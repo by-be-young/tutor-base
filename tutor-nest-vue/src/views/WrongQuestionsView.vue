@@ -3,9 +3,8 @@
   ----------------------------------------------------------------------------
   功能说明：
     1. 展示当前学生的全部错题（手动添加 + 自动收集）
-    2. 题目内容、学科、正确答案不存储在表中，按来源文章动态解析
-       （subject ← articles.json series；题干 ← 文章 markdown 的【题干N】标记；
-        correct_answer ← article_answer_keys）
+    2. 后端返回当前账户可见的错题和正确答案；页面从静态文章补充学科与题干
+       （subject ← articles.json series；题干 ← 文章 markdown 的【题干N】标记）
     3. 统计、筛选（学科/状态/搜索）、排序、掌握标记、编辑、删除
     4. 手动添加：从文章选题（学科 → 文章 → 题号，实时预览题干）
 -->
@@ -259,7 +258,6 @@ import { useArticleStore } from '@/stores/blogStore'
 import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
 import { useKatex } from '@/composables/useKatex'
 import { useImageEmbed } from '@/composables/useImageEmbed'
-import { supabase } from '@/utils/supabase'
 import { resolveQuestionText, resolveQuestionOrder, renderMarkdownTable } from '@/utils/questionText'
 
 const router = useRouter()
@@ -270,9 +268,8 @@ const { renderMath } = useKatex()
 const { processMarkdown, setBasePath } = useImageEmbed()
 setBasePath('articles/图片/')
 
-// ========== 动态解析（题干/学科/正确答案） ==========
-// 错题表只存来源（source_blog_id + source_question_id），
-// 展示时从文章 markdown 与答案表动态解析
+// ========== 展示解析（题干/学科/正确答案） ==========
+// 正确答案由后端返回；静态文章只用于补充题干和学科。
 const resolvedMap = ref(new Map())   // 错题 id → { subject, questionText, correctAnswer }
 const resolvedReady = ref(false)     // 动态解析是否完成（用于区分「加载中」与「无内容」）
 const articleCache = new Map()       // blogId → markdown（缓存）
@@ -300,19 +297,11 @@ async function loadArticle(blogId) {
     return md
 }
 
-async function loadAnswerKeys(blogIds) {
-    if (!blogIds.length) return new Map()
-    const { data, error } = await supabase
-        .from('article_answer_keys')
-        .select('blog_id, question_id, answer_text')
-        .in('blog_id', blogIds)
-
-    if (error) {
-        console.error('加载答案数据失败:', error)
-        return new Map()
-    }
+function indexBackendAnswers() {
     const map = new Map()
-        ; (data || []).forEach(k => map.set(`${k.blog_id}-${String(k.question_id)}`, k.answer_text || ''))
+        ; wrongQuestionsStore.questions.forEach(question => map.set(
+            `${question.source_blog_id}-${String(question.source_question_id)}`,
+            question.correct_answer || ''))
     return map
 }
 
@@ -323,7 +312,7 @@ async function resolveAll() {
     const blogIds = [...new Set(list.map(q => q.source_blog_id).filter(b => b != null))]
 
     await Promise.all(blogIds.map(loadArticle))
-    const answerMap = await loadAnswerKeys(blogIds)
+    const answerMap = indexBackendAnswers()
 
     const map = new Map()
     list.forEach(q => {
