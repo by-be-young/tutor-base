@@ -17,7 +17,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  quality:
+    uses: ./.github/workflows/e2e.yml
+
   build:
+    needs: quality
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,22 +38,21 @@ jobs:
         id: pages
         uses: actions/configure-pages@v5
 
-      - name: Validate frontend configuration
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-        run: |
-          test -n "$VITE_SUPABASE_URL" || { echo "Missing VITE_SUPABASE_URL"; exit 1; }
-          test -n "$VITE_SUPABASE_ANON_KEY" || { echo "Missing VITE_SUPABASE_ANON_KEY"; exit 1; }
-
       - name: Install dependencies
         run: npm ci
 
+      - name: Test frontend
+        run: npm run test:frontend
+
+      - name: Validate API contract
+        run: npm run test:openapi
+
+      - name: Scan tracked files for secrets
+        run: npm run test:secrets
+
       - name: Build Vue frontend
         env:
-          VITE_API_BASE_URL: https://staging-api.be-young.top/api/v1
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'https://staging-api.be-young.top/api/v1' }}
         # 默认 Pages 地址使用 /tutor-base/；绑定自定义域名后 base_path 自动变为空字符串。
         run: npm run build -- --base="${{ steps.pages.outputs.base_path }}/"
 

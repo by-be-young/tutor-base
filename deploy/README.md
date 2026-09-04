@@ -1,117 +1,118 @@
-# 云服务器 staging 部署
+# 云服务器部署手册
 
-当前方案只部署 Java API，不替换 GitHub Pages 前端，也不修改现有 `be-young.top` 博客。服务器使用宿主机已有的
-Nginx 终止 TLS，并反向代理到仅监听 `127.0.0.1:8080` 的后端容器。
+生产形态为 GitHub Pages 前端 + 云服务器 Java API + Supabase PostgreSQL。宿主机 Nginx 负责 HTTPS，后端容器只监听
+`127.0.0.1:8080`。当前 staging 地址是 `https://staging-learn.be-young.top` 和
+`https://staging-api.be-young.top`。
 
-## 前置条件
-
-1. `staging-api.be-young.top` 的 A 记录指向服务器公网 IPv4。
-2. 安全组开放 80、443 和受限来源的 SSH；不要开放 8080 或数据库端口。
-3. Docker Engine 与 Docker Compose 插件已经安装。
-4. 已按 `../docs/runtime-database-role.md` 创建并验证 `tutor_base_app`。
-5. 后端镜像已经通过 `mvnw clean verify`，并使用不可变 commit SHA 标签发布到 GHCR。
-
-## 获取部署文件
-
-在服务器使用当前开发分支：
+## 服务器文件
 
 ```shell
-git clone --branch codex/java-backend-migration --single-branch \
-  https://github.com/by-be-young/tutor-base.git
-cd tutor-base/deploy
+cd /opt/tutor-base/repository
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+cd deploy
+
+cp -n .env.example .env
+cp -n backend.env.example backend.env
+cp -n migration.env.example migration.env
+chmod 600 .env backend.env migration.env
 ```
 
-如果目录已经存在，使用 `git pull --ff-only` 更新，不要覆盖本地环境变量文件。
+- `.env`：`BACKEND_IMAGE=ghcr.io/by-be-young/tutor-base-backend:sha-<40位提交SHA>`。
+- `backend.env`：使用受限运行账户 `tutor_base_app`，保持 `DATABASE_MIGRATIONS_ENABLED=false`、
+  `TUTOR_BOOTSTRAP_ENABLED=false`，并精确配置前端 HTTPS origin。
+- `migration.env`：仅供一次性 migration 容器使用，填写 schema owner/migration 账户；不得使用运行账户。
+- 三个真实文件均被 Git 忽略，不要把内容发到聊天、日志或仓库。
 
-## 配置后端
-
-```shell
-cp .env.example .env
-cp backend.env.example backend.env
-chmod 600 .env backend.env
-```
-
-`.env` 只填写已经验证的不可变镜像标签：
-
-```text
-BACKEND_IMAGE=ghcr.io/by-be-young/tutor-base-backend:sha-<完整提交 SHA>
-```
-
-`backend.env` 填写 Supabase Session Pooler 连接、独立运行账户密码、随机 CSRF secret 和精确的 HTTPS 前端
-origin。CSRF secret 可以用 `openssl rand -base64 48` 生成，不要发送给他人或提交到 Git。
-
-必须保持：
-
-```text
-SPRING_PROFILES_ACTIVE=production
-DATABASE_MIGRATIONS_ENABLED=false
-TUTOR_BOOTSTRAP_ENABLED=false
-TUTOR_BOOTSTRAP_PASSWORD=
-```
-
-生产服务器不执行 Flyway，也不使用 Supabase 管理员或项目数据库密码。
-
-## 启动后端
+先检查配置：
 
 ```shell
 sudo docker compose config --quiet
-sudo docker compose up -d backend
+```
+
+## 首次发布 V5
+
+在 Supabase SQL Editor 先运行 `database/audit/pre_v5_rewards_checks.sql`。所有 `anomaly_count` 为 0 后，在服务器执行：
+
+```shell
+sudo docker compose pull backend migration
+sudo docker compose --profile release run --rm migration
+sudo docker compose up -d --no-deps backend
+```
+
+migration 是一次性非 Web 容器：Flyway 成功后以 0 退出；失败则后端不会被替换。V5 完成后，在 Supabase SQL Editor
+重新运行：
+
+1. `database/operations/provision_runtime_role.sql`
+2. `database/audit/runtime_role_checks.sql`
+
+第二份报告的全部 `anomaly_count` 必须为 0。然后重启后端，让连接池使用新权限：
+
+```shell
+sudo docker compose restart backend
+```
+
+## 每次发布后的验证
+
+```shell
 sudo docker compose ps
-sudo docker compose logs --tail=100 backend
+sudo docker compose logs --tail=150 backend
 curl --fail http://127.0.0.1:8080/actuator/health/liveness
 curl --fail http://127.0.0.1:8080/actuator/health/readiness
-curl --fail http://127.0.0.1:8080/api/v1/system/status
-```
-
-Compose 对容器设置 768 MiB 内存限制，JVM 最大使用其中约 60%。宿主机 8080 只绑定回环地址。
-
-## 配置现有 Nginx
-
-仓库提供独立的 `nginx/staging-api.be-young.top.conf`，不会修改博客配置：
-
-```shell
-sudo install -m 0644 nginx/staging-api.be-young.top.conf \
-  /etc/nginx/conf.d/staging-api.be-young.top.conf
-sudo nginx -t
-sudo systemctl reload nginx
-curl --fail http://staging-api.be-young.top/actuator/health/readiness
-```
-
-确认 HTTP 代理正常后安装 Certbot 并申请证书：
-
-```shell
-sudo apt update
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d staging-api.be-young.top --redirect
-sudo nginx -t
-curl --fail https://staging-api.be-young.top/actuator/health/liveness
-curl --fail https://staging-api.be-young.top/actuator/health/readiness
 curl --fail https://staging-api.be-young.top/api/v1/system/status
-sudo certbot renew --dry-run
 ```
 
-## 身份功能 smoke test
-
-在 Windows 管理机上执行；密码通过隐藏提示输入，不写入命令历史：
+在 Windows 管理机执行完整身份 smoke：
 
 ```powershell
 .\api-smoke-test.ps1 -BaseUrl https://staging-api.be-young.top
 ```
 
-本地后端默认地址可以直接执行：
+还应手工验证管理员建号/授权/设密、学习者作答、批阅、错题、签到和奖励页面。
 
-```powershell
-.\api-smoke-test.ps1
+## GitHub 自动部署
+
+`Backend Container Image` 在 `main` 发布 `sha-<commit>` 镜像；成功后 `Deploy Backend to Staging` 通过 GitHub
+Environment `staging` 审批，再执行迁移、替换容器和健康检查。新容器的本地 readiness 或公网 smoke
+失败时，工作流会把 `.env` 恢复为上一镜像并重新启动旧后端。需在该 Environment 配置：
+
+- `DEPLOY_HOST`：服务器地址。
+- `DEPLOY_USER`：部署用户。
+- `DEPLOY_SSH_PRIVATE_KEY`：专用部署私钥。
+- `DEPLOY_KNOWN_HOSTS`：预先人工核验的服务器 host key，禁止运行时 `ssh-keyscan` 自动信任。
+
+服务器必须预先准备 `.env`、`backend.env`、`migration.env`，并允许部署用户无交互执行所需 Docker 命令。
+
+## 前端发布与权限收口
+
+GitHub Pages 工作流从仓库变量 `VITE_API_BASE_URL` 构建前端；staging 应设为：
+
+```text
+https://staging-api.be-young.top/api/v1
 ```
 
-## 回滚
+确认新版 Pages 的全部关键旅程可用后，才在 Supabase SQL Editor 运行：
 
-把 `.env` 中的 `BACKEND_IMAGE` 改为上一个已验证的 commit SHA 标签，然后执行：
+1. `database/operations/revoke_browser_table_access.sql`
+2. `database/audit/browser_table_access_checks.sql`
+
+第二份报告全为 0 才表示浏览器直连权限已安全关闭。此步骤不可在旧前端仍在线时提前执行。
+
+## Nginx 与回滚
+
+`nginx/staging-api.be-young.top.conf` 反向代理到 `127.0.0.1:8080`。修改后始终先执行：
 
 ```shell
-sudo docker compose up -d backend
-sudo docker compose ps
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+应用回滚只需把 `.env` 的 `BACKEND_IMAGE` 改为上一已验证的 commit SHA，再执行：
+
+```shell
+sudo docker compose up -d --no-deps backend
 curl --fail http://127.0.0.1:8080/actuator/health/readiness
 ```
 
-只允许向后兼容的数据库 migration 与应用一起发布。破坏性 migration 不得依靠切回旧镜像回滚。
+数据库 migration 只允许向后兼容；V5 新表和约束保留时旧镜像仍可运行。不要通过删除表或修改 Flyway 历史回滚。

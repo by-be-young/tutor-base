@@ -3,7 +3,7 @@ name: Backend Container Image
 on:
   push:
     branches:
-      - codex/java-backend-migration
+      - main
     paths:
       - 'backend/**'
       - '.github/workflows/backend-image.yml'
@@ -38,11 +38,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Refuse to overwrite an existing commit image
+        run: |
+          image="ghcr.io/by-be-young/tutor-base-backend:sha-${GITHUB_SHA}"
+          if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
+            echo "Immutable image tag already exists: $image"
+            exit 1
+          fi
+
       - name: Build and publish immutable image
         uses: docker/build-push-action@v6
         with:
           context: backend
           push: true
-          tags: ghcr.io/by-be-young/tutor-base-backend:sha-${{ github.sha }}
+          tags: |
+            ghcr.io/by-be-young/tutor-base-backend:sha-${{ github.sha }}
+            ghcr.io/by-be-young/tutor-base-backend:main
           cache-from: type=gha
           cache-to: type=gha,mode=max

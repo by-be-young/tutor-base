@@ -6,14 +6,19 @@ on:
       - 'tutor-nest-vue/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'backend/api/openapi.yaml'
+      - 'redocly.yaml'
       - '.github/workflows/frontend-ci.yml'
   push:
     branches:
-      - codex/java-backend-migration
+      - main
+      - 'codex/**'
     paths:
       - 'tutor-nest-vue/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'backend/api/openapi.yaml'
+      - 'redocly.yaml'
       - '.github/workflows/frontend-ci.yml'
 
 permissions:
@@ -29,9 +34,11 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
+      - name: Test frontend gateways and security behavior
+        run: npm run test:frontend
+      - name: Validate OpenAPI contract
+        run: npm run test:openapi
       - name: Build Vue identity integration
         env:
           VITE_API_BASE_URL: http://127.0.0.1:8080/api/v1
-          VITE_SUPABASE_URL: https://example.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-placeholder
         run: npm run build

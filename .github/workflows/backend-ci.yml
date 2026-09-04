@@ -4,12 +4,17 @@ on:
   pull_request:
     paths:
       - 'backend/**'
+      - 'database/**'
+      - 'deploy/compose.yaml'
       - '.github/workflows/backend-ci.yml'
   push:
     branches:
-      - codex/java-backend-migration
+      - main
+      - 'codex/**'
     paths:
       - 'backend/**'
+      - 'database/**'
+      - 'deploy/compose.yaml'
       - '.github/workflows/backend-ci.yml'
 
 permissions:

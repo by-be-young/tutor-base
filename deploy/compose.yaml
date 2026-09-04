@@ -1,4 +1,25 @@
 services:
+  migration:
+    image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to an immutable commit-SHA tag}
+    profiles: ["release"]
+    env_file:
+      - backend.env
+      - migration.env
+    environment:
+      DATABASE_MIGRATIONS_ENABLED: "true"
+      TUTOR_BOOTSTRAP_ENABLED: "false"
+    command:
+      - --spring.main.web-application-type=none
+      - --tutor.migration-only=true
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    mem_limit: 512m
+    pids_limit: 128
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+
   backend:
     image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to an immutable commit-SHA tag}
     restart: unless-stopped

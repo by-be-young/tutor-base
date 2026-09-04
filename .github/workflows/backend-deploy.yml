@@ -1,0 +1,93 @@
+name: Deploy Backend to Staging
+
+on:
+  workflow_run:
+    workflows: ["Backend Container Image"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_sha:
+        description: Full Git commit SHA whose immutable image should be deployed
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging-api.be-young.top/api/v1/system/status
+    steps:
+      - name: Resolve immutable image SHA
+        id: image
+        env:
+          MANUAL_SHA: ${{ inputs.image_sha }}
+          AUTOMATIC_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          sha="${MANUAL_SHA:-$AUTOMATIC_SHA}"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Expected a full 40-character Git SHA"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Configure pinned SSH host identity
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Migrate, deploy and verify
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          IMAGE_SHA: ${{ steps.image.outputs.sha }}
+        run: |
+          ssh -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$IMAGE_SHA" <<'REMOTE'
+          set -euo pipefail
+          image_sha="$1"
+          cd /opt/tutor-base/repository
+          git fetch origin main
+          git merge-base --is-ancestor "$image_sha" origin/main
+          git switch --detach "$image_sha"
+          cd deploy
+          test -s .env && test -s backend.env && test -s migration.env
+          previous_env_line="$(grep '^BACKEND_IMAGE=' .env || true)"
+          previous_image="${previous_env_line#BACKEND_IMAGE=}"
+          rollback_backend() {
+            exit_code="$?"
+            trap - ERR
+            set +e
+            if [ -n "$previous_image" ]; then
+              echo "Deployment failed; restoring $previous_image"
+              sed -i -E "s|^BACKEND_IMAGE=.*$|BACKEND_IMAGE=${previous_image}|" .env
+              sudo docker compose up -d --no-deps backend
+              curl --fail --retry 12 --retry-delay 5 --retry-connrefused \
+                http://127.0.0.1:8080/actuator/health/readiness
+            fi
+            exit "$exit_code"
+          }
+          trap rollback_backend ERR
+          sed -i -E "s|^BACKEND_IMAGE=.*$|BACKEND_IMAGE=ghcr.io/by-be-young/tutor-base-backend:sha-${image_sha}|" .env
+          sudo docker compose pull backend migration
+          sudo docker compose --profile release run --rm migration
+          sudo docker compose up -d --no-deps backend
+          sudo docker compose ps backend
+          curl --fail --retry 12 --retry-delay 5 --retry-connrefused \
+            http://127.0.0.1:8080/actuator/health/readiness
+          curl --fail https://staging-api.be-young.top/api/v1/system/status
+          trap - ERR
+          REMOTE

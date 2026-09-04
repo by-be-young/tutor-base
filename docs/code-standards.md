@@ -107,10 +107,10 @@ backend/
 ## 9. 前端迁移规范
 
 - 页面和 Pinia store 不再直接 import Supabase client。
-- 迁移期 gateway 按 `identity/learning/admin/wrongBook` 能力划分，不按数据库表划分。
+- gateway 按 `identity/learner/learning/wrongBook/reward` 能力划分，不按数据库表划分。
 - HTTP adapter 统一处理 base URL、credentials、CSRF、Problem Details 和超时；页面不重复拼接 fetch 配置。
-- staging 和旧生产可分别选择 HTTP/Supabase adapter，但单个浏览器会话禁止双写。
-- 最终切换后删除 Supabase adapter 和无价值的转发 interface，避免永久维护两套路径。
+- 当前生产构建只允许 HTTP backend adapter；禁止恢复浏览器直连数据库或双写。
+- Supabase 仅作为 PostgreSQL 托管方存在，前端不得重新引入 Supabase adapter、URL 或 anon key。
 
 ## 10. 提交与评审
 
