@@ -34,7 +34,9 @@ class FlywayMigrationTest {
             "account_activation",
             "account_session",
             "daily_check_in",
-            "user_points");
+            "user_points",
+            "task_claims",
+            "card_collection");
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
@@ -49,8 +51,8 @@ class FlywayMigrationTest {
 
         MigrateResult result = flyway.migrate();
 
-        assertThat(result.migrationsExecuted).isEqualTo(4);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("4");
+        assertThat(result.migrationsExecuted).isEqualTo(5);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("5");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
         try (Connection connection = POSTGRES.createConnection("")) {
@@ -69,6 +71,13 @@ class FlywayMigrationTest {
             assertThat(hasConstraint(connection, "daily_check_in_points_awarded_check")).isTrue();
             assertThat(hasConstraint(connection, "daily_check_in_bonus_days_check")).isTrue();
             assertThat(isColumnNullable(connection, "daily_check_in", "bonus_days")).isTrue();
+            assertThat(hasConstraint(connection, "user_points_student_id_fkey")).isTrue();
+            assertThat(hasConstraint(connection, "task_claims_student_id_fkey")).isTrue();
+            assertThat(hasConstraint(connection, "task_claims_student_task_unique")).isTrue();
+            assertThat(hasConstraint(connection, "card_collection_student_id_fkey")).isTrue();
+            assertThat(hasConstraint(connection, "card_collection_milestone_positive")).isTrue();
+            assertThat(hasConstraint(connection, "card_collection_rarity_check")).isTrue();
+            assertThat(hasConstraint(connection, "card_collection_student_milestone_unique")).isTrue();
 
             execute(connection, Files.readString(
                     Path.of("..", "database", "audit", "post_v3_identity_checks.sql")));
@@ -76,6 +85,26 @@ class FlywayMigrationTest {
                     Path.of("..", "database", "audit", "flyway_adoption_checks.sql")));
             execute(connection, Files.readString(
                     Path.of("..", "database", "audit", "flyway_adoption_details.sql")));
+            execute(connection, Files.readString(
+                    Path.of("..", "database", "operations", "provision_runtime_role.sql")));
+            execute(connection, Files.readString(
+                    Path.of("..", "database", "audit", "runtime_role_checks.sql")));
+            execute(connection, Files.readString(
+                    Path.of("..", "database", "operations", "revoke_browser_table_access.sql")));
+            execute(connection, Files.readString(
+                    Path.of("..", "database", "audit", "browser_table_access_checks.sql")));
+            assertThat(readCount(connection, """
+                    SELECT count(*)
+                    FROM pg_class AS table_class
+                    JOIN pg_namespace AS namespace ON namespace.oid = table_class.relnamespace
+                    WHERE namespace.nspname = 'public'
+                      AND table_class.relname = ANY (ARRAY[
+                          'student', 'account', 'account_activation', 'account_session',
+                          'daily_check_in', 'user_points', 'task_claims', 'card_collection',
+                          'article_answer_keys', 'article_question_submissions', 'wrong_questions'
+                      ])
+                      AND table_class.relrowsecurity
+                    """)).isEqualTo(11);
 
             assertDatabaseRejectsInvalidStates(connection);
             assertWrongQuestionsFollowStudentLifecycle(connection);
@@ -127,6 +156,24 @@ class FlywayMigrationTest {
                         WHERE namespace.nspname = 'public' AND procedure.proname = 'set_updated_at'
                         """)).isEqualTo(1);
                 assertThat(readTriggerCount(connection)).isEqualTo(3);
+            }
+        }
+    }
+
+    @Test
+    void givenV4SchemaWithoutOptionalRewardTablesWhenPreV5AuditRunsThenAuditCompletes() throws Exception {
+        try (PostgreSQLContainer preV5Database = new PostgreSQLContainer("postgres:17-alpine")) {
+            preV5Database.start();
+            Flyway.configure()
+                    .dataSource(preV5Database.getJdbcUrl(), preV5Database.getUsername(), preV5Database.getPassword())
+                    .locations("classpath:db/migration")
+                    .target(MigrationVersion.fromVersion("4"))
+                    .load()
+                    .migrate();
+
+            try (Connection connection = preV5Database.createConnection("")) {
+                execute(connection, Files.readString(
+                        Path.of("..", "database", "audit", "pre_v5_rewards_checks.sql")));
             }
         }
     }

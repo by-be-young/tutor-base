@@ -225,6 +225,306 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+  /rewards:
+    get:
+      operationId: getRewardSummary
+      summary: 获取当前学习者的积分与卡片收藏
+      description: 学习者身份只从服务端会话取得，不接受客户端传入 student_id。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 当前学习者的积分余额与收藏卡片，卡片按领取时间倒序。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RewardSummary'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /rewards/milestones/{milestonePoints}/claims:
+    post:
+      operationId: claimRewardMilestone
+      summary: 领取一个已达成的积分里程碑卡片
+      description: 卡片种类和稀有度由服务端目录决定；同一学习者的同一里程碑只可领取一次。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: milestonePoints
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 200
+            maximum: 6000
+            multipleOf: 200
+      responses:
+        '201':
+          description: 领取成功，返回由服务端确定的卡片。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardReward'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /articles/study-progress:
+    get:
+      operationId: getLearnerStudyProgress
+      summary: 获取当前学习者各文章的题目与提交计数
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 只包含当前学习者获授权且已配置题目的文章。
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ArticleProgress' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /articles/{articleId}/study-state:
+    get:
+      operationId: getLearnerArticleStudyState
+      summary: 获取当前学习者的文章作答状态
+      description: 未批阅题目的参考答案不会发送到浏览器。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ArticleId'
+      responses:
+        '200':
+          description: 当前学习者的题目状态。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArticleStudyState' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /articles/{articleId}/submissions/{questionId}:
+    put:
+      operationId: saveLearnerSubmission
+      summary: 保存当前学习者的一道作答并执行服务端自动批阅
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/ArticleId'
+        - $ref: '#/components/parameters/QuestionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SaveSubmissionRequest' }
+      responses:
+        '200':
+          description: 保存后的作答；自动批阅为错误时，错题也在同一事务收集。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Submission' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /admin/articles/answer-key-article-ids:
+    get:
+      operationId: listAnswerKeyArticleIds
+      summary: 列出已配置至少一道题的文章 ID
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 文章 ID 列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: integer, format: int64 }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /admin/articles/{articleId}/answer-keys:
+    get:
+      operationId: getArticleAnswerKeys
+      summary: 获取文章的完整参考答案配置
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/ArticleId' }]
+      responses:
+        '200':
+          description: 完整参考答案配置。
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AnswerKey' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+    put:
+      operationId: replaceArticleAnswerKeys
+      summary: 批量创建或替换文章参考答案配置
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/ArticleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReplaceAnswerKeysRequest' }
+      responses:
+        '200':
+          description: 保存后的完整配置。
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AnswerKey' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /admin/articles/{articleId}/study-state:
+    get:
+      operationId: getAdministratorArticleStudyState
+      summary: 获取指定学习者的作答与完整参考答案
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ArticleId'
+        - name: learnerId
+          in: query
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+      responses:
+        '200':
+          description: 管理员批阅视图数据。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArticleStudyState' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /admin/learners/{learnerId}/study-progress:
+    get:
+      operationId: getAdministratorLearnerStudyProgress
+      summary: 获取指定学习者各文章的批阅进度
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: learnerId
+          in: path
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+      responses:
+        '200':
+          description: 文章进度列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ArticleProgress' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /admin/articles/{articleId}/learners/{learnerId}/submissions/{questionId}/review:
+    put:
+      operationId: reviewLearnerSubmission
+      summary: 人工批阅指定作答
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/ArticleId'
+        - name: learnerId
+          in: path
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+        - $ref: '#/components/parameters/QuestionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewSubmissionRequest' }
+      responses:
+        '200':
+          description: 批阅后的作答。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Submission' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /wrong-book:
+    get:
+      operationId: listWrongBookEntries
+      summary: 获取当前学习者未移除的错题
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 错题列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WrongBookEntry' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /wrong-book/entries:
+    post:
+      operationId: collectWrongBookEntry
+      summary: 手动把文章中的一道题加入当前学习者错题本
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/CsrfHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CollectWrongBookRequest' }
+      responses:
+        '201':
+          description: 新建或复活后的错题。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WrongBookEntry' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /wrong-book/entries/{entryId}:
+    patch:
+      operationId: updateWrongBookEntry
+      summary: 修改当前学习者错题的学习字段
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/WrongBookEntryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateWrongBookRequest' }
+      responses:
+        '200':
+          description: 更新后的错题。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WrongBookEntry' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    delete:
+      operationId: removeWrongBookEntry
+      summary: 删除手动错题，或软移除自动收集错题
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/WrongBookEntryId'
+      responses:
+        '204': { description: 已移除。 }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
   /admin/learners:
     get:
       operationId: listLearners
@@ -409,6 +709,21 @@ components:
       schema:
         type: string
         minLength: 1
+    ArticleId:
+      name: articleId
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    QuestionId:
+      name: questionId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 200 }
+    WrongBookEntryId:
+      name: entryId
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
   securitySchemes:
     sessionCookie:
       type: apiKey
@@ -660,6 +975,171 @@ components:
         totalPoints:
           type: integer
           description: 签到后的累计积分。
+    RewardSummary:
+      type: object
+      additionalProperties: false
+      required: [points, collection]
+      properties:
+        points:
+          type: integer
+          format: int64
+          minimum: 0
+        collection:
+          type: array
+          items:
+            $ref: '#/components/schemas/CardReward'
+    ArticleProgress:
+      type: object
+      additionalProperties: false
+      required: [articleId, totalQuestions, submittedQuestions, pendingReviews]
+      properties:
+        articleId: { type: integer, format: int64 }
+        totalQuestions: { type: integer, minimum: 0 }
+        submittedQuestions: { type: integer, minimum: 0 }
+        pendingReviews: { type: integer, minimum: 0 }
+    ArticleStudyState:
+      type: object
+      additionalProperties: false
+      required: [articleId, questions]
+      properties:
+        articleId: { type: integer, format: int64 }
+        questions:
+          type: array
+          items: { $ref: '#/components/schemas/QuestionState' }
+    QuestionState:
+      type: object
+      additionalProperties: false
+      required: [questionId, answerText, autoGrade, submission]
+      properties:
+        questionId: { type: string }
+        answerText: { type: [string, 'null'], description: 学习者未获准查看时为 null。 }
+        autoGrade: { type: [boolean, 'null'], description: 只在管理员响应中返回。 }
+        submission:
+          anyOf:
+            - $ref: '#/components/schemas/Submission'
+            - type: 'null'
+    Submission:
+      type: object
+      additionalProperties: false
+      required: [id, articleId, learnerId, questionId, answerText, reviewStatus, reviewResult, submittedAt, reviewedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        articleId: { type: integer, format: int64 }
+        learnerId: { type: integer, format: int64 }
+        questionId: { type: string }
+        answerText: { type: string }
+        reviewStatus: { type: string, enum: [pending, reviewed] }
+        reviewResult: { type: [string, 'null'], enum: [correct, partial, wrong, null] }
+        submittedAt: { type: string, format: date-time }
+        reviewedAt: { type: [string, 'null'], format: date-time }
+    SaveSubmissionRequest:
+      type: object
+      additionalProperties: false
+      required: [answerText]
+      properties:
+        answerText: { type: string, maxLength: 50000 }
+    AnswerKey:
+      type: object
+      additionalProperties: false
+      required: [questionId, answerText, autoGrade, updatedAt]
+      properties:
+        questionId: { type: string }
+        answerText: { type: string }
+        autoGrade: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+    ReplaceAnswerKeysRequest:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: { $ref: '#/components/schemas/AnswerKeyInput' }
+    AnswerKeyInput:
+      type: object
+      additionalProperties: false
+      required: [questionId, answerText, autoGrade]
+      properties:
+        questionId: { type: string, minLength: 1, maxLength: 200 }
+        answerText: { type: string, maxLength: 50000 }
+        autoGrade: { type: boolean }
+    ReviewSubmissionRequest:
+      type: object
+      additionalProperties: false
+      required: [result]
+      properties:
+        result: { type: string, enum: [correct, partial, wrong] }
+    CollectWrongBookRequest:
+      type: object
+      additionalProperties: false
+      required: [sourceArticleId, sourceQuestionId, myAnswer]
+      properties:
+        sourceArticleId: { type: integer, format: int64, minimum: 1 }
+        sourceQuestionId: { type: string, minLength: 1, maxLength: 200 }
+        myAnswer: { type: string, maxLength: 50000 }
+    UpdateWrongBookRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        myAnswer: { type: string, maxLength: 50000 }
+        wrongReason: { type: string, maxLength: 10000 }
+        tags:
+          type: array
+          maxItems: 100
+          items: { type: string, minLength: 1, maxLength: 100 }
+        note: { type: string, maxLength: 20000 }
+        mastered: { type: boolean }
+    WrongBookEntry:
+      type: object
+      additionalProperties: false
+      required: [id, learnerId, correctAnswer, myAnswer, wrongReason, tags, note,
+                 sourceArticleId, sourceQuestionId, manual, mastered, wrongCount, createdAt, updatedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        learnerId: { type: integer, format: int64 }
+        correctAnswer: { type: string }
+        myAnswer: { type: string }
+        wrongReason: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        note: { type: string }
+        sourceArticleId: { type: [integer, 'null'], format: int64 }
+        sourceQuestionId: { type: [string, 'null'] }
+        manual: { type: boolean }
+        mastered: { type: boolean }
+        wrongCount: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CardReward:
+      type: object
+      additionalProperties: false
+      required: [id, milestonePoints, cardKey, setKey, rarity, claimedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        milestonePoints:
+          type: integer
+          format: int64
+          minimum: 200
+          maximum: 6000
+          multipleOf: 200
+        cardKey:
+          type: string
+          minLength: 1
+        setKey:
+          type: string
+          enum: [flame, aurora, galaxy, forest]
+        rarity:
+          type: string
+          enum: [common, rare]
+        claimedAt:
+          type: string
+          format: date-time
     ApiProblem:
       type: object
       required:

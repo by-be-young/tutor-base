@@ -57,9 +57,32 @@ GRANT SELECT, INSERT, UPDATE ON TABLE public.student TO tutor_base_runtime;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.account TO tutor_base_runtime;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.account_activation TO tutor_base_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.account_session TO tutor_base_runtime;
+GRANT SELECT, INSERT ON TABLE public.daily_check_in TO tutor_base_runtime;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.user_points TO tutor_base_runtime;
+GRANT SELECT, INSERT ON TABLE public.card_collection TO tutor_base_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.article_answer_keys TO tutor_base_runtime;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.article_question_submissions TO tutor_base_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.wrong_questions TO tutor_base_runtime;
 GRANT USAGE ON SEQUENCE public.student_id_seq, public.account_id_seq,
-    public.account_activation_id_seq, public.account_session_id_seq
+    public.account_activation_id_seq, public.account_session_id_seq,
+    public.daily_check_in_id_seq, public.card_collection_id_seq,
+    public.article_answer_keys_id_seq, public.article_question_submissions_id_seq,
+    public.wrong_questions_id_seq
     TO tutor_base_runtime;
+
+-- The application login is not a table owner and must pass these policies.
+-- Explicitly enabling RLS makes the policies effective on plain PostgreSQL as well as Supabase.
+ALTER TABLE public.student ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.account ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.account_activation ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.account_session ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.daily_check_in ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_points ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.task_claims ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.card_collection ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.article_answer_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.article_question_submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.wrong_questions ENABLE ROW LEVEL SECURITY;
 
 DO $policies$
 BEGIN
@@ -127,6 +150,56 @@ BEGIN
                    AND polname = 'tutor_base_runtime_session_delete') THEN
         CREATE POLICY tutor_base_runtime_session_delete ON public.account_session
             FOR DELETE TO tutor_base_runtime USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.daily_check_in'::regclass
+                   AND polname = 'tutor_base_runtime_check_in_select') THEN
+        CREATE POLICY tutor_base_runtime_check_in_select ON public.daily_check_in
+            FOR SELECT TO tutor_base_runtime USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.daily_check_in'::regclass
+                   AND polname = 'tutor_base_runtime_check_in_insert') THEN
+        CREATE POLICY tutor_base_runtime_check_in_insert ON public.daily_check_in
+            FOR INSERT TO tutor_base_runtime WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.user_points'::regclass
+                   AND polname = 'tutor_base_runtime_points_select') THEN
+        CREATE POLICY tutor_base_runtime_points_select ON public.user_points
+            FOR SELECT TO tutor_base_runtime USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.user_points'::regclass
+                   AND polname = 'tutor_base_runtime_points_insert') THEN
+        CREATE POLICY tutor_base_runtime_points_insert ON public.user_points
+            FOR INSERT TO tutor_base_runtime WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.user_points'::regclass
+                   AND polname = 'tutor_base_runtime_points_update') THEN
+        CREATE POLICY tutor_base_runtime_points_update ON public.user_points
+            FOR UPDATE TO tutor_base_runtime USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.card_collection'::regclass
+                   AND polname = 'tutor_base_runtime_card_select') THEN
+        CREATE POLICY tutor_base_runtime_card_select ON public.card_collection
+            FOR SELECT TO tutor_base_runtime USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.card_collection'::regclass
+                   AND polname = 'tutor_base_runtime_card_insert') THEN
+        CREATE POLICY tutor_base_runtime_card_insert ON public.card_collection
+            FOR INSERT TO tutor_base_runtime WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.article_answer_keys'::regclass
+                   AND polname = 'tutor_base_runtime_answer_keys_all') THEN
+        CREATE POLICY tutor_base_runtime_answer_keys_all ON public.article_answer_keys
+            FOR ALL TO tutor_base_runtime USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.article_question_submissions'::regclass
+                   AND polname = 'tutor_base_runtime_submissions_all') THEN
+        CREATE POLICY tutor_base_runtime_submissions_all ON public.article_question_submissions
+            FOR ALL TO tutor_base_runtime USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.wrong_questions'::regclass
+                   AND polname = 'tutor_base_runtime_wrong_questions_all') THEN
+        CREATE POLICY tutor_base_runtime_wrong_questions_all ON public.wrong_questions
+            FOR ALL TO tutor_base_runtime USING (true) WITH CHECK (true);
     END IF;
 END
 $policies$;
