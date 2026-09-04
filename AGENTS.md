@@ -46,6 +46,18 @@ cd backend
 
 如果本机没有 Java 21，可在已安装 Docker 的环境运行 CI 对应容器命令；不得用 Java 8 验证 Spring Boot 4。
 
+## CI/CD 分工
+
+- `backend-ci.yml`：PR 和开发分支的 Java 快速单元测试、HTTP/PostgreSQL 集成测试，两个 job 并行。
+- `frontend-ci.yml`：前端 gateway 测试、OpenAPI 校验和 Vue 构建。
+- `e2e.yml`：以真实 PostgreSQL、后端和浏览器验证跨前后端用户旅程；可被 Pages 部署复用为质量门。
+- `security.yml`：对所有改动执行仓库 secret 扫描，保持独立的最小权限和清晰的安全状态。
+- `backend-image.yml` 与 `backend-deploy.yml`：`main` 上先验证并发布不可变 SHA 镜像，再经 `staging`
+  Environment 审批执行迁移和部署。
+- `deploy.yml`：`main` 上通过 E2E 质量门后构建并发布 GitHub Pages。
+
+不要为了减少 YAML 文件数量把上述职责合成单个串行 job；可以抽取重复 step，但测试、制品发布和环境部署应保持独立状态与权限边界。
+
 ## 完成定义
 
 - HTTP interface 与 OpenAPI 一致，且没有浏览器直连已迁移业务表。

@@ -90,6 +90,9 @@ backend/
 - Interface 是主要测试面：测试 observable result、持久化结果和 error mode，不断言私有 method 或内部调用次数。
 - 纯规则使用快速单元测试；涉及 SQL、constraint、transaction 和 Flyway 的测试使用 Testcontainers PostgreSQL。
 - HTTP adapter 使用 MockMvc 测试状态码、Problem Details、安全规则和 JSON contract。
+- 后端测试类按执行层命名：纯规则使用 `*Test`；HTTP contract 使用 `*HttpContractTest`；其他需要
+  Spring/PostgreSQL 的测试使用 `*IntegrationTest`；Flyway 结构验证保留 `FlywayMigrationTest`。所有需要
+  Spring context、HTTP adapter 或 PostgreSQL 的测试必须标记 JUnit `@Tag("integration")`，CI 依靠标签分组。
 - 每个 production defect 至少增加一个先失败后通过的回归测试。
 - 测试命名采用 `given...When...Then...` 或可读的行为句；一个测试只表达一个失败原因。
 - 测试数据 builder 默认生成有效对象，只在当前场景覆盖相关字段。
@@ -106,6 +109,7 @@ backend/
 
 ## 9. 前端迁移规范
 
+- 前端与仓库脚本基线为 Node.js 24 LTS；CI 和本地使用相同主版本，依赖安装使用锁文件和 `npm ci`。
 - 页面和 Pinia store 不再直接 import Supabase client。
 - gateway 按 `identity/learner/learning/wrongBook/reward` 能力划分，不按数据库表划分。
 - HTTP adapter 统一处理 base URL、credentials、CSRF、Problem Details 和超时；页面不重复拼接 fetch 配置。
