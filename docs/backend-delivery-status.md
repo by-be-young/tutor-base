@@ -13,11 +13,11 @@
 详细能力与测试映射见 `backend-completion-matrix.md`，本地启动见 `../backend/README.md`，服务器步骤见
 `../deploy/README.md`。
 
-## 首次 V5 发布仍需人工完成
+## 首次 V5 发布仍需完成
 
-1. 在 Supabase 运行 `database/audit/pre_v5_rewards_checks.sql`，确认全部异常数为 0。
-2. 配置服务器 `deploy/migration.env` 和 GitHub `staging` Environment secrets。
-3. 合并到 `main` 后批准 staging 部署；确认 migration、readiness 和 smoke test 成功。
+1. V4 签到表接管和 V5 前置审计已完成，全部异常数为 0；Flyway 当前版本为 4。
+2. 服务器 `deploy/migration.env` 和 GitHub `staging` Environment secrets 已配置并验证。
+3. 修复 migration-only 非 Web 启动后，重新运行 staging CD，确认 V5 migration、readiness 和 smoke test 成功。
 4. 发布新版 Pages，真实验证管理员、学习者、作答/批阅、错题、签到和奖励旅程。
 5. 最后撤销 Supabase 浏览器角色的业务表权限并执行对应审计。
 
