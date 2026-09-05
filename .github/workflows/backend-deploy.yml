@@ -94,6 +94,11 @@ jobs:
       name: staging
       url: https://staging-api.be-young.top/api/v1/system/status
     steps:
+      - name: Checkout release definition
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.publish-image.outputs.image_sha }}
+
       - name: Configure pinned SSH host identity
         env:
           SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
@@ -105,6 +110,15 @@ jobs:
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
+      - name: Upload release definition
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          IMAGE_SHA: ${{ needs.publish-image.outputs.image_sha }}
+        run: |
+          scp -o BatchMode=yes deploy/compose.yaml \
+            "$DEPLOY_USER@$DEPLOY_HOST:/tmp/tutor-base-compose-${IMAGE_SHA}.yaml"
+
       - name: Migrate, deploy and verify
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -114,12 +128,13 @@ jobs:
           ssh -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$IMAGE_SHA" <<'REMOTE'
           set -euo pipefail
           image_sha="$1"
-          cd /opt/tutor-base/repository
-          git fetch origin main
-          git merge-base --is-ancestor "$image_sha" origin/main
-          git switch --detach "$image_sha"
-          cd deploy
+          uploaded_compose="/tmp/tutor-base-compose-${image_sha}.yaml"
+          deploy_dir="/opt/tutor-base/repository/deploy"
+          test -s "$uploaded_compose"
+          cd "$deploy_dir"
           test -s .env && test -s backend.env && test -s migration.env
+          install -m 644 "$uploaded_compose" compose.yaml
+          rm -f "$uploaded_compose"
           previous_env_line="$(grep '^BACKEND_IMAGE=' .env || true)"
           previous_image="${previous_env_line#BACKEND_IMAGE=}"
           rollback_backend() {

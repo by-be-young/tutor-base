@@ -76,6 +76,8 @@ curl --fail https://staging-api.be-young.top/api/v1/system/status
 `main` 的集中 `CI` 全部通过后，`Backend CD` 自动启动：先发布或复用 `sha-<commit>` 不可变镜像，随后通过
 GitHub Environment `staging` 审批，再执行迁移、替换容器和健康检查。新容器的本地 readiness 或公网 smoke
 失败时，工作流会把 `.env` 恢复为上一镜像并重新启动旧后端。开发分支和失败的 `main` CI 都不会触发自动部署。
+GitHub Runner 会通过 SSH 上传该 commit 的 `compose.yaml`，服务器不需要能够访问 `github.com` 源码站点；服务器
+必须能够访问 GHCR 以拉取镜像。
 需在该 Environment 配置：
 
 - `DEPLOY_HOST`：服务器地址。
