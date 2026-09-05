@@ -154,7 +154,7 @@ jobs:
           trap rollback_backend ERR
           sed -i -E "s|^BACKEND_IMAGE=.*$|BACKEND_IMAGE=ghcr.io/by-be-young/tutor-base-backend:sha-${image_sha}|" .env
           sudo docker compose pull backend migration
-          sudo docker compose --profile release run --rm migration
+          sudo docker compose --profile release run --rm migration </dev/null
           sudo docker compose up -d --no-deps backend
           sudo docker compose ps backend
           curl --fail --retry 12 --retry-delay 5 --retry-connrefused \
@@ -162,3 +162,21 @@ jobs:
           curl --fail https://staging-api.be-young.top/api/v1/system/status
           trap - ERR
           REMOTE
+
+      - name: Verify deployed immutable image independently
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          IMAGE_SHA: ${{ needs.publish-image.outputs.image_sha }}
+        run: |
+          ssh -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$IMAGE_SHA" <<'REMOTE'
+          set -euo pipefail
+          expected_image="ghcr.io/by-be-young/tutor-base-backend:sha-$1"
+          cd /opt/tutor-base/repository/deploy
+          container_id="$(sudo docker compose ps -q backend)"
+          test -n "$container_id"
+          running_image="$(sudo docker inspect --format '{{.Config.Image}}' "$container_id")"
+          test "$running_image" = "$expected_image"
+          curl --fail http://127.0.0.1:8080/actuator/health/readiness
+          REMOTE
+          curl --fail https://staging-api.be-young.top/api/v1/system/status

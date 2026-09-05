@@ -15,10 +15,10 @@
 
 ## 首次 V5 发布仍需完成
 
-1. V4 签到表接管和 V5 前置审计已完成，全部异常数为 0；Flyway 当前版本为 4。
+1. V4 签到表接管和 V5 前置审计已完成，全部异常数为 0；Flyway 当前版本为 5。
 2. 服务器 `deploy/migration.env` 和 GitHub `staging` Environment secrets 已配置并验证。
-3. 修复 migration-only 非 Web 启动后，重新运行 staging CD，确认 V5 migration、readiness 和 smoke test 成功。
-4. 发布新版 Pages，真实验证管理员、学习者、作答/批阅、错题、签到和奖励旅程。
+3. Flyway V5 migration 已成功；需修复 SSH stdin 被 migration 容器读取的问题，再确认新镜像替换、readiness 和 smoke test。
+4. 新版 Pages 已发布；待真实验证管理员、学习者、作答/批阅、错题、签到和奖励旅程。
 5. 最后撤销 Supabase 浏览器角色的业务表权限并执行对应审计。
 
 ## 保留的产品边界

@@ -90,6 +90,9 @@ GitHub Runner 会通过 SSH 上传该 commit 的 `compose.yaml`，服务器不�
 工作流在写入上述多行 Secret 时会移除 Windows 剪贴板可能引入的 CRLF，并在网络连接前使用
 `ssh-keygen` 验证私钥可解析；私钥必须是不需要交互输入口令的 OpenSSH private key。
 
+远程 migration 命令必须将 stdin 重定向到 `/dev/null`，避免 Compose 读取 SSH heredoc 中余下的部署命令。工作流还会在
+独立 SSH 会话中比较容器实际镜像与目标 commit SHA；只有镜像一致、本地 readiness 和公网 smoke 均成功才会标绿。
+
 服务器必须预先准备 `.env`、`backend.env`、`migration.env`，并允许部署用户无交互执行所需 Docker 命令。
 
 ## 前端发布与权限收口
