@@ -41,4 +41,5 @@
 - 所有 PR 执行前端测试/构建、后端 `verify`、OpenAPI 校验、E2E 和仓库 secret scan。
 - `main` 成功后发布 Pages 与不可变 GHCR 镜像；部署环境使用 GitHub Environment 审批和并发锁。
 - migration job 成功后才替换应用；readiness 与 API smoke test 失败则停止发布。
+- CD 在独立 SSH 会话中核对运行容器的 immutable image SHA，防止迁移成功但应用替换未执行时误报成功。
 - dependency 与 action 固定版本，工作流使用最小权限，生产 secret 只存在 GitHub Environment/服务器受限 env 文件。
