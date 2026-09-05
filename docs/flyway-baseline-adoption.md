@@ -75,3 +75,13 @@ baseline 完成后必须立即执行：
 
 以后不得删除或手工修改 `flyway_schema_history`，也不得再次启用 `baseline-on-migrate`。新增数据库变更必须使用高于 V3
 的新 migration，并先在隔离数据库和 staging 验证。
+
+## V4 既有签到表接管（已完成）
+
+生产库在 Flyway V4 发布前已经存在 `public.daily_check_in`。2026-09-05 先执行
+`database/audit/pre_v4_daily_checkin_checks.sql`，确认字段、约束、索引和 7 条既有签到数据均与 V4 一致，全部异常数为 0；
+同时执行 `database/audit/pre_v5_rewards_checks.sql`，确认既有积分、任务和卡片表不存在结构或数据异常。
+
+在以上只读门禁通过后，使用 Flyway 官方 `skipExecutingMigrations` 并将 `target` 严格限定为 V4，使 Flyway 记录 V4 的
+真实 checksum 而不重复执行建表语句。接管后 V4 执行时间为 0 ms，历史版本为 4，签到数据仍为 7 条。V5 不在本次跳过
+范围内，继续由正常 CD migration job 执行。

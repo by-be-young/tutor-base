@@ -26,7 +26,7 @@ JdbcClient 直接访问 PostgreSQL；数据库结构由 Flyway V1 至 V5 管理�
 1. 修复真实数据库与 V1/V2 的结构差异，并让接管检查全部为 0。
 2. 完成可恢复备份验证和 Flyway V3 baseline。
 3. 一次性激活管理员账户。
-4. 运行 `database/audit/pre_v5_rewards_checks.sql`，再用一次性 migration 容器升级到 V5。
+4. 运行 V4/V5 前置审计，接管既有 V4 签到表，再用一次性 migration 容器升级到 V5。
 5. 重新执行运行角色授权与审计，发布后端和前端并完成 smoke/E2E 验证。
 
 新版前后端验证通过后，最后运行 `database/operations/revoke_browser_table_access.sql`，撤销 Supabase `anon` 和

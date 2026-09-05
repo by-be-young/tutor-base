@@ -33,7 +33,9 @@ sudo docker compose config --quiet
 
 ## 首次发布 V5
 
-在 Supabase SQL Editor 先运行 `database/audit/pre_v5_rewards_checks.sql`。所有 `anomaly_count` 为 0 后，在服务器执行：
+生产库既有的 V4 签到表已经通过 `database/audit/pre_v4_daily_checkin_checks.sql` 核验，并由 Flyway 官方
+`skipExecutingMigrations` 在限定 `target=4` 的一次性操作中接管；不要重复执行该接管操作。V5 前置审计也已全绿。
+后续发布直接在服务器执行：
 
 ```shell
 sudo docker compose pull backend migration

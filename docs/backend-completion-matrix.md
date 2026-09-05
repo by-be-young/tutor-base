@@ -2,7 +2,7 @@
 
 本文以用户旅程追踪“浏览器直连 Supabase”到“Java 后端唯一可信入口”的迁移状态。状态只有 `已接管`、`进行中`、`未接管`；仅有表或 controller 不算完成，必须同时具备服务端授权、事务、OpenAPI 和自动化测试。
 
-## 当前基线（2026-09-04）
+## 当前基线（2026-09-05）
 
 | 业务能力 | 当前数据路径 | 后端状态 | 完成所需验证 |
 | --- | --- | --- | --- |
@@ -32,6 +32,7 @@
 | Unit | 答案规范化与自动批阅；奖励目录映射；错题删除/复活规则 |
 | PostgreSQL integration | Flyway V1→最新；唯一键/外键；积分原子变更；作答与错题同事务回滚 |
 | HTTP contract | 每个 endpoint 的成功、401、403、400/409 与 Problem Details code |
+| Release context | migration-only 非 Web context 不装配 Servlet SecurityFilterChain，Flyway 完成后正常退出 |
 | Frontend | gateway 请求映射、CSRF 单次刷新、store 状态更新、无 Supabase import |
 | E2E | Playwright 启动真实 Vue、Spring Boot 和 PostgreSQL，覆盖管理员建号/授权/设答案/设密、进入学习者、越权拒绝、作答、错题编辑删除、签到、奖励资格拒绝、人工批阅和自动错题收集 |
 
