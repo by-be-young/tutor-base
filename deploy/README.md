@@ -85,6 +85,9 @@ GitHub Runner 会通过 SSH 上传该 commit 的 `compose.yaml`，服务器不�
 - `DEPLOY_SSH_PRIVATE_KEY`：专用部署私钥。
 - `DEPLOY_KNOWN_HOSTS`：预先人工核验的服务器 host key，禁止运行时 `ssh-keyscan` 自动信任。
 
+工作流在写入上述多行 Secret 时会移除 Windows 剪贴板可能引入的 CRLF，并在网络连接前使用
+`ssh-keygen` 验证私钥可解析；私钥必须是不需要交互输入口令的 OpenSSH private key。
+
 服务器必须预先准备 `.env`、`backend.env`、`migration.env`，并允许部署用户无交互执行所需 Docker 命令。
 
 ## 前端发布与权限收口
