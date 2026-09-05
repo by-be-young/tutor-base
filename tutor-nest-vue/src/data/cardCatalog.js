@@ -1,12 +1,9 @@
 // src/data/cardCatalog.js
-// 收藏室卡片目录：卡组定义、卡片检索与随机抽卡
+// 收藏室卡片目录：卡组定义与卡片检索
 // ----------------------------------------------------------------------------
 // 每个卡组包含 1 张稀有卡片 + 6 张普通卡片，卡片以图片呈现（3:4 竖版）。
 // 各卡组主题与画风互不相同（写实油画 / 水彩 / 科幻概念 / 美食摄影 / 动感漫画）。
-// 抽卡规则：
-//   - 非整千里程碑（每 200 积分）：从全部卡组的普通卡池随机抽取一张普通卡
-//   - 整千里程碑（每 1000 积分）：从全部卡组的稀有卡池随机抽取一张稀有卡
-// 抽卡时优先从未拥有的卡片中抽取；对应稀有度已全部集齐时返回重复卡并标记 duplicate。
+// 抽卡由后端依据当前会话、积分与已有收藏完成，浏览器只负责展示服务端返回的卡片。
 
 export const CARD_SETS = [
     {
@@ -103,34 +100,6 @@ export const CARD_SETS = [
  */
 export function milestoneRarity(milestonePoints) {
     return milestonePoints % 1000 === 0 ? 'rare' : 'common'
-}
-
-/**
- * 从卡池随机抽取一张卡片
- * @param {'common'|'rare'} rarity 抽取的稀有度
- * @param {Set<string>|string[]} [ownedKeys] 已拥有的 card_key 集合（用于优先抽取未拥有）
- * @returns {{ setKey: string, rarity: string, cardKey: string, card: object, duplicate: boolean }}
- *   duplicate 为 true 表示该稀有度已全部集齐，本次为重复卡
- */
-export function drawCard(rarity, ownedKeys = new Set()) {
-    const owned = ownedKeys instanceof Set ? ownedKeys : new Set(ownedKeys || [])
-    const pool = []
-    for (const set of CARD_SETS) {
-        if (rarity === 'rare') {
-            pool.push({ setKey: set.key, rarity, cardKey: `${set.key}-r`, card: set.rare })
-        } else {
-            set.commons.forEach((card, i) => {
-                pool.push({ setKey: set.key, rarity, cardKey: `${set.key}-c${i}`, card })
-            })
-        }
-    }
-    if (pool.length === 0) throw new Error('对应稀有度的卡池为空')
-
-    // 优先从未拥有的卡片中抽取，保证集齐进度；全部集齐时允许抽到重复卡
-    const missing = pool.filter(p => !owned.has(p.cardKey))
-    const source = missing.length > 0 ? missing : pool
-    const pick = source[Math.floor(Math.random() * source.length)]
-    return { ...pick, duplicate: missing.length === 0 }
 }
 
 /**

@@ -6,7 +6,7 @@
 
 ### 核心功能
 - 📚 **文章浏览** — 支持 Markdown 格式的学习资料展示
-- 🔐 **用户认证** — 基于 Supabase 的登录/注册系统
+- 🔐 **用户认证** — Java 后端密码登录、服务端会话与 CSRF 防护
 - 🎨 **双栏布局** — 桌面端自动切换双栏显示（正文 + 侧边栏）
 - 📐 **数学公式** — 基于 KaTeX 的 LaTeX 数学公式渲染
 - 🖼️ **图片嵌入** — 支持 `![[图片名]]` 语法的图片嵌入
@@ -78,8 +78,7 @@ tutor-nest-vue/
 │   │   ├── authStore.js            # 用户认证状态
 │   │   ├── blogStore.js            # 博客数据状态
 │   │   └── adminStore.js           # 管理员状态
-│   ├── utils/
-│   │   └── supabase.js             # Supabase 客户端配置
+│   ├── gateways/                    # Java `/api/v1` 能力网关
 │   ├── router/
 │   │   └── index.js                # 路由配置
 │   ├── App.vue                     # 根组件
@@ -507,13 +506,13 @@ B. 选项二
 
 ## 🔧 环境变量
 
-创建 `.env` 文件：
+创建 `.env.local` 文件：
 ```bash
-VITE_SUPABASE_URL=你的_Supabase_URL
-VITE_SUPABASE_ANON_KEY=你的_Supabase_Anon_Key
+VITE_API_BASE_URL=http://localhost:8080/api/v1
 ```
 
-部署到 GitHub Pages 时，需在仓库 Settings → Secrets and variables → Actions 中设置同名 Secrets。
+部署到 GitHub Pages 时，在仓库 Settings → Secrets and variables → Actions → Variables 中设置
+`VITE_API_BASE_URL=https://staging-api.be-young.top/api/v1`。前端不需要 Supabase key。
 
 ---
 
@@ -522,8 +521,8 @@ VITE_SUPABASE_ANON_KEY=你的_Supabase_Anon_Key
 GitHub Actions 自动部署（`.github/workflows/deploy.yml`）：
 
 1. 推送到 `main` 分支自动触发
-2. 注入 Supabase 环境变量（从 Secrets 读取）
-3. 以 `--base=/tutor-base/` 构建
+2. 注入 Java API 地址（从 Actions Variable 读取）
+3. 根据 Pages 自定义域名计算 base path
 4. 部署到 GitHub Pages
 
 ### 手动触发

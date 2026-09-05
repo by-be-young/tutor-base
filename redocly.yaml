@@ -1,0 +1,6 @@
+extends:
+  - minimal
+
+apis:
+  tutor-base@v1:
+    root: backend/api/openapi.yaml

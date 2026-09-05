@@ -1,11 +1,9 @@
 // src/stores/tasksStore.js
-// 任务中心数据：积分、任务领取记录、卡片收藏
-// ----------------------------------------------------------------------------
-// 与 wrong_questions 一致，通过 Supabase anon key 直接读写（表不启用 RLS），
-// 行归属用 student_id（来自身份会话的 learnerId）约束。
+// 任务中心数据：积分与卡片收藏统一由后端按当前会话提供。
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
-import { supabase } from '@/utils/supabase'
+import { findCard } from '@/data/cardCatalog'
+import { rewardGateway } from '@/gateways/rewardGateway'
 
 export const useTasksStore = defineStore('tasks', () => {
     const points = ref(0)
@@ -20,7 +18,7 @@ export const useTasksStore = defineStore('tasks', () => {
         return user?.learnerId != null ? String(user.learnerId) : null
     }
 
-    /** 加载当前用户的积分、任务领取记录与卡片收藏 */
+    /** 加载当前用户的积分与卡片收藏；学习者身份由后端会话确定。 */
     async function load(user) {
         const sid = getStudentId(user)
         claimedTaskIds.clear()
@@ -32,18 +30,16 @@ export const useTasksStore = defineStore('tasks', () => {
         isLoading.value = true
         loadError.value = null
         try {
-            const [pointsRes, claimsRes, cardsRes] = await Promise.all([
-                supabase.from('user_points').select('points').eq('student_id', sid).maybeSingle(),
-                supabase.from('task_claims').select('task_id').eq('student_id', sid),
-                supabase.from('card_collection').select('*').eq('student_id', sid)
-            ])
-            if (pointsRes.error) throw pointsRes.error
-            if (claimsRes.error) throw claimsRes.error
-            if (cardsRes.error) throw cardsRes.error
-
-            points.value = pointsRes.data?.points ?? 0
-            ;(claimsRes.data || []).forEach(row => claimedTaskIds.add(Number(row.task_id)))
-            collection.value = cardsRes.data || []
+            const summary = await rewardGateway.getSummary()
+            points.value = Number(summary.points ?? 0)
+            collection.value = (summary.collection || []).map(card => ({
+                id: card.id,
+                milestone_points: card.milestonePoints,
+                card_key: card.cardKey,
+                set_key: card.setKey,
+                rarity: card.rarity,
+                claimed_at: card.claimedAt
+            }))
             collection.value.forEach(row => claimedMilestones.add(Number(row.milestone_points)))
         } catch (e) {
             console.error('加载任务数据失败:', e)
@@ -54,64 +50,33 @@ export const useTasksStore = defineStore('tasks', () => {
     }
 
     /**
-     * 管理员领取任务积分：记录 task_claims 并累加 user_points
-     * @param {object} user 当前身份会话
-     * @param {number} taskId 任务 id
-     * @param {number} taskPoints 该任务奖励积分
-     * @returns {Promise<number>} 领取后的积分
-     */
-    async function claimTask(user, taskId, taskPoints) {
-        const sid = getStudentId(user)
-        if (!sid) throw new Error('当前账号未关联学习者身份，无法领取积分')
-        if (claimedTaskIds.has(taskId)) throw new Error('该任务已领取过积分')
-
-        const { error: claimErr } = await supabase
-            .from('task_claims')
-            .insert({ student_id: sid, task_id: taskId })
-        if (claimErr) throw new Error(claimErr.message || '领取任务积分失败')
-
-        const { data: row, error: readErr } = await supabase
-            .from('user_points')
-            .select('points')
-            .eq('student_id', sid)
-            .maybeSingle()
-        if (readErr) throw new Error(readErr.message || '读取积分失败')
-
-        const next = (row?.points ?? 0) + taskPoints
-        const { error: writeErr } = await supabase
-            .from('user_points')
-            .upsert({ student_id: sid, points: next, updated_at: new Date().toISOString() }, { onConflict: 'student_id' })
-        if (writeErr) throw new Error(writeErr.message || '积分更新失败')
-
-        points.value = next
-        claimedTaskIds.add(taskId)
-        return next
-    }
-
-    /**
      * 领取里程碑卡片：写入 card_collection（同一里程碑只能领取一次）
      * @param {object} user 当前身份会话
      * @param {object} milestone 里程碑 { pts, isRare, ... }
-     * @param {object} draw 随机抽卡结果 { setKey, rarity, cardKey, card }
-     * @returns {Promise<object>} 领取到的卡片
+     * @returns {Promise<{card: object, duplicate: boolean}>} 后端抽取的卡片
      */
-    async function claimMilestone(user, milestone, draw) {
+    async function claimMilestone(user, milestone) {
         const sid = getStudentId(user)
         if (!sid) throw new Error('当前账号未关联学习者身份，无法领取卡片')
         if (claimedMilestones.has(milestone.pts)) throw new Error('该里程碑已领取过卡片')
 
-        const { setKey, rarity, cardKey, card } = draw
-        const { error } = await supabase
-            .from('card_collection')
-            .insert({ student_id: sid, milestone_points: milestone.pts, card_key: cardKey, set_key: setKey, rarity })
-        if (error) throw new Error(error.message || '领取卡片失败')
+        const claimed = await rewardGateway.claimMilestone(milestone.pts)
+        const previouslyOwned = obtainedCardKeys().has(claimed.cardKey)
+        const card = findCard(claimed.setKey, claimed.cardKey) || { name: '收藏卡', img: '' }
 
-        claimedMilestones.add(milestone.pts)
+        claimedMilestones.add(claimed.milestonePoints)
         collection.value = [
-            { student_id: sid, milestone_points: milestone.pts, card_key: cardKey, set_key: setKey, rarity },
+            {
+                id: claimed.id,
+                milestone_points: claimed.milestonePoints,
+                card_key: claimed.cardKey,
+                set_key: claimed.setKey,
+                rarity: claimed.rarity,
+                claimed_at: claimed.claimedAt
+            },
             ...collection.value
         ]
-        return card
+        return { card, duplicate: previouslyOwned }
     }
 
     /** 当前用户已获得的卡片 key 集合（收藏室高亮用） */
@@ -133,7 +98,6 @@ export const useTasksStore = defineStore('tasks', () => {
         loadError,
         getStudentId,
         load,
-        claimTask,
         claimMilestone,
         obtainedCardKeys,
         syncPoints

@@ -17,6 +17,7 @@ import com.tutorbase.administration.learner.LearnerAdministration;
 import com.tutorbase.administration.learner.LearnerQuery;
 import com.tutorbase.learning.access.ContentGrantQuery;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -32,6 +33,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.context.WebApplicationContext;
 
+@Tag("integration")
 @SpringBootTest(properties = {
         "tutor.web.allowed-origins=https://learn.be-young.top",
         "spring.autoconfigure.exclude="

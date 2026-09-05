@@ -1,10 +1,8 @@
 // src/composables/useWrongQuestionsResolve.js
-// 错题本 / 错题训练共用的动态解析逻辑：
-// 错题表只存来源（source_blog_id + source_question_id），
-// 展示时从文章 markdown 与答案表动态解析题干、学科、正确答案、顺序号
+// 错题本 / 错题训练共用的展示解析逻辑：
+// 后端返回当前账户可见的错题与正确答案；静态文章 markdown 只用于补充题干、学科和顺序号。
 import { ref } from 'vue'
 import { useArticleStore } from '@/stores/blogStore'
-import { supabase } from '@/utils/supabase'
 import { resolveQuestionText, resolveQuestionOrder } from '@/utils/questionText'
 
 export function useWrongQuestionsResolve() {
@@ -35,21 +33,12 @@ export function useWrongQuestionsResolve() {
         return md
     }
 
-    async function loadAnswerKeys(blogIds) {
-        if (!blogIds.length) return new Map()
-        const { data, error } = await supabase
-            .from('article_answer_keys')
-            .select('blog_id, question_id, answer_text, auto_grade')
-            .in('blog_id', blogIds)
-
-        if (error) {
-            console.error('加载答案数据失败:', error)
-            return new Map()
-        }
+    function indexBackendAnswers(list) {
         const map = new Map()
-            ; (data || []).forEach(k => map.set(`${k.blog_id}-${String(k.question_id)}`, {
-                answerText: k.answer_text || '',
-                autoGrade: Boolean(k.auto_grade)
+            ; list.forEach(question => map.set(
+                `${question.source_blog_id}-${String(question.source_question_id)}`, {
+                answerText: question.correct_answer || '',
+                autoGrade: false
             }))
         return map
     }
@@ -60,7 +49,7 @@ export function useWrongQuestionsResolve() {
         const blogIds = [...new Set(list.map(q => q.source_blog_id).filter(b => b != null))]
 
         await Promise.all(blogIds.map(loadArticle))
-        const answerMap = await loadAnswerKeys(blogIds)
+        const answerMap = indexBackendAnswers(list)
 
         const map = new Map()
         list.forEach(q => {

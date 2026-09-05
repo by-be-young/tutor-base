@@ -98,7 +98,7 @@ import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
 import { useKatex } from '@/composables/useKatex'
 import { useImageEmbed } from '@/composables/useImageEmbed'
 import { useDrawingInDetail } from '@/composables/useDrawing'
-import { supabase } from '@/utils/supabase'
+import { learningGateway } from '@/gateways/learningGateway'
 import { marked } from 'marked'
 
 const route = useRoute()
@@ -132,6 +132,7 @@ const answerKeyMap = ref(new Map())
 const submissionMap = ref(new Map())
 const slotNodes = ref(new Map())
 const statusNodes = ref(new Map())
+let loadedStudyState = null
 
 // 答题卡状态
 const answerSheetVisible = ref(false)
@@ -227,10 +228,6 @@ const layoutToggleTitle = computed(() => {
 })
 
 // ========== 工具函数 ==========
-function normalizeLineBreaks(text) {
-    return String(text ?? '').replace(/\r\n/g, '\n')
-}
-
 function escapeHtml(text) {
     return String(text ?? '')
         .replace(/&/g, '&amp;')
@@ -543,44 +540,49 @@ function renderMarkdownWithSidebar(markdown) {
 // ========== 数据库操作 ==========
 async function loadQuestionAnswerKeys(blogId) {
     if (!blogId) return new Map()
-    const { data, error } = await supabase
-        .from('article_answer_keys')
-        .select('blog_id, question_id, answer_text, auto_grade, updated_at')
-        .eq('blog_id', blogId)
-
-    if (error) {
+    try {
+        if (currentMode.value === 'answer') {
+            const keys = await learningGateway.getAnswerKeys(blogId)
+            return new Map(keys.map(item => [String(item.questionId), {
+                blog_id: blogId, question_id: String(item.questionId),
+                answer_text: item.answerText, auto_grade: item.autoGrade, updated_at: item.updatedAt
+            }]))
+        }
+        loadedStudyState = currentMode.value === 'review'
+            ? await learningGateway.getAdministratorState(blogId, studentId.value)
+            : await learningGateway.getLearnerState(blogId)
+        return new Map((loadedStudyState.questions || []).map(item => [String(item.questionId), {
+            blog_id: blogId, question_id: String(item.questionId),
+            answer_text: item.answerText || '', auto_grade: Boolean(item.autoGrade)
+        }]))
+    } catch (error) {
         console.error('加载答案设置失败:', error)
         return new Map()
     }
-
-    const map = new Map()
-        ; (data || []).forEach(item => map.set(String(item.question_id), item))
-    return map
 }
 
 async function loadQuestionSubmissions(blogId, studentId) {
     if (!blogId || !studentId) return new Map()
 
-    const numericId = Number(studentId)
-    if (!Number.isFinite(numericId)) return new Map()
-
-    const { data, error } = await supabase
-        .from('article_question_submissions')
-        .select('blog_id, student_id, question_id, answer_text, review_status, review_result, submitted_at, reviewed_at')
-        .eq('blog_id', blogId)
-        .eq('student_id', numericId)
-
-    if (error) {
+    try {
+        if (!loadedStudyState) {
+            loadedStudyState = currentMode.value === 'review'
+                ? await learningGateway.getAdministratorState(blogId, studentId)
+                : await learningGateway.getLearnerState(blogId)
+        }
+        const data = (loadedStudyState.questions || []).map(item => item.submission).filter(Boolean)
+        const map = new Map()
+        data.forEach(item => map.set(String(item.questionId), {
+            id: item.id, blog_id: item.articleId, student_id: item.learnerId,
+            question_id: String(item.questionId), answer_text: item.answerText,
+            review_status: item.reviewStatus, review_result: item.reviewResult,
+            submitted_at: item.submittedAt, reviewed_at: item.reviewedAt
+        }))
+        return map
+    } catch (error) {
         console.error('加载学生提交失败:', error)
         return new Map()
     }
-
-    const map = new Map()
-        ; (data || []).forEach(item => {
-            const questionId = String(item.question_id)
-            map.set(questionId, { ...item, question_id: questionId })
-        })
-    return map
 }
 
 // ========== 题目卡片渲染 ==========
@@ -957,86 +959,27 @@ async function handleAddToWrongBook(questionId, btn) {
     }
 
     const key = String(questionId)
-    const studentIdStr = String(studentId.value)
-    const blogIdVal = blogId.value
-
-    // 检查是否已在错题本（removed = true 的软删除记录视为不存在，可重新加入）
-    const { data: existing } = await supabase
-        .from('wrong_questions')
-        .select('id, removed, wrong_count')
-        .eq('student_id', studentIdStr)
-        .eq('source_blog_id', blogIdVal)
-        .eq('source_question_id', key)
-        .maybeSingle()
-
-    if (existing && !existing.removed) {
-        showToast('该题已在错题本中', 'info')
-        return
-    }
-
     const node = slotNodes.value.get(key)
     const submission = submissionMap.value.get(key)
     const answer = node?.textarea?.value || submission?.answer_text || ''
-
-    // 存在软删除记录时复活（保留错因、笔记、掌握状态等字段），否则新建
-    const { error } = existing
-        ? await supabase
-            .from('wrong_questions')
-            .update({
-                removed: false,
-                my_answer: answer,
-                is_manual: true,
-                wrong_count: (existing.wrong_count || 0) + 1,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', existing.id)
-        : await supabase
-            .from('wrong_questions')
-            .insert({
-                student_id: studentIdStr,
-                source_blog_id: blogIdVal,
-                source_question_id: key,
-                my_answer: answer,
-                is_manual: true,
-                wrong_count: 1
-            })
-
-    if (error) {
+    try {
+        await wrongQuestionsStore.collectManual({
+            sourceArticleId: blogId.value,
+            sourceQuestionId: key,
+            myAnswer: answer
+        })
+        showToast('已加入错题本', 'success')
+        if (btn) {
+            btn.disabled = true
+            btn.innerHTML = '<i class="fas fa-check"></i><span>已加入</span>'
+        }
+    } catch (error) {
+        if (error.code === 'wrong_book_entry_exists') {
+            showToast('该题已在错题本中', 'info')
+            return
+        }
         console.error('加入错题本失败:', error)
         showToast(`添加失败：${error.message || '请稍后重试'}`, 'error', 5000)
-        return
-    }
-
-    showToast(existing ? '已重新加入错题本' : '已加入错题本', 'success')
-    if (btn) {
-        btn.disabled = true
-        btn.innerHTML = '<i class="fas fa-check"></i><span>已加入</span>'
-    }
-}
-
-// ========== 错题自动收集 ==========
-/**
- * 题目被批阅为「错误」时，自动收集到错题本
- * @param {string|number} questionId 题目编号
- * @param {string} [myAnswer] 本次作答内容（可选，覆盖 submissionMap 中的值）
- */
-async function autoCollectWrongQuestion(questionId, myAnswer) {
-    if (!blogId.value || !studentId.value) return
-
-    const key = String(questionId)
-    const submission = myAnswer !== undefined
-        ? { answer_text: myAnswer }
-        : submissionMap.value.get(key)
-
-    try {
-        await wrongQuestionsStore.autoCollect({
-            studentId: studentId.value,
-            myAnswer: submission?.answer_text || '',
-            sourceArticleId: blogId.value,
-            sourceQuestionId: key
-        })
-    } catch (err) {
-        console.error('自动收集错题失败:', err)
     }
 }
 
@@ -1052,9 +995,6 @@ async function persistStudyAnswers({ silent = false, targetQuestionId = null } =
         }
 
         const rows = []
-        const now = new Date().toISOString()
-        const autoWrongQueue = []
-
         slotNodes.value.forEach((node, questionId) => {
             if (targetQuestionId && String(targetQuestionId) !== String(questionId)) return
 
@@ -1062,34 +1002,11 @@ async function persistStudyAnswers({ silent = false, targetQuestionId = null } =
             if (submission?.review_status === 'reviewed') return
 
             const answer = node.textarea?.value || ''
-            const answerKey = answerKeyMap.value.get(questionId)
-            const autoGrade = Boolean(answerKey?.auto_grade && answerKey.answer_text)
-
-            if (autoGrade && answer.trim() === '') return
-            if (!submission && answer.trim() === '' && !autoGrade) return
-
-            let reviewStatus = 'pending'
-            let reviewResult = null
-            let reviewedAt = null
-
-            if (autoGrade) {
-                reviewStatus = 'reviewed'
-                reviewResult = normalizeLineBreaks(answer) === normalizeLineBreaks(answerKey.answer_text) ? 'correct' : 'wrong'
-                reviewedAt = now
-                if (reviewResult === 'wrong') {
-                    autoWrongQueue.push({ questionId, answer })
-                }
-            }
+            if (!submission && answer.trim() === '') return
 
             rows.push({
-                blog_id: blogId.value,
-                student_id: studentId.value,
                 question_id: questionId,
-                answer_text: answer,
-                review_status: reviewStatus,
-                review_result: reviewResult,
-                submitted_at: now,
-                reviewed_at: reviewedAt
+                answer_text: answer
             })
         })
 
@@ -1098,20 +1015,9 @@ async function persistStudyAnswers({ silent = false, targetQuestionId = null } =
             return true
         }
 
-        const { error } = await supabase
-            .from('article_question_submissions')
-            .upsert(rows, { onConflict: 'blog_id,student_id,question_id' })
-
-        if (error) {
-            console.error('保存学生答案失败:', error)
-            if (!silent) setFabStatus(false, '提交失败，请稍后重试')
-            return false
-        }
-
-        // 自动批阅为「错误」的题目收集到错题本（静默执行，不影响提交结果）
-        autoWrongQueue.forEach(item => {
-            autoCollectWrongQuestion(item.questionId, item.answer)
-        })
+        await Promise.all(rows.map(row => learningGateway.submit(
+            blogId.value, row.question_id, row.answer_text)))
+        loadedStudyState = null
 
         if (!silent) setFabStatus(true, '提交成功！')
         return true
@@ -1156,15 +1062,11 @@ async function persistAnswerKeys({ silent = false } = {}) {
             return false
         }
 
-        const { error } = await supabase
-            .from('article_answer_keys')
-            .upsert(rows, { onConflict: 'blog_id,question_id' })
-
-        if (error) {
-            console.error('保存答案设置失败:', error)
-            if (!silent) setFabStatus(false, '保存失败，请稍后重试')
-            return false
-        }
+        await learningGateway.replaceAnswerKeys(blogId.value, rows.map(row => ({
+            questionId: row.question_id,
+            answerText: row.answer_text,
+            autoGrade: row.auto_grade
+        })))
 
         if (!silent) setFabStatus(true, '保存成功！')
         return true
@@ -1180,22 +1082,10 @@ async function persistReviewResult(questionId, reviewResult) {
     }
 
     const submission = submissionMap.value.get(questionId) || {}
-    const now = new Date().toISOString()
-
-    const { error } = await supabase
-        .from('article_question_submissions')
-        .upsert([{
-            blog_id: blogId.value,
-            student_id: studentId.value,
-            question_id: questionId,
-            answer_text: submission.answer_text || '',
-            review_status: 'reviewed',
-            review_result: reviewResult,
-            submitted_at: submission.submitted_at || now,
-            reviewed_at: now
-        }], { onConflict: 'blog_id,student_id,question_id' })
-
-    if (error) {
+    let reviewed
+    try {
+        reviewed = await learningGateway.review(blogId.value, studentId.value, questionId, reviewResult)
+    } catch (error) {
         console.error('保存批阅结果失败:', error)
         setFabStatus(false, '批阅保存失败，请重试')
         return false
@@ -1203,9 +1093,9 @@ async function persistReviewResult(questionId, reviewResult) {
 
     submissionMap.value.set(questionId, {
         ...submission,
-        review_status: 'reviewed',
-        review_result: reviewResult,
-        reviewed_at: now
+        review_status: reviewed.reviewStatus,
+        review_result: reviewed.reviewResult,
+        reviewed_at: reviewed.reviewedAt
     })
 
     const status = statusNodes.value.get(questionId)
@@ -1213,11 +1103,6 @@ async function persistReviewResult(questionId, reviewResult) {
         const { text, cls } = buildStatusPill(submissionMap.value.get(questionId))
         status.textContent = text
         status.className = `question-pill ${cls}`
-    }
-
-    // 批阅为「错误」时自动收集到错题本（静默执行）
-    if (reviewResult === 'wrong') {
-        autoCollectWrongQuestion(questionId, submission.answer_text)
     }
 
     setFabStatus(true, '批阅已保存')
@@ -1337,6 +1222,7 @@ function resetDetailState() {
     submissionMap.value = new Map()
     slotNodes.value = new Map()
     statusNodes.value = new Map()
+    loadedStudyState = null
     contentVersion.value++
     isSubmitting.value = false
     fabStatusClass.value = ''

@@ -11,27 +11,27 @@ Tutor Base 的可信后端，采用 Java 21、Spring Boot 4.1 和模块化单体
 
 ## 当前集成状态
 
-Java 后端已经可以独立启动和验证，Vue 身份切片也已经改用 Java 的密码登录、CSRF 和服务端会话。学习、作答、批阅和
-错题切片目前仍直接调用 Supabase，因此这是可验证的新身份开发环境，但还不是全部业务都由 Java 托管的最终状态。
+Java 后端已经接管身份与会话、学习者和文章授权、签到、积分与卡片、学习作答、参考答案、人工批阅和错题本。
+Vue 只通过 `/api/v1` 访问业务数据；Supabase 当前只作为受限 PostgreSQL 托管服务，浏览器不再持有 Supabase URL、
+anon key 或数据库写权限。
 
 ### 开发阶段与部署门槛
 
-当前已完成后端工程骨架、模块化 MVC、数据库 V1 至 V3、身份激活与登录、服务端会话、CSRF、管理员鉴权、管理员学员
-查询、OpenAPI、容器镜像和 CI。现有 Supabase schema 已在 2026-08-15 完成可恢复备份验证、结构对齐和 Flyway V3
-baseline；首位管理员也已完成一次性自举和真实登录/登出验证。Vue 身份接口切换已完成，尚未实现其余学习、作答、
-批阅和错题接口。
+当前采用“模块化单体 + 分层 MVC”架构。Controller 负责 HTTP，按业务能力划分的 Service 负责授权、事务与业务规则，
+JdbcClient 直接访问 PostgreSQL；数据库结构由 Flyway V1 至 V5 管理。OpenAPI、Testcontainers HTTP contract、
+前端 gateway 测试和 Playwright E2E 均进入 CI。
 
-可以进入云服务器 staging 部署的门槛是：
+首次发布 V5 的门槛是：
 
 1. 修复真实数据库与 V1/V2 的结构差异，并让接管检查全部为 0。
 2. 完成可恢复备份验证和 Flyway V3 baseline。
 3. 一次性激活管理员账户。
-4. 使用 staging API 域名启动后端，通过 readiness、登录、CSRF、授权和会话 smoke test。
+4. 运行 `database/audit/pre_v5_rewards_checks.sql`，再用一次性 migration 容器升级到 V5。
+5. 重新执行运行角色授权与审计，发布后端和前端并完成 smoke/E2E 验证。
 
-正式生产切换还需要：Vue 改用 Java identity gateway，移除特殊用户名管理员和本地伪会话；完成所需业务 API；在 staging
-跑通关键用户旅程；部署 `api.be-young.top` HTTPS/CORS；最后再撤销浏览器对 Supabase 业务表的直接写权限。可以先部署
-后端 staging，不应等全部前端改造完成才第一次部署。当前数据库接管门禁、管理员自举和受限运行角色均已完成；
-运行角色设置独立密码后即可部署 API-only staging 并执行 smoke test。
+新版前后端验证通过后，最后运行 `database/operations/revoke_browser_table_access.sql`，撤销 Supabase `anon` 和
+`authenticated` 对业务表的直接权限，再用 `database/audit/browser_table_access_checks.sql` 验证。该顺序不可提前，
+否则仍在运行的旧 Pages 版本会立刻失效。
 
 ## 首次完整启动
 
@@ -46,7 +46,7 @@ baseline；首位管理员也已完成一次性自举和真实登录/登出验�
 以下命令均从仓库根目录执行：
 
 ```powershell
-cd D:\newdir\cc\tutor-base
+cd ..\tutor-base
 ```
 
 ### 2. 启动一次性本地 PostgreSQL
@@ -75,7 +75,7 @@ docker start tutor-base-postgres
 项目提供不含真实密钥的 `.env.example`。首次运行先复制成本地 `.env`：
 
 ```powershell
-cd D:\newdir\cc\tutor-base\backend
+cd ..\tutor-base\backend
 Copy-Item .env.example .env
 ```
 
@@ -85,7 +85,7 @@ Spring Boot 会从当前 `backend` 工作目录自动读取 `.env`。该文件�
 .\mvnw.cmd spring-boot:run
 ```
 
-首次启动会由 Flyway 自动执行 V1、V2、V3；以后启动只校验历史，不会重复执行已经成功的 migration。出现
+首次启动会由 Flyway 自动执行 V1 至 V5；以后启动只校验历史，不会重复执行已经成功的 migration。出现
 `Started TutorBaseApplication` 后，后端地址为 `http://localhost:8080`。
 
 系统环境变量的优先级高于 `.env`，因此仍可以在 CI、Docker 或云服务器中直接注入变量。生产环境不要复制本地示例值；
@@ -123,7 +123,7 @@ $browser.Cookies.GetCookies('http://localhost:8080')
 在仓库根目录的另一个 PowerShell 窗口执行：
 
 ```powershell
-cd D:\newdir\cc\tutor-base
+cd ..\tutor-base
 npm install
 ```
 
@@ -132,8 +132,6 @@ npm install
 
 ```text
 VITE_API_BASE_URL=http://localhost:8080/api/v1
-VITE_SUPABASE_URL=<你的 Supabase Project URL>
-VITE_SUPABASE_ANON_KEY=<你的 Supabase anon key>
 ```
 
 然后启动：
@@ -142,8 +140,8 @@ VITE_SUPABASE_ANON_KEY=<你的 Supabase anon key>
 npm run dev
 ```
 
-浏览器访问 `http://localhost:3000`。身份登录连接本机 Java API，其余业务在迁移期仍连接 Supabase；不要在浏览器里
-放入数据库密码、service role key 或后端 `TUTOR_CSRF_SECRET`。
+浏览器访问 `http://localhost:3000`。全部动态业务连接本机 Java API；不要在浏览器环境变量里放数据库密码、
+Supabase key 或后端 `TUTOR_CSRF_SECRET`。
 
 ### 6. 启动完成检查清单
 
@@ -151,7 +149,7 @@ npm run dev
 - `http://localhost:8080/api/v1/system/status` 返回 `status = ok`。
 - liveness 和 readiness 都返回 `UP`。
 - `GET /api/v1/csrf` 返回 token 和 HttpOnly Cookie。
-- 密码登录、刷新恢复会话和退出通过 Java API；学习、作答、批阅和错题仍通过 Supabase，这是当前阶段的预期状态。
+- 管理员建号/授权/设密、学习者作答、批阅、错题、签到和奖励均通过 Java API。
 
 停止开发环境时，在前端和后端窗口分别按 `Ctrl+C`。本地数据库容器可以保留；不使用时执行：
 
@@ -174,13 +172,23 @@ docker stop tutor-base-postgres
 .\mvnw.cmd clean verify
 ```
 
-完整验证会启动临时 PostgreSQL 17 容器，执行 V1 至 V3，并再次调用 Flyway，确认第二次 migrate 执行数为 0。
+完整验证会启动临时 PostgreSQL 17 容器，执行 V1 至 V5，并再次调用 Flyway，确认第二次 migrate 执行数为 0。
 
 前端构建验证：
 
 ```powershell
 cd D:\newdir\cc\tutor-base
 npm run build
+npm run test:frontend
+npm run test:openapi
+npx playwright install chromium
+npm run test:e2e
+```
+
+本地一键启动临时 PostgreSQL、管理员自举、后端、Vue 和 Playwright，并在结束后清理临时容器：
+
+```powershell
+.\scripts\e2e-local.ps1
 ```
 
 公开的运行状态接口包括：
@@ -195,7 +203,7 @@ npm run build
 - `PUT http://localhost:8080/api/v1/admin/learners/{learnerId}/password`
 
 查询接口按学员 ID 稳定排序，通过不透明的 `nextCursor` 获取下一页，默认每页 50 条、最大 100 条。密码接口接收
-`{"password":"..."}`，密码长度必须为 12～128 个字符。首次设置会把待激活学员转为可登录状态；再次设置会重置密码，
+`{"password":"..."}`，密码长度必须为 6～128 个字符。首次设置会把待激活学员转为可登录状态；再次设置会重置密码，
 同时撤销该学员已有的全部会话和未使用激活码。两个接口都要求当前账户具有 `ADMINISTRATOR` 角色，写请求还必须携带
 与会话 Cookie 绑定的 `X-CSRF-TOKEN`。项目不提供绕过生产认证的临时开关。
 
@@ -274,6 +282,8 @@ PostgreSQL 结构只通过 Flyway 管理：
 - `V3__add_identity_and_sessions.sql`：增加账户、一次性激活码和服务端会话，并把原有 `student` 回填为待激活账户；
   如果当时存在 `young` 学员账户，它会在回填时获得管理员角色。当前生产数据当时没有该用户名，因此一次性自举流程
   创建了不绑定 `student` 的独立管理员账户。正常运行时代码不会按用户名授予权限。
+- `V4__add_daily_checkin.sql`：建立每日签到和积分余额，并设置引用完整性与幂等约束。
+- `V5__complete_rewards_schema.sql`：补齐奖励领取与卡片收藏结构、外键、约束和索引。
 
 ### Supabase 出现 `relation "account" already exists`
 
@@ -378,4 +388,5 @@ cd D:\newdir\cc\tutor-base\backend
 ```
 
 手工联调时依次验证：管理员登录、新增学习者、设置密码、勾选并保存文章授权；随后用该学习者登录，确认
-只显示获授权文章。此阶段答题、批阅和错题仍使用 Supabase，属于预期状态。
+只显示获授权文章。答题、参考答案、批阅、错题本、签到和卡片奖励也已通过各自的 `/api/v1` gateway 接管。
+上线新版 Pages 并验证后，按 `../deploy/README.md` 的安全收口步骤撤销浏览器角色对业务表的直接权限。

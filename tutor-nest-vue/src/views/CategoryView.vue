@@ -87,7 +87,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useArticleStore } from '@/stores/blogStore'
-import { supabase } from '@/utils/supabase'
+import { learningGateway } from '@/gateways/learningGateway'
 
 // 子组件：目录文件夹节点
 import FolderNode from '@/components/articles/FolderNode.vue'
@@ -328,59 +328,23 @@ watch(() => route.query.subject, async (newSubject) => {
  */
 async function loadSubmissionStatus(blogIds) {
     if (!blogIds.length) return new Map()
-
-    // 1. 从答案表获取有题目的文章
-    const { data: keys, error: keyErr } = await supabase
-        .from('article_answer_keys')
-        .select('blog_id, question_id')
-        .in('blog_id', blogIds)
-
-    if (keyErr) {
-        console.error('加载答案数据失败:', keyErr)
+    let progress
+    try {
+        progress = await learningGateway.getLearnerProgress()
+    } catch (error) {
+        console.error('加载提交记录失败:', error)
         return new Map()
     }
-
-    // 按 blog_id 统计题目数量
-    const totalQuestionMap = new Map()
-    ;(keys || []).forEach(item => {
-        const bid = Number(item.blog_id)
-        totalQuestionMap.set(bid, (totalQuestionMap.get(bid) || 0) + 1)
-    })
-
-    // 2. 从提交表获取该学生已提交的题目数
-    if (!authStore.currentUser?.id) return new Map()
-
-    const studentId = Number(authStore.currentUser.id)
-    if (!Number.isFinite(studentId)) return new Map()
-
-    const { data: subs, error: subErr } = await supabase
-        .from('article_question_submissions')
-        .select('blog_id')
-        .eq('student_id', studentId)
-        .in('blog_id', blogIds)
-
-    if (subErr) {
-        console.error('加载提交记录失败:', subErr)
-        return new Map()
-    }
-
-    // 按 blog_id 统计已提交题数
-    const submittedCountMap = new Map()
-    ;(subs || []).forEach(item => {
-        const bid = Number(item.blog_id)
-        submittedCountMap.set(bid, (submittedCountMap.get(bid) || 0) + 1)
-    })
-
-    // 3. 结果：待提交 = 总题目数 - 已提交题数（仅当有题目且待提交 > 0）
     const result = new Map()
-    for (const [bid, total] of totalQuestionMap) {
-        const submitted = submittedCountMap.get(bid) || 0
-        const pending = total - submitted
+    const requested = new Set(blogIds.map(Number))
+    progress.forEach(item => {
+        const bid = Number(item.articleId)
+        if (!requested.has(bid)) return
+        const pending = item.totalQuestions - item.submittedQuestions
         if (pending > 0) {
             result.set(bid, pending)
         }
-    }
-
+    })
     return result
 }
 </script>

@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.tutorbase.shared.http.TraceIdFilter;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,6 +30,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("integration")
 @Testcontainers
 @SpringBootTest(properties = {
         "spring.autoconfigure.exclude="

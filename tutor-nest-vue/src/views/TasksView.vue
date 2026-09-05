@@ -4,10 +4,10 @@
   功能说明：
     1. 所有登录用户均可从导航栏进入任务中心
     2. 任务列表仅保留「每日签到」：签到记录、月度统计与积分发放由后端
-       /api/v1/checkins 承担（写入 Supabase user_points 表）；未签到时按钮
+       /api/v1/checkins 承担（后端写入 user_points 表）；未签到时按钮
        显示「去签到」并可打开签到弹窗，已签到显示「今日已签到」
     3. 奖励进度条：每 200 积分获得一张普通卡片；每 1000 积分获得一张随机稀有卡片
-    4. 里程碑卡片领取后写入 Supabase card_collection 表，收藏室中持久可见
+    4. 里程碑卡片由后端写入 card_collection 表，收藏室中持久可见
     5. 收藏室：按卡组陈列已获得的卡片（每个卡组 1 稀有 + 6 普通）
     6. 状态颜色：待领取（金色发光） / 已领取（绿色） / 未达到条件（灰色锁定）
 -->
@@ -184,7 +184,7 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
 import { useCheckinStore } from '@/stores/checkinStore'
 import { useTasksStore } from '@/stores/tasksStore'
-import { buildMilestones, drawCard, findCard } from '@/data/cardCatalog'
+import { buildMilestones, findCard } from '@/data/cardCatalog'
 import CollectionRoom from '@/components/tasks/CollectionRoom.vue'
 
 const authStore = useAuthStore()
@@ -262,37 +262,35 @@ const currentReward = ref(null)
 const claimingMilestone = ref(false)
 let flipTimer = null
 
-function openClaim(m) {
-    if (m.pts > tasksStore.points || tasksStore.claimedMilestones.has(m.pts)) return
-    // 里程碑 → 卡片为随机抽取：普通节点抽普通卡池，稀有节点抽稀有卡池
-    const draw = drawCard(m.isRare ? 'rare' : 'common', tasksStore.obtainedCardKeys())
-    currentReward.value = { milestone: m, ...draw }
+async function openClaim(m) {
+    if (m.pts > tasksStore.points || tasksStore.claimedMilestones.has(m.pts) || claimingMilestone.value) return
+    currentReward.value = { milestone: m, card: null, duplicate: false }
     flipped.value = false
     claimVisible.value = true
-    // 先展示背面，再翻转揭晓
-    flipTimer = setTimeout(() => {
-        flipped.value = true
-    }, 900)
-}
-
-async function confirmClaim() {
-    if (!currentReward.value || !flipped.value || claimingMilestone.value) return
     claimingMilestone.value = true
     try {
-        const card = await tasksStore.claimMilestone(authStore.currentUser, currentReward.value.milestone, currentReward.value)
-        claimVisible.value = false
-        showToast(
-            currentReward.value.duplicate
-                ? `卡片「${card.name}」为重复卡，已计入收藏`
-                : `卡片「${card.name}」已收入收藏室`,
-            currentReward.value.duplicate ? 'info' : 'success'
-        )
-        scrollToLatest()
+        const reward = await tasksStore.claimMilestone(authStore.currentUser, m)
+        currentReward.value = { milestone: m, ...reward }
+        flipTimer = setTimeout(() => {
+            flipped.value = true
+        }, 900)
     } catch (e) {
+        claimVisible.value = false
         showToast(e.message, 'error')
     } finally {
         claimingMilestone.value = false
     }
+}
+
+function confirmClaim() {
+    if (!currentReward.value || !flipped.value || claimingMilestone.value) return
+    const { card, duplicate } = currentReward.value
+    claimVisible.value = false
+    showToast(
+        duplicate ? `卡片「${card.name}」为重复卡，已计入收藏` : `卡片「${card.name}」已收入收藏室`,
+        duplicate ? 'info' : 'success'
+    )
+    scrollToLatest()
 }
 
 function closeClaim() {

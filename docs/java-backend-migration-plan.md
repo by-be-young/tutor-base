@@ -1,5 +1,9 @@
 # Java 后端、部署与数据库迁移方案
 
+> 状态（2026-09-04）：本文保留最初迁移决策与里程碑作为架构记录；应用接管已经完成。当前实现与上线
+> 门槛以 `backend-completion-matrix.md`、`backend-delivery-status.md`、`../backend/api/openapi.yaml` 和
+> `../deploy/README.md` 为准。
+
 ## 1. 结论
 
 推荐建设一个 **Java 模块化单体**，先把浏览器对 Supabase 的直接访问迁移到 `/api/v1`，稳定运行一段时间后再迁移 PostgreSQL。不要在同一次上线中同时更换认证方式、业务接口和数据库，也不需要为当前体量引入微服务、消息队列或 Kubernetes。

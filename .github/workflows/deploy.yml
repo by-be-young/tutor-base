@@ -1,10 +1,12 @@
 # GitHub Pages 自动部署
-# main 更新后构建 Vue 前端，并发布到当前仓库唯一的 Pages 站点。
-name: Deploy to GitHub Pages
+# main 的集中 CI 成功后构建 Vue 前端，并发布到当前仓库唯一的 Pages 站点。
+name: Pages CD
 
 on:
-  push:
-    branches: ["main"]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -18,15 +20,30 @@ concurrency:
 
 jobs:
   build:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve release commit
+        id: commit
+        env:
+          AUTOMATIC_SHA: ${{ github.event.workflow_run.head_sha }}
+          MANUAL_SHA: ${{ github.sha }}
+        run: |
+          sha="${AUTOMATIC_SHA:-$MANUAL_SHA}"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Expected a full 40-character Git SHA"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.commit.outputs.sha }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -34,22 +51,12 @@ jobs:
         id: pages
         uses: actions/configure-pages@v5
 
-      - name: Validate frontend configuration
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-        run: |
-          test -n "$VITE_SUPABASE_URL" || { echo "Missing VITE_SUPABASE_URL"; exit 1; }
-          test -n "$VITE_SUPABASE_ANON_KEY" || { echo "Missing VITE_SUPABASE_ANON_KEY"; exit 1; }
-
       - name: Install dependencies
         run: npm ci
 
       - name: Build Vue frontend
         env:
-          VITE_API_BASE_URL: https://staging-api.be-young.top/api/v1
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'https://staging-api.be-young.top/api/v1' }}
         # 默认 Pages 地址使用 /tutor-base/；绑定自定义域名后 base_path 自动变为空字符串。
         run: npm run build -- --base="${{ steps.pages.outputs.base_path }}/"
 

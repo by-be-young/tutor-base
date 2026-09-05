@@ -49,7 +49,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { supabase } from '@/utils/supabase'
+import { learningGateway } from '@/gateways/learningGateway'
 import ClickableTreeNode from './ClickableTreeNode.vue'
 
 const props = defineProps({
@@ -115,23 +115,19 @@ function hasQuestions(blogId) {
 }
 
 async function loadAnswerKeysCache() {
-    const { data, error } = await supabase
-        .from('article_answer_keys')
-        .select('blog_id')
-
-    if (error) {
+    try {
+        const articleIds = await learningGateway.getAnswerKeyArticleIds()
+        const cache = new Map()
+        const questionsCache = new Map()
+        articleIds.forEach(articleId => {
+            cache.set(Number(articleId), true)
+            questionsCache.set(Number(articleId), true)
+        })
+        answerKeysCache.value = cache
+        articleHasQuestionsCache.value = questionsCache
+    } catch (error) {
         console.error('加载答案数据失败:', error)
-        return
     }
-
-    const cache = new Map()
-    const questionsCache = new Map()
-    ;(data || []).forEach(item => {
-        cache.set(Number(item.blog_id), true)
-        questionsCache.set(Number(item.blog_id), true)
-    })
-    answerKeysCache.value = cache
-    articleHasQuestionsCache.value = questionsCache
 }
 
 function buildTree(articles) {
@@ -188,12 +184,10 @@ function handleFileClick(blogId) {
 async function loadSubmissionStatus() {
     if (!props.selectedStudentId) return
 
-    const { data, error } = await supabase
-        .from('article_question_submissions')
-        .select('blog_id, review_status')
-        .eq('student_id', props.selectedStudentId)
-
-    if (error) {
+    let data
+    try {
+        data = await learningGateway.getAdministratorProgress(props.selectedStudentId)
+    } catch (error) {
         console.error('加载提交记录失败:', error)
         return
     }
@@ -202,14 +196,13 @@ async function loadSubmissionStatus() {
     const countMap = new Map()
 
     ;(data || []).forEach(item => {
-        const blogId = Number(item.blog_id)
-
-        if (item.review_status === 'pending') {
+        const blogId = Number(item.articleId)
+        if (item.pendingReviews > 0) {
             // 有任何 pending 的题目 → blog 状态为待批阅
             statusMap.set(blogId, 'pending')
             // 累计待批阅题数
-            countMap.set(blogId, (countMap.get(blogId) || 0) + 1)
-        } else if (!statusMap.has(blogId)) {
+            countMap.set(blogId, item.pendingReviews)
+        } else if (item.submittedQuestions > 0) {
             // 还没有 pending 的标记 → 已批阅
             statusMap.set(blogId, 'reviewed')
         }

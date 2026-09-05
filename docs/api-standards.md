@@ -121,6 +121,7 @@
 | --- | --- | --- | --- |
 | GET | `/articles` | account | 管理员返回全部，学习者只返回已授权学习文章 |
 | GET | `/articles/{articleId}/study-state` | content grant | 返回参考答案可见性规则下的作答状态 |
+| GET | `/articles/study-progress` | learner | 返回当前学习者已授权文章的作答进度 |
 | PUT | `/admin/learners/{learnerId}/content-grants` | administrator | 原子替换某学习者的内容授权集合 |
 
 ### Learning and Review
@@ -128,15 +129,19 @@
 | Method | Path | Auth | 语义 |
 | --- | --- | --- | --- |
 | PUT | `/articles/{articleId}/submissions/{questionKey}` | content grant | 保存当前账户的当前作答并执行自动批阅 |
-| PUT | `/admin/articles/{articleId}/answer-keys/{questionKey}` | administrator | 创建或替换参考答案与自动批阅规则 |
-| PUT | `/admin/submissions/{submissionId}/review` | administrator | 保存人工批阅结果 |
+| GET | `/admin/articles/answer-key-article-ids` | administrator | 返回已经设置参考答案的文章 ID |
+| GET | `/admin/articles/{articleId}/answer-keys` | administrator | 查询一篇文章的参考答案与自动批阅规则 |
+| PUT | `/admin/articles/{articleId}/answer-keys` | administrator | 创建或替换该文章提交的参考答案集合 |
+| GET | `/admin/articles/{articleId}/study-state?learnerId=` | administrator | 查询指定学习者的文章作答与答案 |
+| GET | `/admin/learners/{learnerId}/study-progress` | administrator | 查询指定学习者的作答进度 |
+| PUT | `/admin/articles/{articleId}/learners/{learnerId}/submissions/{questionKey}/review` | administrator | 保存人工批阅结果 |
 
 ### Wrong Book
 
 | Method | Path | Auth | 语义 |
 | --- | --- | --- | --- |
 | GET | `/wrong-book` | learner | 查询当前学习者的未移除错题条目 |
-| POST | `/wrong-book/entries` | learner | 手动收集一道题；支持 Idempotency-Key |
+| POST | `/wrong-book/entries` | learner | 手动收集一道题；已有未移除条目返回冲突 |
 | PATCH | `/wrong-book/entries/{entryId}` | owner | 修改错因、笔记或掌握状态 |
 | DELETE | `/wrong-book/entries/{entryId}` | owner | 按来源语义软删除或硬删除条目 |
 
@@ -151,6 +156,17 @@
 - 签到记录与积分由服务端写入 `public.daily_check_in` / `public.user_points`，客户端不得直接写表。
 - 当前账户无 `learnerId`（如未关联学习者的管理员）调用返回 `403 learner_context_required`。
 
+### Rewards
+
+| Method | Path | Auth | 语义 |
+| --- | --- | --- | --- |
+| GET | `/rewards` | learner | 返回当前学习者的积分余额与卡片收藏 |
+| POST | `/rewards/milestones/{milestonePoints}/claims` | learner | 领取已达成的积分里程碑；卡片选择由服务端目录决定，同一里程碑只能领取一次 |
+
+- 客户端只发送里程碑积分，不得发送或决定 `studentId`、`cardKey`、`setKey` 或 `rarity`。
+- 未达到里程碑返回 `409 milestone_not_reached`；重复领取返回 `409 reward_already_claimed`。
+- 积分读取、资格校验与卡片写入在一个数据库事务内完成；数据库唯一约束是并发重复领取的最终防线。
+
 ### Administration
 
 | Method | Path | Auth | 语义 |
@@ -160,9 +176,9 @@
 | POST | `/admin/learners/{learnerId}/impersonate` | administrator | 免密进入学习者账户：创建新会话并轮换 Cookie；仅限 `role=learner` 且已激活的账户，不撤销管理员既有会话 |
 | POST | `/admin/account-activations` | administrator | 兼容接口：为待激活账户生成一次性激活码；当前前端不使用 |
 
-## 7. System Status contract（第一阶段）
+## 7. System Status contract
 
-第一阶段只实现 `/system/status` 和 Actuator health：
+`/system/status` 的稳定响应为：
 
 ```json
 {

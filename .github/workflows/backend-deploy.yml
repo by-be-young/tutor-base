@@ -1,0 +1,163 @@
+name: Backend CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_sha:
+        description: Full Git commit SHA whose immutable image should be deployed
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-backend
+  cancel-in-progress: false
+
+jobs:
+  publish-image:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - name: Resolve main commit
+        id: commit
+        env:
+          MANUAL_SHA: ${{ inputs.image_sha }}
+          AUTOMATIC_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          sha="${MANUAL_SHA:-$AUTOMATIC_SHA}"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Expected a full 40-character Git SHA"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.commit.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Require commit to belong to main
+        env:
+          IMAGE_SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "$IMAGE_SHA" origin/main
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check immutable image
+        id: existing-image
+        env:
+          IMAGE_SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          image="ghcr.io/by-be-young/tutor-base-backend:sha-${IMAGE_SHA}"
+          if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Reusing immutable image $image"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and publish immutable image
+        if: steps.existing-image.outputs.exists != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          tags: |
+            ghcr.io/by-be-young/tutor-base-backend:sha-${{ steps.commit.outputs.sha }}
+            ghcr.io/by-be-young/tutor-base-backend:main
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: publish-image
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging-api.be-young.top/api/v1/system/status
+    steps:
+      - name: Checkout release definition
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.publish-image.outputs.image_sha }}
+
+      - name: Configure pinned SSH host identity
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Upload release definition
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          IMAGE_SHA: ${{ needs.publish-image.outputs.image_sha }}
+        run: |
+          scp -o BatchMode=yes deploy/compose.yaml \
+            "$DEPLOY_USER@$DEPLOY_HOST:/tmp/tutor-base-compose-${IMAGE_SHA}.yaml"
+
+      - name: Migrate, deploy and verify
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          IMAGE_SHA: ${{ needs.publish-image.outputs.image_sha }}
+        run: |
+          ssh -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$IMAGE_SHA" <<'REMOTE'
+          set -euo pipefail
+          image_sha="$1"
+          uploaded_compose="/tmp/tutor-base-compose-${image_sha}.yaml"
+          deploy_dir="/opt/tutor-base/repository/deploy"
+          test -s "$uploaded_compose"
+          cd "$deploy_dir"
+          test -s .env && test -s backend.env && test -s migration.env
+          install -m 644 "$uploaded_compose" compose.yaml
+          rm -f "$uploaded_compose"
+          previous_env_line="$(grep '^BACKEND_IMAGE=' .env || true)"
+          previous_image="${previous_env_line#BACKEND_IMAGE=}"
+          rollback_backend() {
+            exit_code="$?"
+            trap - ERR
+            set +e
+            if [ -n "$previous_image" ]; then
+              echo "Deployment failed; restoring $previous_image"
+              sed -i -E "s|^BACKEND_IMAGE=.*$|BACKEND_IMAGE=${previous_image}|" .env
+              sudo docker compose up -d --no-deps backend
+              curl --fail --retry 12 --retry-delay 5 --retry-connrefused \
+                http://127.0.0.1:8080/actuator/health/readiness
+            fi
+            exit "$exit_code"
+          }
+          trap rollback_backend ERR
+          sed -i -E "s|^BACKEND_IMAGE=.*$|BACKEND_IMAGE=ghcr.io/by-be-young/tutor-base-backend:sha-${image_sha}|" .env
+          sudo docker compose pull backend migration
+          sudo docker compose --profile release run --rm migration
+          sudo docker compose up -d --no-deps backend
+          sudo docker compose ps backend
+          curl --fail --retry 12 --retry-delay 5 --retry-connrefused \
+            http://127.0.0.1:8080/actuator/health/readiness
+          curl --fail https://staging-api.be-young.top/api/v1/system/status
+          trap - ERR
+          REMOTE
