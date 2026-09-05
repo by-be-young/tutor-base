@@ -3,7 +3,7 @@ name: Repository Security
 on:
   pull_request:
   push:
-    branches: [main, 'codex/**']
+    branches: [main]
 
 permissions:
   contents: read
