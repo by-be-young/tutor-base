@@ -1,105 +1,130 @@
 // src/data/cardCatalog.js
-// 收藏室卡片目录：卡组定义与里程碑 → 卡片的确定性映射
+// 收藏室卡片目录：卡组定义与卡片检索
 // ----------------------------------------------------------------------------
-// 每个卡组包含 1 张稀有卡片 + 6 张普通卡片；卡片没有图片，用「渐变色 + 图标」呈现。
-// 里程碑映射规则：
-//   - 普通节点（每 200 积分，且不是整千）：按固定顺序循环取卡组内的普通卡
-//   - 稀有节点（每 1000 积分）：按固定顺序循环取卡组稀有卡
-// 同一里程碑对所有人返回同一张卡片，保证收藏可复现。
+// 每个卡组包含 1 张稀有卡片 + 6 张普通卡片，卡片以图片呈现（3:4 竖版）。
+// 各卡组主题与画风互不相同（写实油画 / 水彩 / 科幻概念 / 美食摄影 / 动感漫画）。
+// 抽卡由后端依据当前会话、积分与已有收藏完成，浏览器只负责展示服务端返回的卡片。
 
 export const CARD_SETS = [
     {
-        key: 'flame',
-        name: '烈焰炼金',
-        theme: '化学',
-        emblem: 'fas fa-fire',
-        colors: ['#f08a7a', '#c0483f'],
-        rare: { name: '绯红神话·炼金之焰', icon: 'fas fa-fire', colors: ['#f08a7a', '#c0483f'] },
+        key: 'puppy',
+        name: '狗狗图鉴',
+        theme: '宠物',
+        style: '写实油画',
+        emblem: 'fas fa-dog',
+        colors: ['#f0b27a', '#c05a2f'],
+        rare: { name: '汪星人欢乐时光', img: '/cards/puppy-r.png' },
         commons: [
-            { name: '赤焰试纸', icon: 'fas fa-vial', colors: ['#e58f8f', '#b35656'] },
-            { name: '沸腾坩埚', icon: 'fas fa-flask', colors: ['#d9825a', '#a05a2f'] },
-            { name: '闪电催化', icon: 'fas fa-bolt', colors: ['#e8c35c', '#b3923a'] },
-            { name: '流星火花', icon: 'fas fa-meteor', colors: ['#f0a58a', '#c06050'] },
-            { name: '王冠结晶', icon: 'fas fa-crown', colors: ['#e8c85a', '#b09030'] },
-            { name: '深红矿藏', icon: 'fas fa-gem', colors: ['#e07a7a', '#a84040'] }
+            { name: '柴犬', img: '/cards/puppy-c0.png' },
+            { name: '拉布拉多', img: '/cards/puppy-c1.png' },
+            { name: '柯基', img: '/cards/puppy-c2.png' },
+            { name: '萨摩耶', img: '/cards/puppy-c3.png' },
+            { name: '金毛', img: '/cards/puppy-c4.png' },
+            { name: '哈士奇', img: '/cards/puppy-c5.png' }
         ]
     },
     {
-        key: 'aurora',
-        name: '极光之翼',
-        theme: '英语',
-        emblem: 'fas fa-feather',
-        colors: ['#8fd4f0', '#3f8fb8'],
-        rare: { name: '冰蓝神话·极光之翼', icon: 'fas fa-feather', colors: ['#8fd4f0', '#3f8fb8'] },
+        key: 'ocean',
+        name: '深海探秘',
+        theme: '海洋',
+        style: '淡雅水彩',
+        emblem: 'fas fa-fish',
+        colors: ['#6bc8e8', '#1f7fb8'],
+        rare: { name: '深海盛会', img: '/cards/ocean-r.png' },
         commons: [
-            { name: '晨曦书页', icon: 'fas fa-book-open', colors: ['#c9e8f4', '#7eb3cf'] },
-            { name: '锚定单词', icon: 'fas fa-anchor', colors: ['#9fc4e0', '#5f8fb0'] },
-            { name: '朗读星辉', icon: 'fas fa-microphone', colors: ['#b5d4f0', '#6a8fc0'] },
-            { name: '月圆语法', icon: 'fas fa-moon', colors: ['#d4c9f0', '#8a7fc0'] },
-            { name: '晴空拼写', icon: 'fas fa-sun', colors: ['#f0e8a0', '#c0b060'] },
-            { name: '夜航日记', icon: 'fas fa-book', colors: ['#a8c8d8', '#5f90a8'] }
+            { name: '海豚', img: '/cards/ocean-c0.png' },
+            { name: '座头鲸', img: '/cards/ocean-c1.png' },
+            { name: '章鱼', img: '/cards/ocean-c2.png' },
+            { name: '绿海龟', img: '/cards/ocean-c3.png' },
+            { name: '水母', img: '/cards/ocean-c4.png' },
+            { name: '小丑鱼', img: '/cards/ocean-c5.png' }
         ]
     },
     {
-        key: 'galaxy',
-        name: '星河守望',
-        theme: '数理',
-        emblem: 'fas fa-compass',
-        colors: ['#f2d66b', '#c9a227'],
-        rare: { name: '金色传说·时光罗盘', icon: 'fas fa-compass', colors: ['#f2d66b', '#c9a227'] },
+        key: 'cosmos',
+        name: '太空漫游',
+        theme: '航天',
+        style: '科幻概念',
+        emblem: 'fas fa-rocket',
+        colors: ['#8f7be0', '#3f2f9e'],
+        rare: { name: '星际漫游', img: '/cards/cosmos-r.png' },
         commons: [
-            { name: '坐标星辰', icon: 'fas fa-star', colors: ['#f2e08a', '#c0a855'] },
-            { name: '分秒时辰', icon: 'fas fa-clock', colors: ['#d9c98a', '#a89450'] },
-            { name: '星轨测算', icon: 'fas fa-ruler', colors: ['#c9d9e8', '#8aa0b8'] },
-            { name: '三角灯塔', icon: 'fas fa-mountain', colors: ['#b8d4c0', '#7aa88a'] },
-            { name: '天秤均衡', icon: 'fas fa-balance-scale', colors: ['#d8c8b0', '#a89070'] },
-            { name: '圆周度量', icon: 'fas fa-circle', colors: ['#e8c8d8', '#b080a0'] }
+            { name: '火箭', img: '/cards/cosmos-c0.png' },
+            { name: '宇航员', img: '/cards/cosmos-c1.png' },
+            { name: '土星', img: '/cards/cosmos-c2.png' },
+            { name: '流星', img: '/cards/cosmos-c3.png' },
+            { name: '空间站', img: '/cards/cosmos-c4.png' },
+            { name: '探测车', img: '/cards/cosmos-c5.png' }
         ]
     },
     {
-        key: 'forest',
-        name: '青岚秘境',
-        theme: '自然',
-        emblem: 'fas fa-seedling',
-        colors: ['#7fe0b0', '#2f9e76'],
-        rare: { name: '翠玉传奇·守护之灵', icon: 'fas fa-shield-alt', colors: ['#7fe0b0', '#2f9e76'] },
+        key: 'dessert',
+        name: '甜品工坊',
+        theme: '美食',
+        style: '美食摄影',
+        emblem: 'fas fa-cake-candles',
+        colors: ['#f0a8c8', '#d0608f'],
+        rare: { name: '甜品盛宴', img: '/cards/dessert-r.png' },
         commons: [
-            { name: '苔原印记', icon: 'fas fa-leaf', colors: ['#9cc48a', '#5f8f4e'] },
-            { name: '林间露珠', icon: 'fas fa-droplet', colors: ['#8fd4e0', '#3f90a8'] },
-            { name: '山风回声', icon: 'fas fa-mountain', colors: ['#a8c8b0', '#6a9078'] },
-            { name: '岩层脉络', icon: 'fas fa-layer-group', colors: ['#c0b8a0', '#908060'] },
-            { name: '藤蔓缠绕', icon: 'fas fa-seedling', colors: ['#a0d4a0', '#60a060'] },
-            { name: '萤火微光', icon: 'fas fa-lightbulb', colors: ['#e0e0a0', '#a0a060'] }
+            { name: '草莓蛋糕', img: '/cards/dessert-c0.png' },
+            { name: '马卡龙', img: '/cards/dessert-c1.png' },
+            { name: '甜甜圈', img: '/cards/dessert-c2.png' },
+            { name: '冰淇淋', img: '/cards/dessert-c3.png' },
+            { name: '奶油泡芙', img: '/cards/dessert-c4.png' },
+            { name: '焦糖布丁', img: '/cards/dessert-c5.png' }
+        ]
+    },
+    {
+        key: 'sport',
+        name: '热血运动',
+        theme: '体育',
+        style: '动感漫画',
+        emblem: 'fas fa-futbol',
+        colors: ['#8fe06b', '#2f9e4e'],
+        rare: { name: '赛场狂欢', img: '/cards/sport-r.png' },
+        commons: [
+            { name: '篮球', img: '/cards/sport-c0.png' },
+            { name: '足球', img: '/cards/sport-c1.png' },
+            { name: '网球', img: '/cards/sport-c2.png' },
+            { name: '游泳', img: '/cards/sport-c3.png' },
+            { name: '滑板', img: '/cards/sport-c4.png' },
+            { name: '羽毛球', img: '/cards/sport-c5.png' }
         ]
     }
 ]
 
 /**
- * 里程碑积分 → 卡片（确定性映射）
+ * 里程碑积分 → 稀有度（确定性）
  * @param {number} milestonePoints 里程碑积分（200 的整数倍）
- * @returns {{ setKey: string, set: object, rarity: 'common'|'rare', cardKey: string, card: object }}
+ * @returns {'rare'|'common'} 整千积分为稀有，其余为普通
  */
-export function milestoneCard(milestonePoints) {
-    const isRare = milestonePoints % 1000 === 0
-    if (isRare) {
-        const set = CARD_SETS[((milestonePoints / 1000) - 1 + CARD_SETS.length * 100) % CARD_SETS.length]
-        return { setKey: set.key, set, rarity: 'rare', cardKey: `${set.key}-r`, card: set.rare }
-    }
-    const n = (milestonePoints / 200) - 1
-    const set = CARD_SETS[Math.floor(n / 6) % CARD_SETS.length]
-    const slot = n % 6
-    return { setKey: set.key, set, rarity: 'common', cardKey: `${set.key}-c${slot}`, card: set.commons[slot] }
+export function milestoneRarity(milestonePoints) {
+    return milestonePoints % 1000 === 0 ? 'rare' : 'common'
+}
+
+/**
+ * 根据收藏记录（set_key + card_key）还原卡片对象
+ * @param {string} setKey 卡组 key
+ * @param {string} cardKey 卡片 key（如 'puppy-r'、'puppy-c0'）
+ * @returns {object|null} 卡片对象
+ */
+export function findCard(setKey, cardKey) {
+    const set = CARD_SETS.find(s => s.key === setKey)
+    if (!set) return null
+    if (cardKey === `${setKey}-r`) return set.rare
+    const match = /-c(\d+)$/.exec(cardKey)
+    if (!match) return null
+    return set.commons[parseInt(match[1], 10)] || null
 }
 
 /**
  * 生成里程碑列表（200 ~ maxPoints，每 200 一个；整千为稀有节点）
+ * 里程碑只标记稀有度，具体卡片在领取时随机抽取。
  */
 export function buildMilestones(maxPoints = 6000) {
     const list = []
     for (let pts = 200; pts <= maxPoints; pts += 200) {
-        const isRare = pts % 1000 === 0
-        const { card, rarity, setKey, cardKey } = milestoneCard(pts)
-        list.push({ pts, isRare, rarity, setKey, cardKey, card })
+        list.push({ pts, isRare: milestoneRarity(pts) === 'rare' })
     }
     return list
 }

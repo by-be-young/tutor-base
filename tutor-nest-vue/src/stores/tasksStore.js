@@ -2,7 +2,7 @@
 // 任务中心数据：积分与卡片收藏统一由后端按当前会话提供。
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
-import { milestoneCard } from '@/data/cardCatalog'
+import { findCard } from '@/data/cardCatalog'
 import { rewardGateway } from '@/gateways/rewardGateway'
 
 export const useTasksStore = defineStore('tasks', () => {
@@ -53,7 +53,7 @@ export const useTasksStore = defineStore('tasks', () => {
      * 领取里程碑卡片：写入 card_collection（同一里程碑只能领取一次）
      * @param {object} user 当前身份会话
      * @param {object} milestone 里程碑 { pts, isRare, ... }
-     * @returns {Promise<object>} 领取到的卡片
+     * @returns {Promise<{card: object, duplicate: boolean}>} 后端抽取的卡片
      */
     async function claimMilestone(user, milestone) {
         const sid = getStudentId(user)
@@ -61,7 +61,8 @@ export const useTasksStore = defineStore('tasks', () => {
         if (claimedMilestones.has(milestone.pts)) throw new Error('该里程碑已领取过卡片')
 
         const claimed = await rewardGateway.claimMilestone(milestone.pts)
-        const { card } = milestoneCard(claimed.milestonePoints)
+        const previouslyOwned = obtainedCardKeys().has(claimed.cardKey)
+        const card = findCard(claimed.setKey, claimed.cardKey) || { name: '收藏卡', img: '' }
 
         claimedMilestones.add(claimed.milestonePoints)
         collection.value = [
@@ -75,7 +76,7 @@ export const useTasksStore = defineStore('tasks', () => {
             },
             ...collection.value
         ]
-        return card
+        return { card, duplicate: previouslyOwned }
     }
 
     /** 当前用户已获得的卡片 key 集合（收藏室高亮用） */

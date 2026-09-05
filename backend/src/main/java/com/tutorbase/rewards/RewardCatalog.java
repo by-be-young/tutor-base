@@ -1,35 +1,41 @@
 package com.tutorbase.rewards;
 
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.IntStream;
 
-/** Server-owned deterministic mapping from a points milestone to its collectible card. */
+/** Server-owned collectible-card catalog and draw policy. */
 final class RewardCatalog {
 
     static final int MILESTONE_STEP = 200;
     static final int MAX_MILESTONE = 6_000;
 
-    private static final List<String> SET_KEYS = List.of("flame", "aurora", "galaxy", "forest");
+    private static final List<String> SET_KEYS = List.of("puppy", "ocean", "cosmos", "dessert", "sport");
+    private static final List<CardDefinition> COMMON_CARDS = SET_KEYS.stream()
+            .flatMap(setKey -> IntStream.range(0, 6)
+                    .mapToObj(slot -> new CardDefinition(setKey + "-c" + slot, setKey, "common")))
+            .toList();
+    private static final List<CardDefinition> RARE_CARDS = SET_KEYS.stream()
+            .map(setKey -> new CardDefinition(setKey + "-r", setKey, "rare"))
+            .toList();
 
     private RewardCatalog() {
     }
 
-    static CardDefinition cardFor(long milestonePoints) {
+    static CardDefinition cardFor(long milestonePoints, Set<String> ownedCardKeys) {
         if (milestonePoints < MILESTONE_STEP
                 || milestonePoints > MAX_MILESTONE
                 || milestonePoints % MILESTONE_STEP != 0) {
             throw new InvalidRewardMilestone();
         }
 
-        if (milestonePoints % 1_000 == 0) {
-            int setIndex = Math.floorMod((int) (milestonePoints / 1_000) - 1, SET_KEYS.size());
-            String setKey = SET_KEYS.get(setIndex);
-            return new CardDefinition(setKey + "-r", setKey, "rare");
-        }
-
-        int ordinal = (int) (milestonePoints / MILESTONE_STEP) - 1;
-        String setKey = SET_KEYS.get(Math.floorMod(ordinal / 6, SET_KEYS.size()));
-        int slot = Math.floorMod(ordinal, 6);
-        return new CardDefinition(setKey + "-c" + slot, setKey, "common");
+        List<CardDefinition> pool = milestonePoints % 1_000 == 0 ? RARE_CARDS : COMMON_CARDS;
+        List<CardDefinition> missing = pool.stream()
+                .filter(card -> !ownedCardKeys.contains(card.cardKey()))
+                .toList();
+        List<CardDefinition> candidates = missing.isEmpty() ? pool : missing;
+        return candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
     }
 
     record CardDefinition(String cardKey, String setKey, String rarity) {

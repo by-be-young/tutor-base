@@ -3,30 +3,42 @@ package com.tutorbase.rewards;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import org.junit.jupiter.api.Test;
 
 class RewardCatalogTest {
 
     @Test
-    void mapsCommonAndRareMilestonesDeterministically() {
-        assertThat(RewardCatalog.cardFor(200))
-                .isEqualTo(new RewardCatalog.CardDefinition("flame-c0", "flame", "common"));
-        assertThat(RewardCatalog.cardFor(1_000))
-                .isEqualTo(new RewardCatalog.CardDefinition("flame-r", "flame", "rare"));
-        assertThat(RewardCatalog.cardFor(1_200))
-                .isEqualTo(new RewardCatalog.CardDefinition("flame-c5", "flame", "common"));
-        assertThat(RewardCatalog.cardFor(1_400))
-                .isEqualTo(new RewardCatalog.CardDefinition("aurora-c0", "aurora", "common"));
-        assertThat(RewardCatalog.cardFor(4_000))
-                .isEqualTo(new RewardCatalog.CardDefinition("forest-r", "forest", "rare"));
-        assertThat(RewardCatalog.cardFor(5_000))
-                .isEqualTo(new RewardCatalog.CardDefinition("flame-r", "flame", "rare"));
+    void drawsTheOnlyMissingCommonCardBeforeAllowingDuplicates() {
+        Set<String> owned = new HashSet<>();
+        for (String setKey : Set.of("puppy", "ocean", "cosmos", "dessert", "sport")) {
+            for (int slot = 0; slot < 6; slot++) {
+                owned.add(setKey + "-c" + slot);
+            }
+        }
+        owned.remove("sport-c5");
+
+        assertThat(RewardCatalog.cardFor(200, owned))
+                .isEqualTo(new RewardCatalog.CardDefinition("sport-c5", "sport", "common"));
+    }
+
+    @Test
+    void rareMilestonesDrawOnlyRareCards() {
+        assertThat(RewardCatalog.cardFor(1_000, Set.of()))
+                .satisfies(card -> {
+                    assertThat(card.rarity()).isEqualTo("rare");
+                    assertThat(card.cardKey()).isEqualTo(card.setKey() + "-r");
+                    assertThat(Set.of("puppy", "ocean", "cosmos", "dessert", "sport"))
+                            .contains(card.setKey());
+                });
     }
 
     @Test
     void rejectsValuesOutsideThePublishedMilestoneCatalog() {
-        assertThatThrownBy(() -> RewardCatalog.cardFor(0)).isInstanceOf(InvalidRewardMilestone.class);
-        assertThatThrownBy(() -> RewardCatalog.cardFor(201)).isInstanceOf(InvalidRewardMilestone.class);
-        assertThatThrownBy(() -> RewardCatalog.cardFor(6_200)).isInstanceOf(InvalidRewardMilestone.class);
+        assertThatThrownBy(() -> RewardCatalog.cardFor(0, Set.of())).isInstanceOf(InvalidRewardMilestone.class);
+        assertThatThrownBy(() -> RewardCatalog.cardFor(201, Set.of())).isInstanceOf(InvalidRewardMilestone.class);
+        assertThatThrownBy(() -> RewardCatalog.cardFor(6_200, Set.of())).isInstanceOf(InvalidRewardMilestone.class);
     }
 }

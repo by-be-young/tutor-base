@@ -17,7 +17,7 @@
         <div class="task-header">
             <h1 class="task-title">任务中心</h1>
             <p class="task-subtitle">
-                每日签到赚取积分，积分可兑换卡片奖励：每 200 积分获得一张普通卡片，每 1000 积分获得一张随机稀有卡片。
+                每日签到赚取积分，积分可兑换卡片奖励：每 200 积分随机抽取一张普通卡片，每 1000 积分随机抽取一张稀有卡片。
             </p>
         </div>
 
@@ -107,7 +107,9 @@
                             <div v-if="i > 0" class="connector" :class="connectorClass(m)"></div>
                             <div class="milestone-cell" :class="milestoneClass(m)" @click="openClaim(m)">
                                 <div class="milestone-card" :class="{ 'is-rare': m.isRare }">
-                                    <i :class="milestoneIcon(m)"></i>
+                                    <img v-if="claimedCard(m)" :src="claimedCard(m).img" :alt="claimedCard(m).name"
+                                        class="milestone-img" />
+                                    <i v-else :class="milestoneIcon(m)"></i>
                                 </div>
                                 <span class="milestone-pts">{{ m.pts }}</span>
                                 <span class="milestone-label">{{ milestoneLabel(m) }}</span>
@@ -145,16 +147,20 @@
                             <span class="back-question">?</span>
                             <span class="back-text">揭晓卡片中…</span>
                         </div>
-                        <!-- 正面（卡片：纯色 + 图标） -->
+                        <!-- 正面（卡片：卡图 + 名称） -->
                         <div class="claim-face claim-front"
-                            :class="{ 'is-rare': currentReward?.milestone.isRare }"
-                            :style="{ background: cardGradient(currentReward?.card) }">
-                            <i v-if="currentReward?.card" :class="currentReward.card.icon" class="front-icon"></i>
+                            :class="{ 'is-rare': currentReward?.milestone.isRare }">
+                            <img v-if="currentReward?.card" :src="currentReward.card.img" :alt="currentReward.card.name"
+                                class="front-img" />
+                            <span class="front-shade"></span>
                             <span v-if="currentReward?.card" class="card-type"
                                 :class="{ 'is-rare': currentReward.milestone.isRare }">
                                 {{ currentReward.milestone.isRare ? '✦ 稀有卡片' : '普通卡片' }}
                             </span>
                             <span v-if="currentReward?.card" class="card-name">{{ currentReward.card.name }}</span>
+                            <span v-if="currentReward?.duplicate" class="card-duplicate">
+                                <i class="fas fa-repeat"></i> 该稀有度卡片已集齐，本次为重复卡
+                            </span>
                             <span class="card-points">达成 {{ currentReward?.milestone.pts }} 积分奖励</span>
                         </div>
                     </div>
@@ -178,7 +184,7 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
 import { useCheckinStore } from '@/stores/checkinStore'
 import { useTasksStore } from '@/stores/tasksStore'
-import { buildMilestones } from '@/data/cardCatalog'
+import { buildMilestones, findCard } from '@/data/cardCatalog'
 import CollectionRoom from '@/components/tasks/CollectionRoom.vue'
 
 const authStore = useAuthStore()
@@ -198,6 +204,19 @@ const mockTasks = [
 // 生成 200 ~ 6000 的里程碑；每 1000 积分为稀有卡片节点，其余为普通卡片节点
 const milestones = buildMilestones(MAX_DISPLAY)
 const reachedCount = computed(() => milestones.filter(m => m.pts <= tasksStore.points).length)
+
+// 已领取里程碑 → 已获得卡图（用于进度条节点展示）
+const claimedByPoints = computed(() => {
+    const map = new Map()
+    for (const row of tasksStore.collection) {
+        map.set(Number(row.milestone_points), findCard(row.set_key, row.card_key))
+    }
+    return map
+})
+
+function claimedCard(m) {
+    return claimedByPoints.value.get(m.pts) || null
+}
 
 // ========== 里程碑状态 ==========
 function milestoneClass(m) {
@@ -243,41 +262,40 @@ const currentReward = ref(null)
 const claimingMilestone = ref(false)
 let flipTimer = null
 
-function openClaim(m) {
-    if (m.pts > tasksStore.points || tasksStore.claimedMilestones.has(m.pts)) return
-    // 里程碑 → 卡片由目录确定性映射（同一里程碑所有人获得同一张卡）
-    currentReward.value = { milestone: m, card: m.card }
+async function openClaim(m) {
+    if (m.pts > tasksStore.points || tasksStore.claimedMilestones.has(m.pts) || claimingMilestone.value) return
+    currentReward.value = { milestone: m, card: null, duplicate: false }
     flipped.value = false
     claimVisible.value = true
-    // 先展示背面，再翻转揭晓
-    flipTimer = setTimeout(() => {
-        flipped.value = true
-    }, 900)
-}
-
-async function confirmClaim() {
-    if (!currentReward.value || !flipped.value || claimingMilestone.value) return
     claimingMilestone.value = true
     try {
-        const card = await tasksStore.claimMilestone(authStore.currentUser, currentReward.value.milestone)
-        claimVisible.value = false
-        showToast(`卡片「${card.name}」已收入收藏室`, 'success')
-        scrollToLatest()
+        const reward = await tasksStore.claimMilestone(authStore.currentUser, m)
+        currentReward.value = { milestone: m, ...reward }
+        flipTimer = setTimeout(() => {
+            flipped.value = true
+        }, 900)
     } catch (e) {
+        claimVisible.value = false
         showToast(e.message, 'error')
     } finally {
         claimingMilestone.value = false
     }
 }
 
+function confirmClaim() {
+    if (!currentReward.value || !flipped.value || claimingMilestone.value) return
+    const { card, duplicate } = currentReward.value
+    claimVisible.value = false
+    showToast(
+        duplicate ? `卡片「${card.name}」为重复卡，已计入收藏` : `卡片「${card.name}」已收入收藏室`,
+        duplicate ? 'info' : 'success'
+    )
+    scrollToLatest()
+}
+
 function closeClaim() {
     if (!flipped.value || claimingMilestone.value) return // 揭晓动画进行中不允许关闭
     claimVisible.value = false
-}
-
-function cardGradient(card) {
-    if (!card) return 'linear-gradient(160deg, #5ba8a4, #3a7d79)'
-    return `linear-gradient(160deg, ${card.colors[0]}, ${card.colors[1]})`
 }
 
 // 稀有卡片周围散落的星光位置
@@ -744,6 +762,17 @@ onBeforeUnmount(() => {
     transition: transform 0.2s ease;
 }
 
+/* 已领取：里程碑节点展示已获得卡图 */
+.milestone-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    display: block;
+}
+
 /* 待领取：金色发光 + 呼吸动画 */
 .milestone-cell.is-claimable .milestone-card {
     background: linear-gradient(160deg, #e5c96b, #b3923a);
@@ -795,6 +824,7 @@ onBeforeUnmount(() => {
 .milestone-cell.is-claimed .milestone-card {
     background: linear-gradient(160deg, #b8e0d4, #7fb8a8);
     color: #2f6b50;
+    border: 2px solid rgba(47, 123, 87, 0.55);
 }
 
 /* 未达到条件：灰色锁定 */
@@ -977,18 +1007,38 @@ onBeforeUnmount(() => {
     letter-spacing: 2px;
 }
 
-/* 正面：卡片（纯色 + 图标） */
+/* 正面：卡片（卡图 + 名称） */
 .claim-front {
     transform: rotateY(180deg);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 14px;
+    gap: 12px;
     color: white;
     box-shadow: 0 14px 40px rgba(0, 0, 0, 0.25);
     padding: 20px;
     text-align: center;
+    background: #dce7e2;
+}
+
+.front-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.front-shade {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 62%;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0));
+    pointer-events: none;
 }
 
 .claim-front::after {
@@ -1006,12 +1056,9 @@ onBeforeUnmount(() => {
     box-shadow: 0 0 30px rgba(242, 214, 107, 0.5), 0 14px 40px rgba(0, 0, 0, 0.25);
 }
 
-.front-icon {
-    font-size: 3.2rem;
-    text-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
-}
-
 .card-type {
+    position: relative;
+    z-index: 2;
     font-size: 0.8rem;
     font-weight: 700;
     letter-spacing: 1px;
@@ -1027,15 +1074,34 @@ onBeforeUnmount(() => {
 }
 
 .card-name {
+    position: relative;
+    z-index: 2;
     font-size: 1.15rem;
     font-weight: 700;
     line-height: 1.4;
-    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.card-duplicate {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #ffe9a8;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 4px 12px;
+    border-radius: 999px;
 }
 
 .card-points {
+    position: relative;
+    z-index: 2;
     font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.9);
+    color: rgba(255, 255, 255, 0.92);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 /* 稀有卡片散落的星光 */

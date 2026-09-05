@@ -31,8 +31,8 @@ test('milestone claim sends only the milestone in the path and includes csrf', a
     jsonResponse(201, {
       id: 9,
       milestonePoints: 1000,
-      cardKey: 'flame-r',
-      setKey: 'flame',
+      cardKey: 'puppy-r',
+      setKey: 'puppy',
       rarity: 'rare',
       claimedAt: '2026-09-02T00:00:00Z'
     })
@@ -44,7 +44,7 @@ test('milestone claim sends only the milestone in the path and includes csrf', a
 
   try {
     const reward = await rewardGateway.claimMilestone(1000)
-    assert.equal(reward.cardKey, 'flame-r')
+    assert.equal(reward.cardKey, 'puppy-r')
     assert.equal(requests[1].url.endsWith('/rewards/milestones/1000/claims'), true)
     assert.equal(requests[1].options.method, 'POST')
     assert.equal(requests[1].options.headers['X-CSRF-TOKEN'], 'reward-csrf')

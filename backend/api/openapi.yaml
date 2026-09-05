@@ -247,7 +247,7 @@ paths:
     post:
       operationId: claimRewardMilestone
       summary: 领取一个已达成的积分里程碑卡片
-      description: 卡片种类和稀有度由服务端目录决定；同一学习者的同一里程碑只可领取一次。
+      description: 卡片由服务端从对应稀有度卡池抽取并优先返回尚未收藏的卡片；同一学习者的同一里程碑只可领取一次。
       security:
         - sessionCookie: []
       parameters:
@@ -1133,7 +1133,7 @@ components:
           minLength: 1
         setKey:
           type: string
-          enum: [flame, aurora, galaxy, forest]
+          enum: [puppy, ocean, cosmos, dessert, sport]
         rarity:
           type: string
           enum: [common, rare]

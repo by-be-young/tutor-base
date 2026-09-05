@@ -94,8 +94,8 @@ class RewardHttpContractTest {
         jdbc.update("""
                 INSERT INTO public.card_collection
                     (student_id, milestone_points, card_key, set_key, rarity)
-                VALUES (5, 200, 'flame-c0', 'flame', 'common'),
-                       (6, 200, 'private-card', 'forest', 'common')
+                VALUES (5, 200, 'puppy-c0', 'puppy', 'common'),
+                       (6, 200, 'private-card', 'sport', 'common')
                 """);
         Cookie learner = login("Alice", "Learner-password-2026");
 
@@ -103,7 +103,7 @@ class RewardHttpContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.points").value(400))
                 .andExpect(jsonPath("$.collection.length()").value(1))
-                .andExpect(jsonPath("$.collection[0].cardKey").value("flame-c0"));
+                .andExpect(jsonPath("$.collection[0].cardKey").value("puppy-c0"));
     }
 
     @Test
@@ -117,8 +117,8 @@ class RewardHttpContractTest {
                         .header("X-CSRF-TOKEN", browser.csrfToken()))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.milestonePoints").value(1000))
-                .andExpect(jsonPath("$.cardKey").value("flame-r"))
-                .andExpect(jsonPath("$.setKey").value("flame"))
+                .andExpect(jsonPath("$.cardKey").isNotEmpty())
+                .andExpect(jsonPath("$.setKey").isNotEmpty())
                 .andExpect(jsonPath("$.rarity").value("rare"));
 
         assertThat(jdbc.queryForObject(
