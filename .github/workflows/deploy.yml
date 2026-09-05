@@ -1,10 +1,12 @@
 # GitHub Pages 自动部署
-# main 更新后构建 Vue 前端，并发布到当前仓库唯一的 Pages 站点。
-name: Deploy to GitHub Pages
+# main 的集中 CI 成功后构建 Vue 前端，并发布到当前仓库唯一的 Pages 站点。
+name: Pages CD
 
 on:
-  push:
-    branches: ["main"]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -17,15 +19,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  quality:
-    uses: ./.github/workflows/e2e.yml
-
   build:
-    needs: quality
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve release commit
+        id: commit
+        env:
+          AUTOMATIC_SHA: ${{ github.event.workflow_run.head_sha }}
+          MANUAL_SHA: ${{ github.sha }}
+        run: |
+          sha="${AUTOMATIC_SHA:-$MANUAL_SHA}"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Expected a full 40-character Git SHA"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.commit.outputs.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -40,15 +53,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Test frontend
-        run: npm run test:frontend
-
-      - name: Validate API contract
-        run: npm run test:openapi
-
-      - name: Scan tracked files for secrets
-        run: npm run test:secrets
 
       - name: Build Vue frontend
         env:

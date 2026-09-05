@@ -1,25 +1,25 @@
-name: Backend CI
+name: CI
 
 on:
   pull_request:
-    paths:
-      - 'backend/**'
-      - 'database/**'
-      - 'deploy/compose.yaml'
-      - '.github/workflows/backend-ci.yml'
   push:
     branches:
       - main
-    paths:
-      - 'backend/**'
-      - 'database/**'
-      - 'deploy/compose.yaml'
-      - '.github/workflows/backend-ci.yml'
 
 permissions:
   contents: read
 
 jobs:
+  tracked-secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Scan tracked files for secrets
+        run: node scripts/ci/scan-tracked-secrets.mjs
+
   unit-tests:
     runs-on: ubuntu-latest
     defaults:
@@ -51,3 +51,96 @@ jobs:
         run: docker info
       - name: Run HTTP and PostgreSQL integration tests
         run: bash mvnw -B -ntp test -Dgroups=integration
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Test frontend gateways and security behavior
+        run: npm run test:frontend
+      - name: Validate OpenAPI contract
+        run: npm run test:openapi
+      - name: Build Vue frontend
+        env:
+          VITE_API_BASE_URL: http://127.0.0.1:8080/api/v1
+        run: npm run build
+
+  browser-journey:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: tutor_base_e2e
+          POSTGRES_USER: tutor_base_e2e
+          POSTGRES_PASSWORD: e2e-database-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tutor_base_e2e -d tutor_base_e2e"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: jdbc:postgresql://127.0.0.1:5432/tutor_base_e2e
+      DATABASE_USERNAME: tutor_base_e2e
+      DATABASE_PASSWORD: e2e-database-password
+      DATABASE_MIGRATIONS_ENABLED: 'true'
+      TUTOR_CSRF_SECRET: e2e-only-csrf-secret-with-more-than-thirty-two-bytes
+      TUTOR_SESSION_COOKIE_NAME: TUTOR_SESSION
+      TUTOR_SESSION_COOKIE_SECURE: 'false'
+      TUTOR_WEB_ALLOWED_ORIGINS: http://127.0.0.1:3000
+      TUTOR_BOOTSTRAP_USERNAME: e2e-admin
+      TUTOR_BOOTSTRAP_PASSWORD: E2e-admin-password-2026
+      E2E_ADMIN_USERNAME: e2e-admin
+      E2E_ADMIN_PASSWORD: E2e-admin-password-2026
+      VITE_API_BASE_URL: http://127.0.0.1:8080/api/v1
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Provision isolated E2E administrator
+        working-directory: backend
+        env:
+          SPRING_PROFILES_ACTIVE: bootstrap-admin
+          TUTOR_BOOTSTRAP_ENABLED: 'true'
+        run: bash mvnw -B -ntp spring-boot:run
+      - name: Start backend
+        working-directory: backend
+        run: |
+          nohup bash mvnw -B -ntp spring-boot:run > ../backend-e2e.log 2>&1 &
+          echo $! > ../backend-e2e.pid
+          for attempt in {1..60}; do
+            curl --fail --silent http://127.0.0.1:8080/actuator/health/readiness && exit 0
+            sleep 2
+          done
+          cat ../backend-e2e.log
+          exit 1
+      - name: Run browser journey
+        run: npm run test:e2e
+      - name: Upload E2E diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-diagnostics
+          path: |
+            backend-e2e.log
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7

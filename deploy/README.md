@@ -73,9 +73,10 @@ curl --fail https://staging-api.be-young.top/api/v1/system/status
 
 ## GitHub 自动部署
 
-`Backend Container Image` 在 `main` 发布 `sha-<commit>` 镜像；成功后 `Deploy Backend to Staging` 通过 GitHub
-Environment `staging` 审批，再执行迁移、替换容器和健康检查。新容器的本地 readiness 或公网 smoke
-失败时，工作流会把 `.env` 恢复为上一镜像并重新启动旧后端。需在该 Environment 配置：
+`main` 的集中 `CI` 全部通过后，`Backend CD` 自动启动：先发布或复用 `sha-<commit>` 不可变镜像，随后通过
+GitHub Environment `staging` 审批，再执行迁移、替换容器和健康检查。新容器的本地 readiness 或公网 smoke
+失败时，工作流会把 `.env` 恢复为上一镜像并重新启动旧后端。开发分支和失败的 `main` CI 都不会触发自动部署。
+需在该 Environment 配置：
 
 - `DEPLOY_HOST`：服务器地址。
 - `DEPLOY_USER`：部署用户。
@@ -86,7 +87,8 @@ Environment `staging` 审批，再执行迁移、替换容器和健康检查。�
 
 ## 前端发布与权限收口
 
-GitHub Pages 工作流从仓库变量 `VITE_API_BASE_URL` 构建前端；staging 应设为：
+同一 `main` CI 通过后，`Pages CD` 从相同 commit 构建前端。工作流从仓库变量 `VITE_API_BASE_URL`
+读取 API 地址；staging 应设为：
 
 ```text
 https://staging-api.be-young.top/api/v1
