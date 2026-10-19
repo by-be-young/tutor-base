@@ -30,7 +30,14 @@ WITH expected_privilege(table_name, privilege_type) AS (
         ('wrong_questions', 'SELECT'),
         ('wrong_questions', 'INSERT'),
         ('wrong_questions', 'UPDATE'),
-        ('wrong_questions', 'DELETE')
+        ('wrong_questions', 'DELETE'),
+        ('task_claims', 'SELECT'),
+        ('task_claims', 'INSERT'),
+        ('achievement_claims', 'SELECT'),
+        ('achievement_claims', 'INSERT'),
+        ('task_assignments', 'SELECT'),
+        ('task_assignments', 'INSERT'),
+        ('task_assignments', 'UPDATE')
 ), expected_sequence(sequence_name) AS (
     VALUES
         ('student_id_seq'),
@@ -41,11 +48,15 @@ WITH expected_privilege(table_name, privilege_type) AS (
         ('card_collection_id_seq'),
         ('article_answer_keys_id_seq'),
         ('article_question_submissions_id_seq'),
-        ('wrong_questions_id_seq')
+        ('wrong_questions_id_seq'),
+        ('task_claims_id_seq'),
+        ('achievement_claims_id_seq'),
+        ('task_assignments_id_seq')
 ), expected_rls_table(table_name) AS (
     VALUES ('student'), ('account'), ('account_activation'), ('account_session'),
         ('daily_check_in'), ('user_points'), ('task_claims'), ('card_collection'),
-        ('article_answer_keys'), ('article_question_submissions'), ('wrong_questions')
+        ('article_answer_keys'), ('article_question_submissions'), ('wrong_questions'),
+        ('achievement_claims'), ('task_assignments')
 ), expected_policy(table_name, policy_name, command, using_expression, check_expression) AS (
     VALUES
         ('student', 'tutor_base_runtime_student_select', 'r', 'true', NULL),
@@ -70,7 +81,10 @@ WITH expected_privilege(table_name, privilege_type) AS (
         ('card_collection', 'tutor_base_runtime_card_insert', 'a', NULL, 'true'),
         ('article_answer_keys', 'tutor_base_runtime_answer_keys_all', '*', 'true', 'true'),
         ('article_question_submissions', 'tutor_base_runtime_submissions_all', '*', 'true', 'true'),
-        ('wrong_questions', 'tutor_base_runtime_wrong_questions_all', '*', 'true', 'true')
+        ('wrong_questions', 'tutor_base_runtime_wrong_questions_all', '*', 'true', 'true'),
+        ('task_claims', 'tutor_base_runtime_task_claims_all', '*', 'true', 'true'),
+        ('achievement_claims', 'tutor_base_runtime_achievement_claims_all', '*', 'true', 'true'),
+        ('task_assignments', 'tutor_base_runtime_task_assignments_all', '*', 'true', 'true')
 ), checks AS (
     SELECT 'runtime roles missing or unsafe' AS check_name, count(*)::bigint AS anomaly_count
     FROM (VALUES ('tutor_base_runtime'), ('tutor_base_app')) AS expected(role_name)

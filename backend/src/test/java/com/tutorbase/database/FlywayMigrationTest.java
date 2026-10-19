@@ -38,7 +38,9 @@ class FlywayMigrationTest {
             "daily_check_in",
             "user_points",
             "task_claims",
-            "card_collection");
+            "card_collection",
+            "achievement_claims",
+            "task_assignments");
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
@@ -53,8 +55,14 @@ class FlywayMigrationTest {
 
         MigrateResult result = flyway.migrate();
 
-        assertThat(result.migrationsExecuted).isEqualTo(5);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("5");
+        long expectedMigrations;
+        try (var migrations = Files.list(Path.of("src/main/resources/db/migration"))) {
+            expectedMigrations = migrations
+                    .filter(path -> path.getFileName().toString().endsWith(".sql"))
+                    .count();
+        }
+        assertThat(result.migrationsExecuted).isEqualTo((int) expectedMigrations);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("6");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
         try (Connection connection = POSTGRES.createConnection("")) {
@@ -103,10 +111,11 @@ class FlywayMigrationTest {
                       AND table_class.relname = ANY (ARRAY[
                           'student', 'account', 'account_activation', 'account_session',
                           'daily_check_in', 'user_points', 'task_claims', 'card_collection',
-                          'article_answer_keys', 'article_question_submissions', 'wrong_questions'
+                          'article_answer_keys', 'article_question_submissions', 'wrong_questions',
+                          'achievement_claims', 'task_assignments'
                       ])
                       AND table_class.relrowsecurity
-                    """)).isEqualTo(11);
+                    """)).isEqualTo(13);
 
             assertDatabaseRejectsInvalidStates(connection);
             assertWrongQuestionsFollowStudentLifecycle(connection);
