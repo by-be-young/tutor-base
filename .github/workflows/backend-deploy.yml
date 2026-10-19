@@ -176,8 +176,17 @@ jobs:
           sudo docker compose up -d --no-deps backend
           sudo docker compose ps backend
           wait_for_backend
-          curl --fail https://staging-api.be-young.top/api/v1/system/status
+          # 本地健康检查通过后，关闭回滚陷阱：此时若公网 smoke 失败，通常是
+          # DNS/TLS/反代等基础设施问题，回滚到旧镜像只会让服务与已迁移的
+          # 数据库更不匹配，无法修复问题。保留新镜像并明确报错。
           trap - ERR
+          if ! curl --fail --silent --show-error \
+              https://staging-api.be-young.top/api/v1/system/status; then
+            echo "ERROR: backend is healthy locally but the public smoke test failed."
+            echo "Check the DNS record for staging-api.be-young.top and the Nginx/TLS setup."
+            echo "The new image was kept running; deployment is NOT rolled back."
+            exit 1
+          fi
           REMOTE
 
       - name: Verify deployed immutable image independently
