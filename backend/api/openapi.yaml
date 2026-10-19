@@ -276,6 +276,109 @@ paths:
           $ref: '#/components/responses/Problem'
         '409':
           $ref: '#/components/responses/Problem'
+  /achievements:
+    get:
+      operationId: listAchievements
+      summary: 获取当前学习者的分级成就进度
+      description: 成就等级与领取状态由服务端计算；浏览器不能提交学习者 ID 或奖励积分。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 成就目录、当前指标、已领取等级与可领取等级。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementSummary'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /achievements/{key}/claims:
+    post:
+      operationId: claimAchievementTier
+      summary: 领取下一级已达成成就并发放积分
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/GrowthKey'
+      responses:
+        '200':
+          description: 领取成功，返回本次奖励与最新积分余额。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrowthClaimResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /tasks/board:
+    get:
+      operationId: getTaskBoard
+      summary: 获取每日、每周与限时任务进度
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 任务列表、进度、状态与刷新时间。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrowthTaskBoard'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /tasks/{key}/accept:
+    post:
+      operationId: acceptGrowthTask
+      summary: 接取限时任务并开始计算宽松截止时间
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/GrowthKey'
+      responses:
+        '204':
+          description: 接取成功。
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /tasks/{key}/claims:
+    post:
+      operationId: claimGrowthTask
+      summary: 领取已完成任务奖励
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/GrowthKey'
+      responses:
+        '200':
+          description: 领取成功，返回本次奖励与最新积分余额。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrowthClaimResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
   /articles/study-progress:
     get:
       operationId: getLearnerStudyProgress
@@ -724,6 +827,13 @@ components:
       in: path
       required: true
       schema: { type: integer, format: int64, minimum: 1 }
+    GrowthKey:
+      name: key
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-z0-9-]{1,64}$'
   securitySchemes:
     sessionCookie:
       type: apiKey
@@ -1167,3 +1277,143 @@ components:
           type: string
         traceId:
           type: string
+    AchievementTier:
+      type: object
+      additionalProperties: false
+      required: [level, requirement, rewardPoints, state]
+      properties:
+        level:
+          type: integer
+          minimum: 1
+        requirement:
+          type: integer
+          minimum: 1
+        rewardPoints:
+          type: integer
+          minimum: 1
+        state:
+          type: string
+          enum: [locked, claimable, claimed]
+    Achievement:
+      type: object
+      additionalProperties: false
+      required: [key, title, description, icon, tone, metric, currentValue, tiers]
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        tone:
+          type: string
+        metric:
+          type: string
+        currentValue:
+          type: integer
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AchievementTier'
+        claimableLevel:
+          type: [integer, 'null']
+        nextTier:
+          oneOf:
+            - $ref: '#/components/schemas/AchievementTier'
+            - type: 'null'
+    AchievementSummary:
+      type: object
+      additionalProperties: false
+      required: [points, earnedPoints, claimedTiers, totalTiers, achievements]
+      properties:
+        points:
+          type: integer
+          format: int64
+        earnedPoints:
+          type: integer
+          format: int64
+        claimedTiers:
+          type: integer
+        totalTiers:
+          type: integer
+        achievements:
+          type: array
+          items:
+            $ref: '#/components/schemas/Achievement'
+    GrowthClaimResult:
+      type: object
+      additionalProperties: false
+      required: [key, awardedPoints, totalPoints]
+      properties:
+        key:
+          type: string
+        tierLevel:
+          type: [integer, 'null']
+        awardedPoints:
+          type: integer
+        totalPoints:
+          type: integer
+          format: int64
+    GrowthTask:
+      type: object
+      additionalProperties: false
+      required: [key, type, title, description, icon, tone, rewardPoints, target, progress, status]
+      properties:
+        key:
+          type: string
+        type:
+          type: string
+          enum: [daily, weekly, limited]
+        title:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        tone:
+          type: string
+        rewardPoints:
+          type: integer
+        target:
+          type: integer
+        progress:
+          type: integer
+        status:
+          type: string
+          enum: [available, in_progress, claimable, claimed, expired]
+        periodKey:
+          type: [string, 'null']
+        acceptedAt:
+          type: [string, 'null']
+          format: date-time
+        deadlineAt:
+          type: [string, 'null']
+          format: date-time
+    GrowthTaskBoard:
+      type: object
+      additionalProperties: false
+      required: [points, daily, weekly, limited, dailyResetAt, weeklyResetAt]
+      properties:
+        points:
+          type: integer
+          format: int64
+        daily:
+          type: array
+          items:
+            $ref: '#/components/schemas/GrowthTask'
+        weekly:
+          type: array
+          items:
+            $ref: '#/components/schemas/GrowthTask'
+        limited:
+          type: array
+          items:
+            $ref: '#/components/schemas/GrowthTask'
+        dailyResetAt:
+          type: string
+          format: date-time
+        weeklyResetAt:
+          type: string
+          format: date-time

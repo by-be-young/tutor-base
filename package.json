@@ -8,6 +8,7 @@
     "predev": "npm run frontend:sync",
     "dev": "vite tutor-nest-vue",
     "test:frontend": "node --test --test-concurrency=1 tutor-nest-vue/test/*.test.js",
+    "check:sfc": "node scripts/check-sfc.mjs",
     "test:openapi": "redocly lint backend/api/openapi.yaml",
     "test:secrets": "node scripts/ci/scan-tracked-secrets.mjs",
     "test:e2e": "playwright test",

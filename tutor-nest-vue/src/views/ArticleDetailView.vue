@@ -1,90 +1,208 @@
 <!-- src/views/ArticleDetailView.vue -->
 <template>
-    <div class="detail-container">
-        <!-- 标题区 -->
-        <div class="detail-title-area">
-            <h1 class="detail-title">{{ blogTitle }}</h1>
+    <div class="reader" :class="['reader--fs-' + fontScale, { 'reader--focus': focusMode }]">
+        <!-- 顶部阅读进度 -->
+        <div class="reader-progress" aria-hidden="true">
+            <span class="reader-progress__bar" :style="{ width: progressWidth }"></span>
         </div>
 
-        <!-- 双栏内容区（保持每个section独立的双栏结构） -->
-        <div class="detail-layout-wrapper" :class="'layout-' + layoutMode">
-            <div class="detail-body" ref="detailBodyRef" v-html="renderedContent"></div>
+        <div class="reader-shell">
+            <!-- 文章信息 / 阅读进度 -->
+            <header class="reader-hero panel panel--glow">
+                <div class="reader-hero__halftone" aria-hidden="true"></div>
+                <div class="reader-hero__top">
+                    <span class="eyebrow">NEST / 学巢阅读</span>
+                    <span class="chip reader-mode" :class="modeChipClass">
+                        <i class="fas" :class="modeIcon"></i>{{ modeLabel }}
+                    </span>
+                </div>
+                <h1 class="reader-title">{{ blogTitle }}</h1>
+                <div class="reader-meta">
+                    <span v-if="subjectMeta.label" class="chip" :class="'chip--' + subjectMeta.tone">
+                        <i class="fas" :class="subjectMeta.icon"></i>{{ subjectMeta.label }}
+                    </span>
+                    <span v-if="dateLabel" class="chip">
+                        <i class="far fa-calendar"></i>{{ dateLabel }}
+                    </span>
+                    <span v-if="questionCount" class="chip chip--violet">
+                        <i class="fas fa-list-ol"></i>{{ questionCount }} 道题
+                    </span>
+                    <span v-if="currentMode === 'study' && questionCount" class="chip chip--lime">
+                        <i class="fas fa-book-medical"></i>错题可归档
+                    </span>
+                </div>
+                <div class="reader-meter">
+                    <div class="progress">
+                        <span class="progress__bar" :style="{ width: progressWidth }"></span>
+                    </div>
+                    <span class="reader-meter__label mono">已读 {{ progressPercent }}%</span>
+                </div>
+            </header>
+
+            <!-- 阅读工具条：字号 / 专注 / 目录 / 答题卡 / 布局 -->
+            <div class="reader-tools" role="toolbar" aria-label="阅读工具">
+                <div class="seg reader-fontsize" role="group" aria-label="正文字号">
+                    <button v-for="option in FONT_SCALE_OPTIONS" :key="option.value" type="button"
+                        class="seg__btn reader-fontsize__btn" :class="{ 'is-active': fontScale === option.value }"
+                        :aria-pressed="fontScale === option.value" :title="option.title"
+                        @click="setFontScale(option.value)">
+                        {{ option.label }}
+                    </button>
+                </div>
+
+                <span class="reader-tools__divider" aria-hidden="true"></span>
+
+                <button type="button" class="reader-tool" :class="{ 'is-active': focusMode }" :aria-pressed="focusMode"
+                    title="专注模式：收起装饰与侧栏，专注正文" @click="toggleFocusMode">
+                    <i class="fas" :class="focusMode ? 'fa-compress' : 'fa-expand'"></i>
+                    <span>专注</span>
+                </button>
+                <button v-if="showTocFab" type="button" class="reader-tool" :class="{ 'is-active': tocActive }"
+                    :aria-expanded="tocActive" title="目录" @click="toggleToc">
+                    <i class="fas fa-list"></i>
+                    <span>目录</span>
+                </button>
+                <button v-if="showAnswerSheetFab" type="button" class="reader-tool"
+                    :class="{ 'is-active': answerSheetActive }" :aria-expanded="answerSheetActive" title="答题卡"
+                    @click="toggleAnswerSheet">
+                    <i class="fas fa-th"></i>
+                    <span>答题卡</span>
+                </button>
+                <button v-if="hasSidebar" type="button" class="reader-tool" :title="layoutToggleTitle"
+                    @click="cycleLayoutMode">
+                    <i class="fas" :class="layoutToggleIcon"></i>
+                    <span>布局</span>
+                </button>
+
+                <span v-if="submittedCount > 0" class="reader-tools__hint mono">{{ submittedCount }} 题已提交</span>
+
+                <button type="button" class="reader-tool reader-tool--end" title="回到顶部" aria-label="回到顶部"
+                    @click="scrollToTop">
+                    <i class="fas fa-arrow-up"></i>
+                </button>
+            </div>
+
+            <!-- 正文：纸白卡片 + 墨线硬阴影 -->
+            <main class="reader-sheet">
+                <div v-if="!renderedContent" class="reader-loading">
+                    <span class="spinner"></span>
+                    <span>正在展开讲义…</span>
+                </div>
+                <div class="detail-layout-wrapper" :class="['layout-' + layoutMode, { 'has-sidebar-content': hasSidebar }]">
+                    <div class="detail-body" ref="detailBodyRef" v-html="renderedContent"></div>
+                </div>
+            </main>
         </div>
 
         <!-- 悬浮提交按钮 -->
         <div v-if="showFab" class="fab-container">
-            <button class="fab-btn" :class="fabStatusClass" :disabled="isSubmitting" @click="handleFabClick"
+            <button class="fab-btn" :class="fabStatusClass" :disabled="isSubmitting"
+                :aria-label="currentMode === 'answer' ? '保存标准答案' : '提交答案'" @click="handleFabClick"
                 v-html="fabButtonHtml"></button>
         </div>
 
-        <!-- 右下角悬浮按钮组 -->
+        <!-- 桌面端右侧悬浮快捷组（移动端收纳进工具条） -->
         <div class="fab-right-group">
-            <button v-if="hasSidebar" class="layout-toggle-fab" @click="cycleLayoutMode" :title="layoutToggleTitle">
+            <button v-if="hasSidebar" type="button" class="layout-toggle-fab" :title="layoutToggleTitle"
+                :aria-label="layoutToggleTitle" @click="cycleLayoutMode">
                 <i class="fas" :class="layoutToggleIcon"></i>
             </button>
-            <button v-if="showAnswerSheetFab" class="answer-sheet-fab" @click="toggleAnswerSheet" title="答题卡">
+            <button v-if="showAnswerSheetFab" type="button" class="answer-sheet-fab" title="答题卡" aria-label="答题卡"
+                @click="toggleAnswerSheet">
                 <i class="fas fa-th"></i>
             </button>
-            <button v-if="showTocFab" class="toc-fab" @click="toggleToc" title="目录">
+            <button v-if="showTocFab" type="button" class="toc-fab" title="目录" aria-label="目录" @click="toggleToc">
                 <i class="fas fa-list"></i>
             </button>
         </div>
 
-        <!-- 答题卡侧边栏 -->
-        <div v-if="answerSheetVisible" class="answer-sheet-overlay" :class="{ 'overlay-active': answerSheetActive }" @click.self="closeAnswerSheet">
-            <div class="answer-sheet-sidebar" :class="{ 'sidebar-open': answerSheetActive }" @click.stop>
+        <!-- 答题卡侧栏 -->
+        <div v-if="answerSheetVisible" class="answer-sheet-overlay"
+            :class="{ 'overlay-active': answerSheetActive }" @click.self="closeAnswerSheet">
+            <aside class="answer-sheet-sidebar" :class="{ 'sidebar-open': answerSheetActive }" @click.stop role="dialog"
+                aria-modal="true" aria-label="答题卡">
                 <div class="answer-sheet-header">
-                    <span class="answer-sheet-title">答题卡</span>
-                    <button class="answer-sheet-close-btn" @click="closeAnswerSheet">
+                    <div class="answer-sheet-heading">
+                        <span class="answer-sheet-title">答题卡</span>
+                        <span class="answer-sheet-sub mono">{{ questionCount }} 题 · 已提交 {{ submittedCount }}</span>
+                    </div>
+                    <button type="button" class="answer-sheet-close-btn" aria-label="关闭答题卡"
+                        @click="closeAnswerSheet">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
+
+                <div class="answer-sheet-legend">
+                    <span class="legend-item"><i class="legend-dot is-unsubmitted"></i>未提交</span>
+                    <span class="legend-item"><i class="legend-dot is-pending"></i>待批阅</span>
+                    <span class="legend-item"><i class="legend-dot is-correct"></i>正确</span>
+                    <span class="legend-item"><i class="legend-dot is-wrong"></i>错误</span>
+                </div>
+
                 <div class="answer-sheet-body">
                     <div v-for="(section, sIdx) in answerSheetSections" :key="sIdx" class="answer-sheet-section">
                         <div class="answer-sheet-section-title">{{ section.h1Title }}</div>
                         <div class="answer-sheet-grid">
-                            <div v-for="q in section.questions" :key="q.questionId"
-                                 class="answer-sheet-cell"
-                                 :class="'cell-' + q.status"
-                                 @click="scrollToHeading(section.headingId)"
-                                 :title="`第${q.localIndex}题: ${q.statusLabel}`">
+                            <button v-for="q in section.questions" :key="q.questionId" type="button"
+                                class="answer-sheet-cell" :class="'cell-' + q.status"
+                                :title="`第${q.localIndex}题: ${q.statusLabel}`"
+                                :aria-label="`第${q.localIndex}题，${q.statusLabel}，跳转到该章节`"
+                                @click="scrollToHeading(section.headingId)">
                                 {{ q.localIndex }}
-                            </div>
+                            </button>
                         </div>
                     </div>
                     <div v-if="answerSheetSections.length === 0" class="answer-sheet-empty">
                         暂无题目
                     </div>
                 </div>
-            </div>
+
+                <div class="answer-sheet-foot">
+                    <button type="button" class="btn btn--primary btn--block" @click="closeAnswerSheet">
+                        <i class="fas fa-pen"></i>继续作答
+                    </button>
+                </div>
+            </aside>
         </div>
 
-        <!-- 目录侧边栏 -->
-        <div v-if="tocVisible" class="answer-sheet-overlay" :class="{ 'overlay-active': tocActive }" @click.self="closeToc">
-            <div class="answer-sheet-sidebar" :class="{ 'sidebar-open': tocActive }" @click.stop>
+        <!-- 目录侧栏 -->
+        <div v-if="tocVisible" class="answer-sheet-overlay" :class="{ 'overlay-active': tocActive }"
+            @click.self="closeToc">
+            <aside class="answer-sheet-sidebar toc-sidebar" :class="{ 'sidebar-open': tocActive }" @click.stop
+                role="dialog" aria-modal="true" aria-label="目录">
                 <div class="answer-sheet-header">
-                    <span class="answer-sheet-title">目录</span>
-                    <button class="answer-sheet-close-btn" @click="closeToc">
+                    <div class="answer-sheet-heading">
+                        <span class="answer-sheet-title">目录</span>
+                        <span class="answer-sheet-sub mono">{{ tocData.length }} 个章节</span>
+                    </div>
+                    <button type="button" class="answer-sheet-close-btn" aria-label="关闭目录" @click="closeToc">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
+
                 <div class="toc-body">
                     <div v-for="(h1, idx) in tocData" :key="h1.id" class="toc-h1-item">
-                        <div class="toc-h1-title">
-                            <i class="fas toc-arrow" :class="expandedTocH1 === idx ? 'fa-chevron-down' : 'fa-chevron-right'" @click.stop="toggleTocH1(idx)"></i>
-                            <span class="toc-text" @click="scrollToHeading(h1.id)">{{ h1.text }}</span>
+                        <div class="toc-h1-title" :class="{ 'is-open': expandedTocH1 === idx }"
+                            @click="toggleTocH1(idx)">
+                            <button type="button" class="toc-toggle" :aria-expanded="expandedTocH1 === idx"
+                                :aria-label="`展开或收起 ${h1.text}`" @click.stop="toggleTocH1(idx)">
+                                <i class="fas toc-arrow"
+                                    :class="expandedTocH1 === idx ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
+                            </button>
+                            <span class="toc-text" @click.stop="scrollToHeading(h1.id)">{{ h1.text }}</span>
                         </div>
                         <div v-if="expandedTocH1 === idx && h1.children.length" class="toc-h2-list">
-                            <div v-for="h2 in h1.children" :key="h2.id" class="toc-h2-item" @click="scrollToHeading(h2.id)">
+                            <button v-for="h2 in h1.children" :key="h2.id" type="button" class="toc-h2-item"
+                                @click="scrollToHeading(h2.id)">
                                 {{ h2.text }}
-                            </div>
+                            </button>
                         </div>
                     </div>
                     <div v-if="tocData.length === 0" class="answer-sheet-empty">
                         暂无目录
                     </div>
                 </div>
-            </div>
+            </aside>
         </div>
     </div>
 </template>
@@ -99,6 +217,7 @@ import { useKatex } from '@/composables/useKatex'
 import { useImageEmbed } from '@/composables/useImageEmbed'
 import { useDrawingInDetail } from '@/composables/useDrawing'
 import { learningGateway } from '@/gateways/learningGateway'
+import { showToast } from '@/utils/toast'
 import { marked } from 'marked'
 
 const route = useRoute()
@@ -144,6 +263,65 @@ const tocVisible = ref(false)
 const tocActive = ref(false)
 const tocData = ref([])
 const expandedTocH1 = ref(null)
+
+// ========== 阅读体验（纯展示状态，不影响业务数据） ==========
+const FONT_SCALE_KEY = 'nest-reader-font-scale'
+const FONT_SCALE_OPTIONS = [
+    { value: 'sm', label: '小', title: '小号正文' },
+    { value: 'md', label: '中', title: '中号正文' },
+    { value: 'lg', label: '大', title: '大号正文' }
+]
+const fontScale = ref(readStoredFontScale())
+const focusMode = ref(false)
+const readingProgress = ref(0)
+let progressFrame = 0
+
+function readStoredFontScale() {
+    try {
+        const stored = window.localStorage.getItem(FONT_SCALE_KEY)
+        return FONT_SCALE_OPTIONS.some(option => option.value === stored) ? stored : 'md'
+    } catch (error) {
+        return 'md'
+    }
+}
+
+function setFontScale(value) {
+    if (!FONT_SCALE_OPTIONS.some(option => option.value === value)) return
+    fontScale.value = value
+    try {
+        window.localStorage.setItem(FONT_SCALE_KEY, value)
+    } catch (error) {
+        /* localStorage 不可用时仅保留本次会话 */
+    }
+}
+
+function toggleFocusMode() {
+    focusMode.value = !focusMode.value
+}
+
+function scrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function updateReadingProgress() {
+    const max = document.documentElement.scrollHeight - window.innerHeight
+    const ratio = max > 0 ? window.scrollY / max : 0
+    readingProgress.value = Math.min(100, Math.max(0, ratio * 100))
+}
+
+function handleReaderScroll() {
+    if (progressFrame) return
+    progressFrame = requestAnimationFrame(() => {
+        progressFrame = 0
+        updateReadingProgress()
+    })
+}
+
+function handleReaderKeydown(event) {
+    if (event.key !== 'Escape') return
+    if (answerSheetVisible.value) closeAnswerSheet()
+    if (tocVisible.value) closeToc()
+}
 
 // ========== 计算属性 ==========
 const blogId = computed(() => {
@@ -226,6 +404,44 @@ const layoutToggleTitle = computed(() => {
     if (layoutMode.value === 'left') return '点击切换为仅显示答题区'
     return '点击切换为双栏显示'
 })
+
+// ========== 阅读页展示信息 ==========
+const modeLabel = computed(() => {
+    if (currentMode.value === 'review') return '批阅模式'
+    if (currentMode.value === 'answer') return '答案设置'
+    return '学习模式'
+})
+
+const modeIcon = computed(() => {
+    if (currentMode.value === 'review') return 'fa-clipboard-check'
+    if (currentMode.value === 'answer') return 'fa-key'
+    return 'fa-book-open'
+})
+
+const modeChipClass = computed(() => {
+    if (currentMode.value === 'review') return 'chip--amber'
+    if (currentMode.value === 'answer') return 'chip--violet'
+    return 'chip--cyan'
+})
+
+const subjectMeta = computed(() => {
+    const series = currentArticle.value?.series || ''
+    if (series.includes('化学')) return { label: series, tone: 'cyan', icon: 'fa-flask' }
+    if (series.includes('初中英语')) return { label: series, tone: 'amber', icon: 'fa-language' }
+    if (series.includes('英语')) return { label: series, tone: 'violet', icon: 'fa-language' }
+    return { label: series, tone: 'violet', icon: 'fa-book' }
+})
+
+const dateLabel = computed(() => {
+    const date = currentArticle.value?.date || ''
+    return date ? date.replace(/-/g, '.') : ''
+})
+
+const progressPercent = computed(() => Math.round(readingProgress.value))
+
+const progressWidth = computed(() => `${readingProgress.value.toFixed(2)}%`)
+
+const submittedCount = computed(() => submissionMap.value.size)
 
 // ========== 工具函数 ==========
 function escapeHtml(text) {
@@ -910,8 +1126,8 @@ function scrollToHeading(headingId) {
     if (!headingId) return
     const el = document.getElementById(headingId)
     if (el) {
-        // 偏移顶部导航栏的高度（~56px），使标题不紧贴视口顶部
-        const NAV_BAR_HEIGHT = 64
+        // 偏移吸顶头部 + 阅读工具条，使标题不被遮挡
+        const NAV_BAR_HEIGHT = getStickyChromeOffset()
         const rect = el.getBoundingClientRect()
         window.scrollBy({
             top: rect.top - NAV_BAR_HEIGHT,
@@ -924,6 +1140,15 @@ function scrollToHeading(headingId) {
 
 function toggleTocH1(idx) {
     expandedTocH1.value = expandedTocH1.value === idx ? null : idx
+}
+
+/** 吸顶头部 + 阅读工具条的实际高度，用于目录/答题卡跳转时留出可见空间 */
+function getStickyChromeOffset() {
+    const header = document.querySelector('.site-header')
+    const tools = document.querySelector('.reader-tools')
+    const headerHeight = header?.offsetHeight || 76
+    const toolsHeight = tools?.offsetHeight || 58
+    return headerHeight + toolsHeight + 12
 }
 
 function findCenterHeading() {
@@ -1124,34 +1349,6 @@ function setFabStatus(success, message) {
     }, 2500)
 }
 
-// Toast 弹窗
-let toastTimer = null
-function showToast(message, type = 'info', duration = 3000) {
-    const existing = document.querySelector('.custom-toast')
-    if (existing) {
-        existing.remove()
-        if (toastTimer) {
-            clearTimeout(toastTimer)
-            toastTimer = null
-        }
-    }
-
-    const toast = document.createElement('div')
-    toast.className = `custom-toast toast-${type}`
-    toast.textContent = message
-    document.body.appendChild(toast)
-
-    requestAnimationFrame(() => toast.classList.add('toast-visible'))
-
-    toastTimer = setTimeout(() => {
-        toast.classList.remove('toast-visible')
-        setTimeout(() => {
-            if (toast.parentNode) toast.parentNode.removeChild(toast)
-            toastTimer = null
-        }, 300)
-    }, duration)
-}
-
 // ========== 刷新提交状态 ==========
 async function refreshSubmissionStatus() {
     const blogIdValue = blogId.value
@@ -1337,6 +1534,7 @@ async function loadContent() {
         renderedContent.value = '<p>无法读取文章内容，请稍后重试。</p>'
     } finally {
         isRendering = false
+        nextTick(updateReadingProgress)
     }
 }
 
@@ -1354,7 +1552,7 @@ function cycleLayoutMode() {
         nextTick(() => {
             const el = document.getElementById(centerH1Id)
             if (el) {
-                const NAV_BAR_HEIGHT = 64
+                const NAV_BAR_HEIGHT = getStickyChromeOffset()
                 const rect = el.getBoundingClientRect()
                 window.scrollBy({
                     top: rect.top - NAV_BAR_HEIGHT,
@@ -1421,220 +1619,697 @@ onMounted(async () => {
     await loadContent()
     breakpointMql.addEventListener('change', handleBreakpointChange)
     window.addEventListener('pagehide', handlePageHide)
+    window.addEventListener('scroll', handleReaderScroll, { passive: true })
+    window.addEventListener('keydown', handleReaderKeydown)
+    updateReadingProgress()
 })
 
 onUnmounted(() => {
     disconnect()
     breakpointMql.removeEventListener('change', handleBreakpointChange)
     window.removeEventListener('pagehide', handlePageHide)
+    window.removeEventListener('scroll', handleReaderScroll)
+    window.removeEventListener('keydown', handleReaderKeydown)
+    if (progressFrame) cancelAnimationFrame(progressFrame)
 })
 </script>
 
 <style scoped>
-.detail-container {
-    max-width: 1300px;
-    min-width: 800px;
+/* ==========================================================================
+   NEST · 学巢 — 阅读器（Riso Campus 印刷学院风）
+   奶油纸张 + 墨黑文字 + 印刷纯色块 + 硬边框 / 错位硬阴影。
+   仅使用 theme.css token；不使用毛玻璃、发光与深色页面底。
+   ========================================================================== */
+
+.reader {
+    --reader-fs: 1.08rem;
+    --reader-lh: 1.85;
+    --reader-sticky-top: calc(var(--header-h) - 4px);
+    position: relative;
+    width: 100%;
+    max-width: var(--page-max);
     margin: 0 auto;
-    padding: 30px 32px 80px;
+    padding: 30px 24px calc(88px + env(safe-area-inset-bottom) + 32px);
+    color: var(--text-2);
 }
 
-.detail-title-area {
-    margin-bottom: 24px;
+.reader--fs-sm { --reader-fs: 0.98rem; }
+.reader--fs-md { --reader-fs: 1.08rem; }
+.reader--fs-lg { --reader-fs: 1.2rem; }
+
+/* --- 顶部阅读进度（纸面刻度线） ----------------------------------------- */
+.reader-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 320;
+    height: 5px;
+    background: var(--paper-2);
+    border-bottom: 1px solid var(--ink);
+    pointer-events: none;
 }
 
-.detail-title {
-    font-size: 2.2rem;
+.reader-progress__bar {
+    display: block;
+    height: 100%;
+    border-right: 1px solid var(--ink);
+    background: var(--vermilion);
+    transition: width var(--dur-fast) linear;
+}
+
+.reader-shell {
+    position: relative;
+}
+
+/* --- 文章头部（纸卡 + 网点装饰） --------------------------------------- */
+.reader-hero {
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 20px;
+    padding: 26px clamp(20px, 3.6vw, 42px) 24px;
+    border-radius: var(--r-lg);
+}
+
+.reader-hero__halftone {
+    position: absolute;
+    right: -26px;
+    top: -30px;
+    width: 190px;
+    height: 150px;
+    background-image: radial-gradient(var(--cobalt) 2px, transparent 2.4px);
+    background-size: 13px 13px;
+    opacity: 0.14;
+    pointer-events: none;
+}
+
+.reader-hero__top {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.reader-mode {
+    font-family: var(--font-mono);
+    letter-spacing: 0.06em;
+}
+
+.reader-title {
+    position: relative;
+    margin: 12px 0 16px;
+    font-family: var(--font-display);
+    font-size: clamp(1.6rem, 3.2vw, 2.5rem);
+    font-weight: 800;
+    line-height: 1.14;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+    text-wrap: balance;
+}
+
+.reader-meta {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* 全页唯一的 ink 反白区块：阅读进度条 */
+.reader-meter {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 20px;
+    padding: 9px 14px;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-full);
+    background: var(--ink);
+    box-shadow: 4px 4px 0 var(--vermilion);
+}
+
+.reader-meter .progress {
+    flex: 1;
+    height: 9px;
+    border-color: var(--paper-1);
+    background: var(--paper-2);
+}
+
+.reader-meter .progress__bar {
+    background: var(--lime);
+}
+
+.reader-meter__label {
+    flex-shrink: 0;
+    color: var(--paper-1);
+    font-size: 0.7rem;
     font-weight: 700;
-    color: #2d4a3a;
-    margin-bottom: 6px;
+    letter-spacing: 0.1em;
 }
 
-/* 每个section的双栏布局 */
+/* --- 阅读工具条（纸白胶囊 + 墨线硬阴影） -------------------------------- */
+.reader-tools {
+    position: sticky;
+    top: var(--reader-sticky-top);
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 7px 9px;
+    border-radius: var(--r-full);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-1);
+    box-shadow: 4px 4px 0 var(--ink);
+}
+
+.reader-fontsize {
+    flex-shrink: 0;
+    border-color: var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+}
+
+.reader-fontsize__btn {
+    min-width: 38px;
+    height: 36px;
+    justify-content: center;
+    font-family: var(--font-mono);
+}
+
+.reader-tools__divider {
+    width: 2px;
+    height: 24px;
+    margin: 0 5px;
+    background: var(--ink);
+    opacity: 0.32;
+}
+
+.reader-tool {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    height: 40px;
+    padding: 0 14px;
+    border-radius: var(--r-full);
+    border: 1.5px solid transparent;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    transition: color var(--dur-fast), background var(--dur-fast), border-color var(--dur-fast),
+        transform var(--dur-fast) var(--ease-out);
+}
+
+.reader-tool i {
+    font-size: 0.86rem;
+}
+
+.reader-tool:hover {
+    color: var(--ink);
+    background: var(--paper-2);
+    border-color: var(--ink);
+}
+
+.reader-tool:active {
+    transform: translate(1px, 1px);
+}
+
+.reader-tool.is-active {
+    color: var(--paper-1);
+    background: var(--ink);
+    border-color: var(--ink);
+}
+
+.reader-tool--end {
+    margin-left: auto;
+}
+
+.reader-tools__hint {
+    margin-left: 4px;
+    color: var(--text-3);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+}
+
+/* --- 正文纸张（纸白卡片 + 墨线硬阴影） ---------------------------------- */
+.reader-sheet {
+    position: relative;
+    padding: clamp(18px, 3.4vw, 50px);
+    border-radius: var(--r-lg);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-1);
+    box-shadow: var(--shadow-card);
+    transition: max-width var(--dur) var(--ease-out), padding var(--dur) var(--ease-out);
+}
+
+.reader--focus .reader-sheet {
+    max-width: 920px;
+    margin: 0 auto;
+}
+
+.reader--focus .reader-hero__halftone,
+.reader--focus .fab-right-group {
+    display: none;
+}
+
+.reader--focus .reader-tools {
+    max-width: 920px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* 专注模式：收起答题侧栏与装饰，只留正文（仅“答题区”布局时保留） */
+.reader--focus .detail-layout-wrapper:not(.layout-right) :deep(.detail-sidebar-column) {
+    display: none;
+}
+
+.reader--focus .detail-layout-wrapper:not(.layout-right) :deep(.detail-main-column) {
+    flex: 1 1 100%;
+    max-width: 100%;
+}
+
+.reader-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 64px 0;
+    color: var(--text-3);
+    font-size: 0.86rem;
+}
+
+.detail-body {
+    position: relative;
+    color: var(--text-2);
+    font-size: var(--reader-fs);
+    line-height: var(--reader-lh);
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.detail-body:empty {
+    display: none;
+}
+
+/* 双栏：正文 + 答题区 */
 .detail-body :deep(.detail-section-two-column) {
     display: flex;
-    gap: 40px;
     align-items: flex-start;
-    margin-bottom: 40px;
-    border-bottom: 2px dashed rgba(120, 170, 155, 0.15);
-    padding-bottom: 32px;
+    gap: 34px;
+    margin: 0 0 34px;
+    padding-bottom: 26px;
+    border-bottom: 1.5px dashed var(--line-strong);
 }
 
 .detail-body :deep(.detail-section-two-column:last-child) {
-    border-bottom: none;
     margin-bottom: 0;
     padding-bottom: 0;
+    border-bottom: 0;
 }
 
 .detail-body :deep(.detail-main-column) {
-    flex: 2;
+    flex: 1 1 0;
     min-width: 0;
-    overflow: visible !important;
 }
 
 .detail-body :deep(.detail-sidebar-column) {
-    flex: 1;
+    flex: 0 1 36%;
     min-width: 0;
     position: sticky;
-    top: 20px;
-    max-height: calc(100vh - 40px);
+    top: calc(var(--header-h) + 82px);
+    max-height: calc(100vh - var(--header-h) - 108px);
     overflow-y: auto;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 16px;
-    padding: 16px 20px;
-    border: 1px solid rgba(120, 170, 155, 0.15);
+    padding: 16px 18px;
+    border-radius: var(--r-md);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-0);
+    box-shadow: 3px 3px 0 var(--ink);
 }
 
-/* 单栏模式：隐藏对侧列，可见列占满 */
 .detail-layout-wrapper.layout-left :deep(.detail-sidebar-column) {
     display: none;
 }
+
 .detail-layout-wrapper.layout-left :deep(.detail-main-column) {
-    flex: 1;
+    flex: 1 1 100%;
     max-width: 100%;
 }
 
 .detail-layout-wrapper.layout-right :deep(.detail-main-column) {
     display: none;
 }
-.detail-layout-wrapper.layout-right :deep(.detail-sidebar-column) {
-    flex: 1;
-    max-width: none;
-}
 
-/* 正文样式 */
-.detail-body {
-    background: rgba(255, 255, 255, 0.55);
-    backdrop-filter: blur(8px);
-    border-radius: 24px;
-    padding: 40px 48px;
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    box-shadow: 0 8px 32px var(--shadow);
-    line-height: 1.85;
-    color: #2d4a3a;
-    font-size: 1.05rem;
+.detail-layout-wrapper.layout-right :deep(.detail-sidebar-column) {
+    flex: 1 1 100%;
+    max-width: 100%;
+    position: static;
+    max-height: none;
     overflow: visible;
 }
 
-/* Markdown 内容样式 */
-.detail-body :deep(h1) {
-    color: #2d8cf0;
-    font-size: 2.2rem;
+/* 没有答题侧栏的文章：限制行宽，长文更好读 */
+.detail-layout-wrapper:not(.has-sidebar-content) {
+    max-width: 880px;
+    margin-inline: auto;
+}
+
+/* --- Markdown 排版 ------------------------------------------------------ */
+.detail-body :deep(h1),
+.detail-body :deep(h2),
+.detail-body :deep(h3),
+.detail-body :deep(h4),
+.detail-body :deep(h5),
+.detail-body :deep(h6) {
+    color: var(--ink);
+    font-family: var(--font-display);
     font-weight: 800;
-    margin: 1.4em 0 0.8em 0;
-    border-left: 6px solid #2d8cf0;
-    padding: 10px 14px;
-    background: linear-gradient(90deg, rgba(234, 246, 255, 0.95) 0%, rgba(234, 246, 255, 0.6) 60%);
-    border-radius: 8px;
+    scroll-margin-top: calc(var(--header-h) + 74px);
+}
+
+.detail-body :deep(h1) {
+    position: relative;
+    margin: 1.7em 0 0.8em;
+    padding-left: 22px;
+    font-size: 1.68em;
+    line-height: 1.22;
+    letter-spacing: -0.025em;
+}
+
+.detail-body :deep(h1:first-child) {
+    margin-top: 0;
+}
+
+.detail-body :deep(h1)::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.16em;
+    bottom: 0.16em;
+    width: 8px;
+    border-radius: 3px;
+    border: 1.5px solid var(--ink);
+    background: var(--vermilion);
 }
 
 .detail-body :deep(h2) {
-    color: #19be6b;
-    font-size: 1.8rem;
-    font-weight: 700;
-    margin: 1.2em 0 0.75em 0;
-    border-left: 5px solid #19be6b;
-    padding: 9px 12px;
-    background: linear-gradient(90deg, rgba(234, 255, 243, 0.95) 0%, rgba(234, 255, 243, 0.6) 60%);
-    border-radius: 6px;
+    position: relative;
+    margin: 1.5em 0 0.7em;
+    padding-left: 18px;
+    font-size: 1.32em;
+    line-height: 1.28;
+}
+
+.detail-body :deep(h2)::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.18em;
+    bottom: 0.18em;
+    width: 7px;
+    border-radius: 3px;
+    border: 1.5px solid var(--ink);
+    background: var(--cobalt);
 }
 
 .detail-body :deep(h3) {
-    color: #ff8f9e;
-    font-size: 1.4rem;
+    margin: 1.4em 0 0.6em;
+    padding-left: 10px;
+    border-left: 4px solid var(--butter);
+    font-size: 1.15em;
+}
+
+.detail-body :deep(h4),
+.detail-body :deep(h5),
+.detail-body :deep(h6) {
+    margin: 1.2em 0 0.5em;
+    font-size: 0.94em;
+    color: var(--cobalt);
+    font-family: var(--font-mono);
     font-weight: 700;
-    margin: 1.2em 0 0.8em 0;
-    border-left: 4px solid #ff8f9e;
-    padding: 8px 12px;
-    background: linear-gradient(90deg, rgba(255, 251, 230, 0.9) 0%, rgba(255, 251, 230, 0.6) 60%);
-    border-radius: 8px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
 .detail-body :deep(p) {
-    margin: 0.8em 0;
+    margin: 0.9em 0;
+    color: var(--text-2);
+}
+
+.detail-body :deep(a) {
+    color: var(--cobalt);
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 3px;
+}
+
+.detail-body :deep(a:hover) {
+    color: var(--ink);
+    background: var(--lime);
 }
 
 .detail-body :deep(ul),
 .detail-body :deep(ol) {
-    padding-left: 1.8em;
-    margin: 0.6em 0;
+    margin: 0.9em 0;
+    padding-left: 1.55em;
+}
+
+.detail-body :deep(ul) { list-style: disc; }
+.detail-body :deep(ol) { list-style: decimal; }
+
+.detail-body :deep(li) {
+    margin: 0.34em 0;
+    color: var(--text-2);
+}
+
+.detail-body :deep(li::marker) {
+    color: var(--vermilion);
+    font-weight: 700;
+}
+
+.detail-body :deep(li > ul),
+.detail-body :deep(li > ol) {
+    margin: 0.3em 0;
+}
+
+/* 黄绿荧光笔划线 */
+.detail-body :deep(strong),
+.detail-body :deep(b) {
+    color: var(--ink);
+    font-weight: 800;
+    background: linear-gradient(transparent 58%, var(--lime) 58%);
+    padding: 0 0.08em;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+}
+
+.detail-body :deep(em) {
+    color: var(--ink-soft);
+    font-style: italic;
 }
 
 .detail-body :deep(blockquote) {
-    border-left: 4px solid var(--teal);
-    padding: 0.6em 1.2em;
-    margin: 1em 0;
-    background: rgba(120, 200, 190, 0.08);
-    border-radius: 0 12px 12px 0;
+    margin: 1.3em 0;
+    padding: 0.9em 1.1em;
+    border: 1.5px solid var(--ink);
+    border-left-width: 8px;
+    border-left-color: var(--vermilion);
+    border-radius: 0 var(--r-xs) var(--r-xs) 0;
+    background: var(--paper-2);
+    color: var(--ink-soft);
+}
+
+.detail-body :deep(blockquote p:first-child) { margin-top: 0; }
+.detail-body :deep(blockquote p:last-child) { margin-bottom: 0; }
+
+.detail-body :deep(hr) {
+    height: 2px;
+    margin: 2.2em 0;
+    border: 0;
+    background: var(--ink);
+    opacity: 0.8;
 }
 
 .detail-body :deep(code) {
-    font-family: "Courier New", monospace;
-    background: rgba(120, 170, 155, 0.12);
-    padding: 0.15em 0.5em;
-    border-radius: 6px;
-    font-size: 0.9em;
-    color: #2a7a6a;
+    padding: 0.14em 0.42em;
+    border-radius: 5px;
+    border: 1px solid var(--line-strong);
+    background: var(--paper-2);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.88em;
 }
 
 .detail-body :deep(pre) {
-    background: #1a2a22;
-    color: #d4ece4;
-    padding: 18px 22px;
-    border-radius: 16px;
+    margin: 1.3em 0;
+    padding: 18px 20px;
+    border-radius: var(--r-sm);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
+    color: var(--ink);
+    box-shadow: 3px 3px 0 var(--line-strong);
+    font-size: 0.88em;
+    line-height: 1.75;
     overflow-x: auto;
-    margin: 1.2em 0;
 }
 
 .detail-body :deep(pre code) {
+    padding: 0;
+    border: 0;
     background: transparent;
     color: inherit;
-    padding: 0;
+    font-size: 1em;
 }
 
+/* 图片：纸白画框 + 圆角内边距 */
 .detail-body :deep(img) {
+    display: block;
     max-width: 100%;
-    border-radius: 16px;
-    margin: 1em 0;
+    height: auto;
+    margin: 1.3em auto;
+    padding: 10px;
+    border-radius: var(--r-sm);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-1);
+    box-shadow: 4px 4px 0 var(--ink);
 }
 
+.detail-body :deep(.image-wrapper),
+.detail-body :deep(.image-figure) {
+    max-width: 100%;
+    margin: 1.3em 0;
+}
+
+.detail-body :deep(.image-wrapper img),
+.detail-body :deep(.image-figure img) {
+    margin: 0 auto;
+}
+
+.detail-body :deep(.image-caption) {
+    margin-top: 0.6em;
+    color: var(--text-3);
+    font-size: 0.8em;
+    letter-spacing: 0.02em;
+    text-align: center;
+}
+
+.detail-body :deep(figure) {
+    margin: 1.3em 0;
+}
+
+/* 表格：印刷表格线 */
 .detail-body :deep(table) {
     width: 100%;
+    margin: 1.3em 0;
     border-collapse: collapse;
-    margin: 1em 0;
+    border: 1.5px solid var(--ink);
+    font-size: 0.92em;
+    overflow: hidden;
 }
 
 .detail-body :deep(th),
 .detail-body :deep(td) {
-    border: 1px solid rgba(120, 170, 155, 0.2);
-    padding: 8px 14px;
+    padding: 9px 14px;
+    border: 1px solid var(--line-strong);
     text-align: left;
+    vertical-align: top;
 }
 
 .detail-body :deep(th) {
-    background: rgba(120, 170, 155, 0.08);
+    color: var(--ink);
+    font-family: var(--font-display);
+    font-weight: 800;
+    background: var(--paper-2);
+    border-bottom: 1.5px solid var(--ink);
+    white-space: nowrap;
 }
 
-.detail-body :deep(strong),
-.detail-body :deep(b) {
-    color: #d57587;
+.detail-body :deep(tr:nth-child(even) td) {
+    background: var(--paper-0);
 }
 
-/* 题目卡片样式 */
+/* KaTeX：墨黑公式 + 纸面公式块 */
+.detail-body :deep(.katex) {
+    color: var(--ink);
+    font-size: 1.02em;
+}
+
+.detail-body :deep(.katex-display) {
+    margin: 1.2em 0;
+    padding: 14px 16px;
+    border-radius: var(--r-sm);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
+}
+
+.detail-body :deep(.katex .mord),
+.detail-body :deep(.katex .mbin),
+.detail-body :deep(.katex .mrel),
+.detail-body :deep(.katex .mopen),
+.detail-body :deep(.katex .mclose),
+.detail-body :deep(.katex .mpunct),
+.detail-body :deep(.katex .minner) {
+    color: inherit;
+}
+
+/* 题干题号（v-html 中由脚本生成） */
+.detail-body :deep(.stem-label) {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 8px;
+    padding: 2px 12px;
+    border-radius: var(--r-full);
+    border: 1.5px solid var(--ink);
+    background: var(--butter);
+    color: var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.74em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    vertical-align: middle;
+}
+
+/* --- 题块与作答卡片 ------------------------------------------------------ */
 :deep(.question-slot) {
     display: block;
-    margin: 18px 0;
+    margin: 22px 0;
+}
+
+:deep(.question-group) {
+    margin: 26px 0;
+    padding: 26px 22px 18px;
+    border-radius: var(--r-md);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-1);
+    box-shadow: 3px 3px 0 var(--line-strong);
 }
 
 :deep(.question-card) {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 6px 10px;
-    border-radius: 22px;
-    background: rgba(255, 255, 255, 0.25);
-    border: 1px solid rgba(120, 170, 155, 0.07);
-    box-shadow: none;
-    position: relative;
+    gap: 10px;
+    margin: 22px 0;
+    padding: 28px 18px 14px;
+    border-radius: var(--r-md);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-1);
+    box-shadow: 3px 3px 0 var(--ink);
+    transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+:deep(.question-card:hover) {
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 var(--ink);
 }
 
 :deep(.question-card-header) {
@@ -1642,137 +2317,139 @@ onUnmounted(() => {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    opacity: 0.45;
-    font-size: 0.82rem;
     min-height: 20px;
+    color: var(--text-3);
+    font-size: 0.78rem;
+    font-weight: 600;
 }
 
-/* 状态角标：左上角绝对定位 */
-:deep(.question-card-study > .question-pill) {
-    position: absolute;
-    top: -10px;
-    left: 12px;
-    z-index: 1;
-    padding: 1px 10px;
-    min-height: 20px;
-    border-radius: 999px;
-    font-size: 0.68rem;
-    font-weight: 600;
-    line-height: 1.5;
-    background: rgba(120, 170, 155, 0.08);
-    color: #4c6b5b;
-    border: 1px solid rgba(120, 170, 155, 0.15);
+:deep(.question-card-header:empty) {
+    display: none;
+}
+
+/* 题号 / 状态角标 */
+:deep(.question-pill) {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 5px;
+    min-height: 22px;
+    padding: 2px 10px;
+    border-radius: var(--r-full);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1.5;
+    white-space: nowrap;
 }
 
-:deep(.question-card-study > .question-pill.is-waiting),
-:deep(.question-card-study > .question-pill.is-muted) {
-    background: rgba(240, 244, 242, 0.7);
-    color: #7a8a80;
-    border-color: rgba(180, 200, 190, 0.3);
+:deep(.question-pill.is-number) {
+    position: absolute;
+    top: -12px;
+    left: 16px;
+    z-index: 1;
+    background: var(--cobalt);
+    color: var(--paper-1);
+    box-shadow: 2px 2px 0 var(--ink);
 }
 
-:deep(.question-card-study > .question-pill.is-pending) {
-    background: rgba(242, 226, 172, 0.6);
-    color: #7b6420;
-    border-color: rgba(227, 203, 124, 0.35);
-}
-
-:deep(.question-card-study > .question-pill.is-correct) {
-    background: rgba(205, 237, 221, 0.75);
-    color: #2f7b57;
-    border-color: rgba(80, 176, 122, 0.25);
-}
-
-:deep(.question-card-study > .question-pill.is-partial) {
-    background: rgba(255, 234, 188, 0.7);
-    color: #a87b19;
-    border-color: rgba(227, 188, 90, 0.3);
-}
-
-:deep(.question-card-study > .question-pill.is-wrong) {
-    background: rgba(255, 224, 224, 0.7);
-    color: #b65661;
-    border-color: rgba(208, 116, 126, 0.3);
-}
-
-/* 题号角标：左上角（与状态角标同款样式） */
-:deep(.question-card-study > .question-pill.is-number) {
-    background: rgba(91, 168, 164, 0.15);
-    color: #2f6a66;
-    border-color: rgba(91, 168, 164, 0.3);
-}
-
-/* 状态角标：右上角 */
 :deep(.question-card-study > .question-pill:not(.is-number)) {
+    position: absolute;
+    top: -12px;
     left: auto;
-    right: 12px;
+    right: 16px;
+    z-index: 1;
 }
 
-/* 题干题号标签（正文中显示「第 N 题」） */
-:deep(.stem-label) {
-    display: inline-block;
-    padding: 2px 12px;
-    border-radius: 999px;
-    background: rgba(91, 168, 164, 0.15);
-    color: #2f6a66;
-    font-size: 0.82rem;
-    font-weight: 600;
-    border: 1px solid rgba(91, 168, 164, 0.3);
-    margin-right: 8px;
-    vertical-align: middle;
+:deep(.question-pill.is-waiting),
+:deep(.question-pill.is-muted) {
+    background: var(--paper-2);
+    color: var(--text-2);
 }
 
-/* 大题分组框（公共题干 + 小题，纯样式作用） */
-:deep(.question-group) {
-    border: 2px solid rgba(91, 168, 164, 0.35);
-    border-radius: 20px;
-    padding: 20px 22px 14px;
-    background: rgba(240, 248, 246, 0.45);
-    margin: 22px 0;
+:deep(.question-pill.is-pending) {
+    background: var(--butter);
+    color: var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
 }
 
+:deep(.question-pill.is-partial) {
+    background: var(--sky);
+    color: var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+}
+
+:deep(.question-pill.is-correct),
+:deep(.question-pill.is-auto) {
+    background: var(--lime);
+    color: var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+}
+
+:deep(.question-pill.is-wrong) {
+    background: var(--vermilion);
+    color: var(--paper-1);
+    box-shadow: 2px 2px 0 var(--ink);
+}
+
+:deep(.question-pill.is-reviewed) {
+    background: var(--paper-2);
+    color: var(--ink);
+}
+
+/* 作答输入：纸上输入框 */
 :deep(.question-textarea) {
     width: 100%;
+    min-height: 82px;
+    padding: 12px 14px;
+    border-radius: var(--r-sm);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-0);
+    color: var(--text-1);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    line-height: 1.7;
     resize: vertical;
-    min-height: 64px;
-    border-radius: 14px;
-    border: 1px solid rgba(120, 170, 155, 0.22);
-    background: rgba(255, 255, 255, 0.98);
-    padding: 10px 14px;
-    font-size: 1rem;
-    color: #345143;
     outline: none;
-    line-height: 1.6;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-    box-shadow: 0 2px 8px rgba(80, 130, 120, 0.04);
+    transition: background var(--dur-fast), box-shadow var(--dur-fast);
+}
+
+:deep(.question-textarea::placeholder) {
+    color: var(--text-4);
+}
+
+:deep(.question-textarea:hover) {
+    background: var(--paper-1);
 }
 
 :deep(.question-textarea:focus) {
-    border-color: rgba(224, 199, 106, 0.8);
-    box-shadow: 0 0 0 4px rgba(243, 227, 162, 0.25);
-}
-
-:deep(.question-textarea.is-showing-answer) {
-    background: #eaffea !important;
-    border-color: #4caf50 !important;
-    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.2) !important;
+    background: var(--paper-1);
+    box-shadow: 3px 3px 0 var(--ink);
 }
 
 :deep(.question-textarea.is-locked),
 :deep(.question-textarea[readonly]) {
-    background: rgba(249, 247, 240, 0.95);
-    color: #66756c;
+    border-style: dashed;
+    background: var(--paper-2);
+    color: var(--text-2);
 }
 
+:deep(.question-textarea.is-showing-answer) {
+    border-color: var(--green) !important;
+    background: var(--paper-1) !important;
+    color: var(--text-1);
+    box-shadow: 3px 3px 0 var(--green) !important;
+}
+
+/* 卡片底部操作 */
 :deep(.question-card-footer) {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
-    opacity: 0.5;
+    gap: 8px;
     padding-top: 2px;
 }
 
@@ -1780,76 +2457,42 @@ onUnmounted(() => {
     justify-content: space-between;
 }
 
-/* 非角标的 pill（review/answer 模式中使用） */
-:deep(.question-card:not(.question-card-study) > .question-pill),
-:deep(.question-card-review .question-pill),
-:deep(.question-card-answer .question-pill) {
+:deep(.question-action-btn) {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 0 10px;
-    min-height: 24px;
-    border-radius: 999px;
-    background: rgba(120, 170, 155, 0.08);
-    color: #4c6b5b;
-    font-size: 0.75rem;
-    border: 1px solid rgba(120, 170, 155, 0.10);
+    gap: 7px;
+    min-height: 40px;
+    padding: 8px 15px;
+    border-radius: var(--r-full);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-1);
+    color: var(--ink);
+    font-size: 0.78rem;
+    font-weight: 700;
+    box-shadow: 2px 2px 0 var(--ink);
+    transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
+        background var(--dur-fast);
 }
 
-:deep(.question-card:not(.question-card-study) > .question-pill.is-number) {
-    position: absolute;
-    top: -10px;
-    left: 12px;
-    z-index: 1;
-    padding: 1px 10px;
-    min-height: 20px;
-    border-radius: 999px;
-    font-size: 0.68rem;
-    font-weight: 600;
-    line-height: 1.5;
-    background: rgba(91, 168, 164, 0.15);
-    color: #2f6a66;
-    border: 1px solid rgba(91, 168, 164, 0.3);
+:deep(.question-action-btn:hover) {
+    background: var(--paper-2);
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
 }
 
-:deep(.question-card-review .question-pill.is-waiting),
-:deep(.question-card-review .question-pill.is-muted),
-:deep(.question-card-answer .question-pill.is-waiting),
-:deep(.question-card-answer .question-pill.is-muted) {
-    background: rgba(216, 222, 219, 0.3);
-    color: #6d756e;
+:deep(.question-action-btn:active) {
+    transform: translate(1px, 1px);
+    box-shadow: none;
 }
 
-:deep(.question-card-review .question-pill.is-pending),
-:deep(.question-card-answer .question-pill.is-pending) {
-    background: rgba(242, 226, 172, 0.35);
-    color: #7b6420;
-    border-color: rgba(227, 203, 124, 0.25);
+:deep(.question-action-btn:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: 2px 2px 0 rgba(28, 26, 20, 0.35);
 }
 
-:deep(.question-card-review .question-pill.is-correct),
-:deep(.question-card-review .question-pill.is-auto),
-:deep(.question-card-answer .question-pill.is-correct),
-:deep(.question-card-answer .question-pill.is-auto) {
-    background: rgba(205, 237, 221, 0.55);
-    color: #2f7b57;
-    border-color: rgba(80, 176, 122, 0.15);
-}
-
-:deep(.question-card-review .question-pill.is-partial),
-:deep(.question-card-answer .question-pill.is-partial) {
-    background: rgba(255, 234, 188, 0.6);
-    color: #a87b19;
-    border-color: rgba(227, 188, 90, 0.2);
-}
-
-:deep(.question-card-review .question-pill.is-wrong),
-:deep(.question-card-answer .question-pill.is-wrong) {
-    background: rgba(255, 224, 224, 0.6);
-    color: #b65661;
-    border-color: rgba(208, 116, 126, 0.2);
-}
-
+/* 批阅工具 */
 :deep(.question-review-toolbar) {
     display: flex;
     align-items: center;
@@ -1858,168 +2501,154 @@ onUnmounted(() => {
 }
 
 :deep(.question-icon-btn) {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    border: 1px solid transparent;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-    box-shadow: 0 6px 16px rgba(80, 130, 120, 0.08);
-    background: rgba(255, 255, 255, 0.92);
-    color: #496556;
-}
-
-:deep(.question-icon-btn.is-correct) {
-    background: rgba(205, 237, 221, 0.88);
-    color: #2f7b57;
-    border-color: rgba(80, 176, 122, 0.18);
-}
-
-:deep(.question-icon-btn.is-partial) {
-    background: rgba(255, 234, 188, 0.9);
-    color: #a87b19;
-    border-color: rgba(227, 188, 90, 0.24);
-}
-
-:deep(.question-icon-btn.is-wrong) {
-    background: rgba(255, 224, 224, 0.92);
-    color: #b65661;
-    border-color: rgba(208, 116, 126, 0.24);
+    width: 42px;
+    height: 42px;
+    border-radius: var(--r-full);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-1);
+    color: var(--ink);
+    font-size: 1rem;
+    box-shadow: 2px 2px 0 var(--ink);
+    transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
+        background var(--dur-fast);
 }
 
 :deep(.question-icon-btn:hover) {
-    transform: translateY(-1px);
-    box-shadow: 0 10px 20px rgba(80, 130, 120, 0.12);
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
+}
+
+:deep(.question-icon-btn:active) {
+    transform: translate(1px, 1px);
+    box-shadow: none;
+}
+
+:deep(.question-icon-btn.is-correct) {
+    background: var(--lime);
+    color: var(--ink);
+}
+
+:deep(.question-icon-btn.is-partial) {
+    background: var(--sky);
+    color: var(--ink);
+}
+
+:deep(.question-icon-btn.is-wrong) {
+    background: var(--vermilion);
+    color: var(--paper-1);
 }
 
 :deep(.question-auto-grade) {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: #5b6d63;
-    font-size: 0.9rem;
+    color: var(--text-2);
+    font-size: 0.82rem;
+    font-weight: 600;
 }
 
-:deep(.question-auto-grade input) {
+:deep(.question-auto-grade input[type="checkbox"]) {
     width: 18px;
     height: 18px;
-    accent-color: #d9ba4b;
+    accent-color: var(--cobalt);
 }
 
-:deep(.question-action-btn) {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    align-self: flex-end;
-    padding: 10px 16px;
-    border-radius: 999px;
-    border: 1px solid rgba(120, 170, 155, 0.18);
-    background: linear-gradient(135deg, rgba(255, 248, 214, 0.98), rgba(243, 227, 162, 0.92));
-    color: #705d13;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 8px 18px rgba(80, 130, 120, 0.08);
-    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-}
-
-:deep(.question-action-btn:hover) {
-    transform: translateY(-1px);
-    box-shadow: 0 12px 22px rgba(80, 130, 120, 0.12);
-}
-
-:deep(.question-action-btn:disabled) {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-}
-
+/* 参考答案 */
 :deep(.question-reference-wrapper) {
-    margin-top: 4px;
-    padding: 10px 14px;
-    background: rgba(245, 248, 250, 0.8);
-    border-radius: 12px;
-    border-left: 3px solid #7ab8a0;
+    padding: 12px 14px;
+    border: 1.5px solid var(--ink);
+    border-left-width: 7px;
+    border-left-color: var(--cobalt);
+    border-radius: 0 var(--r-xs) var(--r-xs) 0;
+    background: var(--paper-2);
 }
 
 :deep(.question-reference-label) {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #4c6b5b;
     display: block;
     margin-bottom: 4px;
+    color: var(--cobalt);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
 }
 
 :deep(.question-reference-text) {
-    font-size: 0.95rem;
-    color: #2d4a3a;
-    padding: 4px 0;
+    padding: 2px 0;
+    color: var(--ink);
+    font-size: 0.92rem;
     white-space: pre-wrap;
     word-break: break-word;
 }
 
-/* FAB 按钮 */
+/* --- 悬浮提交 / 快捷控件 ------------------------------------------------- */
 .fab-container {
     position: fixed;
-    bottom: 30px;
-    right: 30px;
-    z-index: 999;
+    right: 24px;
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    z-index: 998;
 }
 
 .fab-btn {
-    width: 156px;
-    height: 56px;
-    border-radius: 28px;
-    border: none;
-    background: linear-gradient(135deg, rgba(255, 248, 214, 0.98), rgba(243, 227, 162, 0.92));
-    color: #705d13;
-    font-size: 1.4rem;
-    cursor: pointer;
-    box-shadow: 0 6px 24px rgba(217, 186, 75, 0.4);
-    transition: all 0.3s ease;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 9px;
+    min-width: 150px;
+    height: 54px;
+    padding: 0 22px;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-full);
+    background: var(--vermilion);
+    color: var(--paper-1);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    box-shadow: 5px 5px 0 var(--ink);
+    transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
+        filter var(--dur-fast);
 }
 
 .fab-btn:hover {
-    transform: scale(1.08) translateY(-2px);
-    box-shadow: 0 10px 32px rgba(217, 186, 75, 0.5);
+    transform: translate(-2px, -2px);
+    box-shadow: 7px 7px 0 var(--ink);
+    filter: brightness(1.04);
 }
 
 .fab-btn:active {
-    transform: scale(0.94);
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 var(--ink);
 }
 
 .fab-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    opacity: 0.45;
     transform: none;
+    box-shadow: 3px 3px 0 rgba(28, 26, 20, 0.4);
 }
 
 .fab-btn.is-success {
-    background: #4caf50 !important;
-    color: white !important;
+    background: var(--lime) !important;
+    color: var(--ink) !important;
 }
 
 .fab-btn.is-error {
-    background: #ef5350 !important;
-    color: white !important;
+    background: var(--coral) !important;
+    color: var(--ink) !important;
 }
 
-/* 右下角悬浮按钮组 */
+/* 桌面端右侧快捷组 */
 .fab-right-group {
     position: fixed;
-    bottom: 100px;
-    right: 30px;
-    z-index: 998;
+    right: 24px;
+    bottom: calc(24px + 54px + 22px + env(safe-area-inset-bottom));
+    z-index: 997;
     display: flex;
     flex-direction: row;
-    gap: 12px;
+    gap: 10px;
     align-items: center;
 }
 
@@ -2028,66 +2657,70 @@ onUnmounted(() => {
     z-index: auto;
 }
 
-/* 布局切换悬浮球 + 答题卡悬浮球 + 目录悬浮球（相同样式） */
 .layout-toggle-fab,
 .answer-sheet-fab,
 .toc-fab {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    border: none;
-    background: linear-gradient(135deg, var(--teal), var(--teal-dark));
-    color: white;
-    font-size: 1.1rem;
-    cursor: pointer;
-    box-shadow: 0 4px 20px rgba(123, 200, 196, 0.45);
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.25s ease;
+    width: 46px;
+    height: 46px;
+    border-radius: var(--r-full);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-1);
+    color: var(--ink);
+    font-size: 1rem;
+    box-shadow: 3px 3px 0 var(--ink);
+    transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
+        background var(--dur-fast);
 }
 
 .layout-toggle-fab:hover,
-.answer-sheet-fab:hover {
-    transform: scale(1.12) translateY(-2px);
-    box-shadow: 0 8px 28px rgba(123, 200, 196, 0.55);
+.answer-sheet-fab:hover,
+.toc-fab:hover {
+    background: var(--paper-2);
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 var(--ink);
 }
 
 .layout-toggle-fab:active,
-.answer-sheet-fab:active {
-    transform: scale(0.92);
+.answer-sheet-fab:active,
+.toc-fab:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0 var(--ink);
 }
 
-/* 答题卡侧边栏 */
+/* --- 纸卡抽屉（答题卡 / 目录） ----------------------------------------- */
 .answer-sheet-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    inset: 0;
     z-index: 1000;
-    background: rgba(0, 0, 0, 0.15);
+    background: rgba(28, 26, 20, 0.42);
     opacity: 0;
-    transition: opacity 0.3s ease;
+    pointer-events: none;
+    transition: opacity var(--dur) var(--ease-out);
 }
+
 .answer-sheet-overlay.overlay-active {
     opacity: 1;
+    pointer-events: auto;
 }
 
 .answer-sheet-sidebar {
     position: fixed;
     top: 0;
     left: 0;
-    width: 300px;
-    height: 100%;
-    background: #ffffff;
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
-    z-index: 1001;
     display: flex;
     flex-direction: column;
-    transform: translateX(-100%);
-    transition: transform 0.3s ease;
+    width: min(396px, 92vw);
+    height: 100%;
+    border-right: 2px solid var(--ink);
+    background: var(--paper-1);
+    box-shadow: 6px 0 0 var(--ink);
+    transform: translateX(-102%);
+    transition: transform var(--dur) var(--ease-out);
 }
+
 .answer-sheet-sidebar.sidebar-open {
     transform: translateX(0);
 }
@@ -2096,54 +2729,121 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 14px;
     padding: 20px 20px 16px;
-    border-bottom: 1px solid rgba(120, 170, 155, 0.12);
+    border-bottom: 1.5px solid var(--ink);
     flex-shrink: 0;
 }
 
+.answer-sheet-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
 .answer-sheet-title {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #2d4a3a;
+    font-family: var(--font-display);
+    font-size: 1.18rem;
+    font-weight: 800;
+    color: var(--ink);
+}
+
+.answer-sheet-sub {
+    color: var(--text-3);
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
 }
 
 .answer-sheet-close-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(120, 170, 155, 0.08);
-    color: #4c6b5b;
-    cursor: pointer;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 1rem;
-    transition: background 0.2s ease;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--r-xs);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-1);
+    color: var(--ink);
+    font-size: 0.95rem;
+    box-shadow: 2px 2px 0 var(--ink);
+    flex-shrink: 0;
+    transition: background var(--dur-fast), transform var(--dur-fast) var(--ease-out),
+        box-shadow var(--dur-fast);
 }
+
 .answer-sheet-close-btn:hover {
-    background: rgba(120, 170, 155, 0.2);
+    background: var(--butter);
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
 }
+
+.answer-sheet-close-btn:active {
+    transform: translate(1px, 1px);
+    box-shadow: none;
+}
+
+.answer-sheet-legend {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 12px 20px;
+    border-bottom: 1.5px solid var(--ink);
+    color: var(--text-3);
+    font-size: 0.7rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
+    flex-shrink: 0;
+}
+
+.legend-dot.is-pending { background: var(--butter); }
+.legend-dot.is-correct { background: var(--lime); }
+.legend-dot.is-wrong { background: var(--vermilion); }
 
 .answer-sheet-body {
     flex: 1;
     overflow-y: auto;
-    padding: 16px 20px 24px;
+    padding: 18px 20px 24px;
+}
+
+.answer-sheet-foot {
+    padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
+    border-top: 1.5px solid var(--ink);
+    background: var(--paper-0);
+    flex-shrink: 0;
 }
 
 .answer-sheet-section {
-    margin-bottom: 20px;
+    margin-bottom: 22px;
 }
+
 .answer-sheet-section:last-child {
     margin-bottom: 0;
 }
 
 .answer-sheet-section-title {
-    font-size: 0.88rem;
-    font-weight: 600;
-    color: #3a5a4a;
     margin-bottom: 10px;
-    line-height: 1.4;
+    color: var(--ink);
+    font-family: var(--font-display);
+    font-size: 0.88rem;
+    font-weight: 800;
+    line-height: 1.45;
     word-break: break-word;
 }
 
@@ -2154,70 +2854,77 @@ onUnmounted(() => {
 }
 
 .answer-sheet-cell {
-    width: 32px;
-    height: 32px;
-    border-radius: 6px;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--r-xs);
+    border: 1.5px solid var(--ink);
+    background: var(--paper-1);
+    color: var(--ink);
+    font-family: var(--font-mono);
     font-size: 0.8rem;
-    font-weight: 600;
-    cursor: default;
-    border: 1px solid rgba(120, 170, 155, 0.15);
-    background: rgba(240, 244, 242, 0.5);
-    color: #6d7a72;
-    transition: transform 0.15s ease;
-}
-.answer-sheet-cell:hover {
-    transform: scale(1.15);
+    font-weight: 700;
+    box-shadow: 2px 2px 0 var(--ink);
+    transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 
-/* 答题卡单元格状态色 */
+.answer-sheet-cell:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
+}
+
+.answer-sheet-cell:active {
+    transform: translate(1px, 1px);
+    box-shadow: none;
+}
+
 .answer-sheet-cell.cell-unsubmitted {
-    background: rgba(240, 244, 242, 0.4);
-    color: #8a9a90;
-    border-color: rgba(120, 170, 155, 0.12);
+    background: var(--paper-2);
+    color: var(--text-3);
 }
+
 .answer-sheet-cell.cell-pending {
-    background: rgba(242, 226, 172, 0.55);
-    color: #7b6420;
-    border-color: rgba(227, 203, 124, 0.3);
+    background: var(--butter);
+    color: var(--ink);
 }
+
 .answer-sheet-cell.cell-correct {
-    background: rgba(205, 237, 221, 0.7);
-    color: #2f7b57;
-    border-color: rgba(80, 176, 122, 0.2);
+    background: var(--lime);
+    color: var(--ink);
 }
+
 .answer-sheet-cell.cell-partial {
-    background: rgba(255, 234, 188, 0.7);
-    color: #a87b19;
-    border-color: rgba(227, 188, 90, 0.25);
+    background: var(--sky);
+    color: var(--ink);
 }
+
 .answer-sheet-cell.cell-wrong {
-    background: rgba(255, 224, 224, 0.7);
-    color: #b65661;
-    border-color: rgba(208, 116, 126, 0.25);
+    background: var(--vermilion);
+    color: var(--paper-1);
 }
 
 .answer-sheet-empty {
+    padding: 48px 0;
+    color: var(--text-3);
+    font-size: 0.86rem;
     text-align: center;
-    color: #8a9a90;
-    font-size: 0.9rem;
-    padding: 40px 0;
 }
 
-/* 目录树样式 */
+/* 目录树 */
 .toc-body {
     flex: 1;
     overflow-y: auto;
-    padding: 8px 0 24px;
+    padding: 10px 0 calc(20px + env(safe-area-inset-bottom));
 }
 
 .toc-h1-item {
-    border-bottom: 1px solid rgba(120, 170, 155, 0.08);
+    border-bottom: 1.5px solid var(--ink);
 }
+
 .toc-h1-item:last-child {
-    border-bottom: none;
+    border-bottom: 0;
 }
 
 .toc-h1-title {
@@ -2225,181 +2932,256 @@ onUnmounted(() => {
     align-items: center;
     gap: 10px;
     padding: 12px 20px;
-    cursor: pointer;
+    color: var(--ink);
+    font-family: var(--font-display);
     font-size: 0.92rem;
-    font-weight: 600;
-    color: #2d4a3a;
-    transition: background 0.15s ease;
+    font-weight: 800;
     user-select: none;
+    transition: background var(--dur-fast);
 }
-.toc-h1-title:hover {
-    background: rgba(120, 170, 155, 0.06);
+
+.toc-h1-title:hover,
+.toc-h1-title.is-open {
+    background: var(--paper-2);
 }
-.toc-h1-title i {
-    font-size: 0.7rem;
-    color: #7a9a8a;
-    width: 12px;
+
+.toc-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    margin-left: -8px;
+    border-radius: 8px;
+    color: var(--ink);
     flex-shrink: 0;
 }
 
+.toc-toggle:hover {
+    background: var(--butter);
+}
+
+.toc-arrow {
+    font-size: 0.66rem;
+}
+
+.toc-text {
+    cursor: pointer;
+    line-height: 1.45;
+}
+
+.toc-text:hover {
+    color: var(--cobalt);
+}
+
 .toc-h2-list {
-    background: rgba(245, 248, 246, 0.4);
+    padding: 4px 0 8px;
+    border-top: 1px dashed var(--line-strong);
+    background: var(--paper-0);
 }
 
 .toc-h2-item {
-    padding: 8px 20px 8px 44px;
-    font-size: 0.85rem;
-    color: #4c6b5b;
-    cursor: pointer;
-    transition: background 0.15s ease;
-    user-select: none;
+    display: block;
+    width: 100%;
+    padding: 8px 20px 8px 46px;
+    color: var(--text-2);
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-align: left;
+    line-height: 1.45;
+    transition: color var(--dur-fast), background var(--dur-fast);
 }
+
 .toc-h2-item:hover {
-    background: rgba(120, 170, 155, 0.08);
-    color: #1d4a3a;
+    color: var(--ink);
+    background: var(--paper-2);
 }
 
-/* Toast 弹窗 */
-:global(.custom-toast) {
-    position: fixed;
-    top: 30px;
-    left: 50%;
-    transform: translateX(-50%) translateY(-20px);
-    padding: 8px 25px;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(12px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
-    font-size: 1.05rem;
-    font-weight: 500;
-    color: #2d4a3a;
-    z-index: 9999;
-    opacity: 0;
-    transition: opacity 0.3s ease, transform 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.6);
-}
-
-:global(.custom-toast.toast-visible) {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-}
-
-:global(.custom-toast.toast-success) {
-    border: 4px solid #4caf50;
-    color: #1e4a2a;
-}
-
-:global(.custom-toast.toast-error) {
-    border: 4px solid #ef5350;
-    color: #7a2a2a;
-}
-
-:global(.custom-toast.toast-info) {
-    border: 4px solid #42a5f5;
-    color: #1a3a5a;
-}
-
-/* 响应式 */
-@media (min-width: 1024px) {
-    .detail-container {
-        width: 100%;
-        padding: 50px 60px 120px;
-    }
-
-    .detail-title {
-        font-size: 3rem;
-    }
-
-    .detail-body {
-        padding: 56px 64px;
-        font-size: 1.25rem;
-    }
-}
-
-@media (min-width: 641px) and (max-width: 1023px) {
-    .detail-container {
-        width: 100%;
-        padding: 30px 28px 70px;
+/* --- 响应式：375 / 768 / 1440 ------------------------------------------- */
+@media (max-width: 1023px) {
+    .fab-right-group {
+        display: none;
     }
 
     .detail-body :deep(.detail-section-two-column) {
         flex-direction: column;
-        gap: 10px;
-        padding-bottom: 16px;
-        margin-bottom: 16px;
+        gap: 18px;
+        padding-bottom: 22px;
+        margin-bottom: 26px;
     }
 
     .detail-body :deep(.detail-sidebar-column) {
+        position: static;
+        flex: 1 1 auto;
+        width: 100%;
         max-width: 100%;
         max-height: none;
-        overflow-y: visible;
-        position: static;
-        padding: 10px 0 0 0;
-        border: none;
-        background: transparent;
+        overflow: visible;
+    }
+
+    .detail-layout-wrapper.layout-right :deep(.detail-sidebar-column) {
+        max-width: 100%;
     }
 }
 
-@media (max-width: 640px) {
-    .detail-container {
-        width: 100%;
-        padding: 16px 14px 40px;
-        min-width: auto;
+@media (max-width: 900px) {
+    .reader {
+        padding: 22px 18px calc(88px + env(safe-area-inset-bottom) + 28px);
     }
 
-    .detail-title {
-        font-size: 1.6rem;
+    .reader-hero {
+        padding: 22px 20px 20px;
     }
 
-    .detail-body {
-        padding: 18px 16px;
+    .reader-tools {
+        gap: 4px;
+        border-radius: var(--r-lg);
+        box-shadow: 3px 3px 0 var(--ink);
+    }
+
+    .reader-tools__hint,
+    .reader-tools__divider {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .reader-tools {
+        top: calc(var(--header-h) - 12px);
+    }
+
+    .detail-body :deep(h1),
+    .detail-body :deep(h2),
+    .detail-body :deep(h3),
+    .detail-body :deep(h4) {
+        scroll-margin-top: calc(var(--header-h) + 96px);
+    }
+}
+
+@media (max-width: 760px) {
+    .reader {
+        padding: 18px 14px calc(88px + env(safe-area-inset-bottom) + 56px);
+    }
+
+    .reader-hero {
+        padding: 20px 16px 18px;
+    }
+
+    .reader-hero__halftone {
+        display: none;
+    }
+
+    .reader-title {
+        margin: 10px 0 12px;
+        font-size: 1.55rem;
+    }
+
+    .reader-meter {
+        margin-top: 14px;
+        padding: 8px 12px;
+        box-shadow: 3px 3px 0 var(--vermilion);
+    }
+
+    .reader-tools {
+        top: calc(var(--header-h) - 12px);
+        flex-wrap: wrap;
+        padding: 6px;
+        box-shadow: 3px 3px 0 var(--ink);
+    }
+
+    .detail-body :deep(h1),
+    .detail-body :deep(h2),
+    .detail-body :deep(h3),
+    .detail-body :deep(h4) {
+        scroll-margin-top: calc(var(--header-h) + 108px);
+    }
+
+    .reader-tool {
+        height: 40px;
+        padding: 0 12px;
+    }
+
+    .reader-tool span {
+        display: none;
+    }
+
+    .reader-tool--end {
+        margin-left: 0;
+    }
+
+    .reader-tool i {
         font-size: 0.95rem;
     }
 
-    .detail-body :deep(.detail-section-two-column) {
-        flex-direction: column;
-        gap: 10px;
-        padding-bottom: 16px;
-        margin-bottom: 16px;
+    .reader-fontsize__btn {
+        min-width: 34px;
+        padding: 0 10px;
     }
 
-    .detail-body :deep(.detail-sidebar-column) {
-        max-width: 100%;
-        position: static;
-        padding: 10px 0 0 0;
-        border: none;
-        max-height: none;
-        overflow-y: visible;
-        background: transparent;
+    .reader-sheet {
+        padding: 18px 16px 22px;
+        box-shadow: 4px 4px 0 var(--ink);
+    }
+
+    .detail-body {
+        --reader-fs: 1rem;
+    }
+
+    .detail-body :deep(th),
+    .detail-body :deep(td) {
+        padding: 7px 10px;
+    }
+
+    .detail-body :deep(table) {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    .detail-body :deep(img) {
+        padding: 7px;
+        box-shadow: 3px 3px 0 var(--ink);
     }
 
     .fab-container {
-        bottom: 16px;
-        right: 16px;
+        right: 14px;
+        bottom: calc(88px + env(safe-area-inset-bottom));
     }
 
     .fab-btn {
-        width: 120px;
-        height: 44px;
-        font-size: 1.1rem;
-    }
-
-    .fab-right-group {
-        bottom: 72px;
-        right: 16px;
-        gap: 10px;
-    }
-
-    .layout-toggle-fab,
-    .answer-sheet-fab,
-    .toc-fab {
-        width: 42px;
-        height: 42px;
-        font-size: 1rem;
+        min-width: 132px;
+        height: 50px;
+        font-size: 0.95rem;
+        box-shadow: 4px 4px 0 var(--ink);
     }
 
     .answer-sheet-sidebar {
-        width: 260px;
+        width: 100%;
+        max-width: 100%;
+        border-right: 0;
+        box-shadow: none;
+    }
+
+    .answer-sheet-cell {
+        width: 44px;
+        height: 44px;
     }
 }
+
+@media (max-width: 380px) {
+    .reader-meta .chip {
+        height: 28px;
+        padding: 0 9px;
+        font-size: 0.7rem;
+    }
+
+    .reader-meter__label {
+        font-size: 0.64rem;
+    }
+
+    .reader-tools {
+        padding: 5px;
+    }
+}
+
 </style>

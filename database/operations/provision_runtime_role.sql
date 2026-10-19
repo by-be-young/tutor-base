@@ -15,7 +15,7 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'tutor_base_app') THEN
         CREATE ROLE tutor_base_app
             LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS
-            CONNECTION LIMIT 5;
+            CONNECTION LIMIT 20;
     END IF;
 END
 $roles$;
@@ -36,7 +36,7 @@ ALTER ROLE tutor_base_runtime
     NOLOGIN NOCREATEDB NOCREATEROLE INHERIT;
 ALTER ROLE tutor_base_app
     LOGIN NOCREATEDB NOCREATEROLE INHERIT
-    CONNECTION LIMIT 5;
+    CONNECTION LIMIT 20;
 ALTER ROLE tutor_base_app SET statement_timeout = '15s';
 ALTER ROLE tutor_base_app SET lock_timeout = '3s';
 ALTER ROLE tutor_base_app SET idle_in_transaction_session_timeout = '15s';
@@ -59,15 +59,18 @@ GRANT SELECT, INSERT, UPDATE ON TABLE public.account_activation TO tutor_base_ru
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.account_session TO tutor_base_runtime;
 GRANT SELECT, INSERT ON TABLE public.daily_check_in TO tutor_base_runtime;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.user_points TO tutor_base_runtime;
+GRANT SELECT, INSERT ON TABLE public.task_claims TO tutor_base_runtime;
 GRANT SELECT, INSERT ON TABLE public.card_collection TO tutor_base_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.article_answer_keys TO tutor_base_runtime;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.article_question_submissions TO tutor_base_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.wrong_questions TO tutor_base_runtime;
+GRANT SELECT, INSERT ON TABLE public.achievement_claims TO tutor_base_runtime;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.task_assignments TO tutor_base_runtime;
 GRANT USAGE ON SEQUENCE public.student_id_seq, public.account_id_seq,
     public.account_activation_id_seq, public.account_session_id_seq,
-    public.daily_check_in_id_seq, public.card_collection_id_seq,
+    public.daily_check_in_id_seq, public.task_claims_id_seq, public.card_collection_id_seq,
     public.article_answer_keys_id_seq, public.article_question_submissions_id_seq,
-    public.wrong_questions_id_seq
+    public.wrong_questions_id_seq, public.achievement_claims_id_seq, public.task_assignments_id_seq
     TO tutor_base_runtime;
 
 -- The application login is not a table owner and must pass these policies.
@@ -83,6 +86,8 @@ ALTER TABLE public.card_collection ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.article_answer_keys ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.article_question_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.wrong_questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.achievement_claims ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.task_assignments ENABLE ROW LEVEL SECURITY;
 
 DO $policies$
 BEGIN
@@ -199,6 +204,21 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.wrong_questions'::regclass
                    AND polname = 'tutor_base_runtime_wrong_questions_all') THEN
         CREATE POLICY tutor_base_runtime_wrong_questions_all ON public.wrong_questions
+            FOR ALL TO tutor_base_runtime USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.task_claims'::regclass
+                   AND polname = 'tutor_base_runtime_task_claims_all') THEN
+        CREATE POLICY tutor_base_runtime_task_claims_all ON public.task_claims
+            FOR ALL TO tutor_base_runtime USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.achievement_claims'::regclass
+                   AND polname = 'tutor_base_runtime_achievement_claims_all') THEN
+        CREATE POLICY tutor_base_runtime_achievement_claims_all ON public.achievement_claims
+            FOR ALL TO tutor_base_runtime USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.task_assignments'::regclass
+                   AND polname = 'tutor_base_runtime_task_assignments_all') THEN
+        CREATE POLICY tutor_base_runtime_task_assignments_all ON public.task_assignments
             FOR ALL TO tutor_base_runtime USING (true) WITH CHECK (true);
     END IF;
 END

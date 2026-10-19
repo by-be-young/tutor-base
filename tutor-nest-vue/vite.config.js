@@ -12,7 +12,14 @@ export default defineConfig({
   },
   server: {
     port: 3000,
-    open: true
+    open: true,
+    // 本地开发：前端同源代理到 Spring 后端，避免 CORS / Cookie 问题。
+    proxy: {
+      '/api': {
+        target: process.env.VITE_DEV_API_TARGET || 'http://127.0.0.1:8080',
+        changeOrigin: true
+      }
+    }
   },
   // GitHub Pages 部署时通过 --base 参数覆盖
   base: process.env.BASE_URL || '/'

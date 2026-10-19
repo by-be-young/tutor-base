@@ -1,4 +1,5 @@
 // src/router/index.js
+import { reactive } from 'vue'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -69,11 +70,34 @@ const routes = [
 
 const router = createRouter({
   history: createWebHashHistory(),
-  routes
+  routes,
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) return savedPosition
+    if (to.hash) return { el: to.hash, top: 96, behavior: 'smooth' }
+    return { top: 0 }
+  }
 })
 
-// 路由守卫
+/** 路由加载/异常状态：用于顶部进度条与整页兜底，避免异步 chunk 失败时白屏 */
+export const routeState = reactive({ loading: false, error: null })
+
+let loadingTimer = null
+const CHUNK_RELOAD_KEY = 'nest:chunk-reload'
+
+function beginLoading() {
+  window.clearTimeout(loadingTimer)
+  loadingTimer = window.setTimeout(() => {
+    routeState.loading = true
+  }, 160)
+}
+
+function endLoading() {
+  window.clearTimeout(loadingTimer)
+  routeState.loading = false
+}
+
 router.beforeEach(async (to) => {
+  beginLoading()
   const authStore = useAuthStore()
   await authStore.ensureInitialized()
 
@@ -87,5 +111,33 @@ router.beforeEach(async (to) => {
   }
   return true
 })
+
+router.afterEach(() => {
+  endLoading()
+  try {
+    window.sessionStorage.removeItem(CHUNK_RELOAD_KEY)
+  } catch { /* 忽略隐私模式 */ }
+})
+
+router.onError((error) => {
+  endLoading()
+  const message = String(error?.message || error)
+  const chunkFailed = /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk|ChunkLoadError/i.test(message)
+  if (chunkFailed) {
+    // 开发服务器重启 / 发布后旧 chunk 失效：自动刷新一次；仍失败则展示兜底页
+    try {
+      if (!window.sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+        window.sessionStorage.setItem(CHUNK_RELOAD_KEY, '1')
+        window.location.reload()
+        return
+      }
+    } catch { /* 忽略隐私模式 */ }
+  }
+  routeState.error = error
+})
+
+export function clearRouteError() {
+  routeState.error = null
+}
 
 export default router

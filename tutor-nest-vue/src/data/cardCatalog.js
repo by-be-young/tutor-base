@@ -13,14 +13,14 @@ export const CARD_SETS = [
         style: '写实油画',
         emblem: 'fas fa-dog',
         colors: ['#f0b27a', '#c05a2f'],
-        rare: { name: '汪星人欢乐时光', img: '/cards/puppy-r.png' },
+        rare: { name: '汪星人欢乐时光', img: `${import.meta.env.BASE_URL}cards/puppy-r.png` },
         commons: [
-            { name: '柴犬', img: '/cards/puppy-c0.png' },
-            { name: '拉布拉多', img: '/cards/puppy-c1.png' },
-            { name: '柯基', img: '/cards/puppy-c2.png' },
-            { name: '萨摩耶', img: '/cards/puppy-c3.png' },
-            { name: '金毛', img: '/cards/puppy-c4.png' },
-            { name: '哈士奇', img: '/cards/puppy-c5.png' }
+            { name: '柴犬', img: `${import.meta.env.BASE_URL}cards/puppy-c0.png` },
+            { name: '拉布拉多', img: `${import.meta.env.BASE_URL}cards/puppy-c1.png` },
+            { name: '柯基', img: `${import.meta.env.BASE_URL}cards/puppy-c2.png` },
+            { name: '萨摩耶', img: `${import.meta.env.BASE_URL}cards/puppy-c3.png` },
+            { name: '金毛', img: `${import.meta.env.BASE_URL}cards/puppy-c4.png` },
+            { name: '哈士奇', img: `${import.meta.env.BASE_URL}cards/puppy-c5.png` }
         ]
     },
     {
@@ -30,14 +30,14 @@ export const CARD_SETS = [
         style: '淡雅水彩',
         emblem: 'fas fa-fish',
         colors: ['#6bc8e8', '#1f7fb8'],
-        rare: { name: '深海盛会', img: '/cards/ocean-r.png' },
+        rare: { name: '深海盛会', img: `${import.meta.env.BASE_URL}cards/ocean-r.png` },
         commons: [
-            { name: '海豚', img: '/cards/ocean-c0.png' },
-            { name: '座头鲸', img: '/cards/ocean-c1.png' },
-            { name: '章鱼', img: '/cards/ocean-c2.png' },
-            { name: '绿海龟', img: '/cards/ocean-c3.png' },
-            { name: '水母', img: '/cards/ocean-c4.png' },
-            { name: '小丑鱼', img: '/cards/ocean-c5.png' }
+            { name: '海豚', img: `${import.meta.env.BASE_URL}cards/ocean-c0.png` },
+            { name: '座头鲸', img: `${import.meta.env.BASE_URL}cards/ocean-c1.png` },
+            { name: '章鱼', img: `${import.meta.env.BASE_URL}cards/ocean-c2.png` },
+            { name: '绿海龟', img: `${import.meta.env.BASE_URL}cards/ocean-c3.png` },
+            { name: '水母', img: `${import.meta.env.BASE_URL}cards/ocean-c4.png` },
+            { name: '小丑鱼', img: `${import.meta.env.BASE_URL}cards/ocean-c5.png` }
         ]
     },
     {
@@ -47,14 +47,14 @@ export const CARD_SETS = [
         style: '科幻概念',
         emblem: 'fas fa-rocket',
         colors: ['#8f7be0', '#3f2f9e'],
-        rare: { name: '星际漫游', img: '/cards/cosmos-r.png' },
+        rare: { name: '星际漫游', img: `${import.meta.env.BASE_URL}cards/cosmos-r.png` },
         commons: [
-            { name: '火箭', img: '/cards/cosmos-c0.png' },
-            { name: '宇航员', img: '/cards/cosmos-c1.png' },
-            { name: '土星', img: '/cards/cosmos-c2.png' },
-            { name: '流星', img: '/cards/cosmos-c3.png' },
-            { name: '空间站', img: '/cards/cosmos-c4.png' },
-            { name: '探测车', img: '/cards/cosmos-c5.png' }
+            { name: '火箭', img: `${import.meta.env.BASE_URL}cards/cosmos-c0.png` },
+            { name: '宇航员', img: `${import.meta.env.BASE_URL}cards/cosmos-c1.png` },
+            { name: '土星', img: `${import.meta.env.BASE_URL}cards/cosmos-c2.png` },
+            { name: '流星', img: `${import.meta.env.BASE_URL}cards/cosmos-c3.png` },
+            { name: '空间站', img: `${import.meta.env.BASE_URL}cards/cosmos-c4.png` },
+            { name: '探测车', img: `${import.meta.env.BASE_URL}cards/cosmos-c5.png` }
         ]
     },
     {
@@ -64,14 +64,14 @@ export const CARD_SETS = [
         style: '美食摄影',
         emblem: 'fas fa-cake-candles',
         colors: ['#f0a8c8', '#d0608f'],
-        rare: { name: '甜品盛宴', img: '/cards/dessert-r.png' },
+        rare: { name: '甜品盛宴', img: `${import.meta.env.BASE_URL}cards/dessert-r.png` },
         commons: [
-            { name: '草莓蛋糕', img: '/cards/dessert-c0.png' },
-            { name: '马卡龙', img: '/cards/dessert-c1.png' },
-            { name: '甜甜圈', img: '/cards/dessert-c2.png' },
-            { name: '冰淇淋', img: '/cards/dessert-c3.png' },
-            { name: '奶油泡芙', img: '/cards/dessert-c4.png' },
-            { name: '焦糖布丁', img: '/cards/dessert-c5.png' }
+            { name: '草莓蛋糕', img: `${import.meta.env.BASE_URL}cards/dessert-c0.png` },
+            { name: '马卡龙', img: `${import.meta.env.BASE_URL}cards/dessert-c1.png` },
+            { name: '甜甜圈', img: `${import.meta.env.BASE_URL}cards/dessert-c2.png` },
+            { name: '冰淇淋', img: `${import.meta.env.BASE_URL}cards/dessert-c3.png` },
+            { name: '奶油泡芙', img: `${import.meta.env.BASE_URL}cards/dessert-c4.png` },
+            { name: '焦糖布丁', img: `${import.meta.env.BASE_URL}cards/dessert-c5.png` }
         ]
     },
     {
@@ -81,14 +81,14 @@ export const CARD_SETS = [
         style: '动感漫画',
         emblem: 'fas fa-futbol',
         colors: ['#8fe06b', '#2f9e4e'],
-        rare: { name: '赛场狂欢', img: '/cards/sport-r.png' },
+        rare: { name: '赛场狂欢', img: `${import.meta.env.BASE_URL}cards/sport-r.png` },
         commons: [
-            { name: '篮球', img: '/cards/sport-c0.png' },
-            { name: '足球', img: '/cards/sport-c1.png' },
-            { name: '网球', img: '/cards/sport-c2.png' },
-            { name: '游泳', img: '/cards/sport-c3.png' },
-            { name: '滑板', img: '/cards/sport-c4.png' },
-            { name: '羽毛球', img: '/cards/sport-c5.png' }
+            { name: '篮球', img: `${import.meta.env.BASE_URL}cards/sport-c0.png` },
+            { name: '足球', img: `${import.meta.env.BASE_URL}cards/sport-c1.png` },
+            { name: '网球', img: `${import.meta.env.BASE_URL}cards/sport-c2.png` },
+            { name: '游泳', img: `${import.meta.env.BASE_URL}cards/sport-c3.png` },
+            { name: '滑板', img: `${import.meta.env.BASE_URL}cards/sport-c4.png` },
+            { name: '羽毛球', img: `${import.meta.env.BASE_URL}cards/sport-c5.png` }
         ]
     }
 ]

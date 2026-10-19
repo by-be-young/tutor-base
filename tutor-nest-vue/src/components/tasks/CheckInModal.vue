@@ -1,99 +1,135 @@
 <!--
-  CheckInModal.vue - 每日签到弹窗
+  CheckInModal.vue - 每日签到弹窗（Riso Campus 印章本）
   ----------------------------------------------------------------------------
-  1. 整月大日历（周一开头），已签日期打勾、今日高亮、跨月空白
+  1. 纸白弹层 + 整月日历（周一开头）：纸白格、朱红勾选、今日高亮、跨月空白
   2. 签到状态、月度次数、第 7/14 次额外奖励进度均来自后端 /api/v1/checkins
-  3. 登录成功后由 checkinStore.openAfterLogin() 打开；任务列表「去签到」同样打开本弹窗
+  3. 登录成功后由 checkinStore.openAfterLogin() 打开；任务卡「去签到」同样打开本弹窗
+  4. 签到成功：朱红「已签到」印章 + 红/蓝/黄绿纸屑 confetti，并 toast 反馈
+
+  E2E 契约（不要改）：根节点 .checkin-panel、heading 含「每日签到」、
+  按钮文案含「签到 +100 积分」、签到后按钮「今日已签到」且 disabled。
 -->
 <template>
     <div v-if="checkinStore.modalVisible" class="checkin-overlay" @click.self="checkinStore.closeModal()">
-        <div class="checkin-panel">
-            <button class="checkin-close" @click="checkinStore.closeModal()">
+        <div class="checkin-panel" role="dialog" aria-modal="true" aria-labelledby="checkin-title">
+            <span class="checkin-riso" aria-hidden="true"></span>
+
+            <button type="button" class="modal__close checkin-close" aria-label="关闭签到面板"
+                @click="checkinStore.closeModal()">
                 <i class="fas fa-times"></i>
             </button>
 
             <header class="checkin-head">
-                <h2 class="checkin-title"><i class="fas fa-calendar-check"></i> 每日签到</h2>
+                <span class="eyebrow">DAILY CHECK-IN</span>
+                <h2 id="checkin-title" class="checkin-title">
+                    <span class="checkin-icon" aria-hidden="true"><i class="fas fa-calendar-check"></i></span>
+                    每日签到
+                </h2>
                 <p class="checkin-subtitle">
                     每日可签到一次，每次 +{{ checkinStore.pointsPerCheckIn }} 积分；本月第 7、14 次签到额外
                     +{{ checkinStore.pointsPerCheckIn }} 积分
                 </p>
             </header>
 
-            <!-- 统计行 -->
-            <div class="checkin-stats">
-                <div class="checkin-stat">
-                    <span class="checkin-stat-num">{{ tasksStore.points }}</span>
-                    <span class="checkin-stat-label">当前积分</span>
-                </div>
-                <div class="checkin-stat">
-                    <span class="checkin-stat-num">{{ checkinStore.monthCount }}</span>
-                    <span class="checkin-stat-label">本月已签到</span>
-                </div>
-            </div>
-
-            <!-- 月份导航 -->
-            <div class="month-nav">
-                <button class="month-nav-btn" :disabled="!checkinStore.year || checkinStore.month <= 1 && checkinStore.year <= 2000"
-                    @click="goMonth(-1)">
-                    <i class="fas fa-chevron-left"></i>
-                </button>
-                <span class="month-title">{{ checkinStore.year }} 年 {{ checkinStore.month }} 月</span>
-                <button class="month-nav-btn" :disabled="!checkinStore.year || checkinStore.month >= 12 && checkinStore.year >= 2100"
-                    @click="goMonth(1)">
-                    <i class="fas fa-chevron-right"></i>
-                </button>
-                <button v-if="!isCurrentMonth" class="back-today" @click="goCurrentMonth">
-                    <i class="fas fa-rotate-left"></i> 回到本月
-                </button>
-            </div>
-
-            <!-- 日历网格（周一开头） -->
-            <div class="calendar">
-                <div class="weekdays">
-                    <span v-for="w in WEEKDAYS" :key="w" class="weekday">{{ w }}</span>
-                </div>
-                <div class="days">
-                    <div v-for="(d, i) in grid" :key="i" class="day-cell"
-                        :class="{ 'is-blank': !d, 'is-today': d && isToday(d), 'is-checked': d && checkedDays.has(d) }">
-                        <span class="day-num">{{ d || '' }}</span>
-                        <span v-if="d && checkedDays.has(d)" class="day-dot"><i class="fas fa-check"></i></span>
+            <div class="checkin-grid">
+                <!-- 月历 -->
+                <section class="calendar-card">
+                    <div class="month-nav">
+                        <button type="button" class="month-nav-btn" aria-label="上个月"
+                            :disabled="!checkinStore.year || checkinStore.month <= 1 && checkinStore.year <= 2000"
+                            @click="goMonth(-1)">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span class="month-title">{{ checkinStore.year }} 年 {{ checkinStore.month }} 月</span>
+                        <button type="button" class="month-nav-btn" aria-label="下个月"
+                            :disabled="!checkinStore.year || checkinStore.month >= 12 && checkinStore.year >= 2100"
+                            @click="goMonth(1)">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
                     </div>
-                </div>
+                    <button v-if="!isCurrentMonth" type="button" class="back-today" @click="goCurrentMonth">
+                        <i class="fas fa-rotate-left"></i> 回到本月
+                    </button>
+
+                    <!-- 日历网格（周一开头） -->
+                    <div class="calendar" :class="{ 'is-loading': checkinStore.loading }">
+                        <div class="weekdays">
+                            <span v-for="w in WEEKDAYS" :key="w" class="weekday">{{ w }}</span>
+                        </div>
+                        <div class="days">
+                            <span v-for="(d, i) in grid" :key="i" class="day-cell"
+                                :class="{ 'is-blank': !d, 'is-today': d && isToday(d), 'is-checked': d && checkedDays.has(d) }">
+                                <span class="day-num">{{ d || '' }}</span>
+                                <span v-if="d && checkedDays.has(d)" class="day-mark" aria-hidden="true">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="month-foot">
+                        <span><i class="fas fa-circle-check"></i> 本月已签到 <strong>{{ checkinStore.monthCount }}</strong> 天</span>
+                        <span v-if="nextBonus" class="month-foot-next">距第 {{ nextBonus }} 次奖励还差 {{ nextBonus - checkinStore.monthCount }} 天</span>
+                        <span v-else class="month-foot-next is-done">月度额外奖励已全部拿到</span>
+                    </div>
+                </section>
+
+                <!-- 状态与签到 -->
+                <aside class="checkin-side">
+                    <div class="side-stats">
+                        <div class="side-stat">
+                            <span class="side-stat-label">当前积分</span>
+                            <strong class="side-stat-value">{{ tasksStore.points }}</strong>
+                        </div>
+                        <div class="side-stat">
+                            <span class="side-stat-label">连续签到</span>
+                            <strong class="side-stat-value">{{ streak }}<small>天</small></strong>
+                        </div>
+                    </div>
+
+                    <!-- 额外奖励进度 -->
+                    <div class="bonus-progress">
+                        <div v-for="m in checkinStore.bonusMilestones" :key="m" class="bonus-item"
+                            :class="{ 'is-reached': checkinStore.monthCount >= m }">
+                            <i class="fas" :class="checkinStore.monthCount >= m ? 'fa-circle-check' : 'fa-circle'"></i>
+                            <span class="bonus-text">第 {{ m }} 次签到额外 +{{ checkinStore.pointsPerCheckIn }} 积分</span>
+                            <span v-if="checkinStore.monthCount < m" class="bonus-remain">还差 {{ m - checkinStore.monthCount }} 次</span>
+                        </div>
+                    </div>
+
+                    <!-- 加载失败提示 -->
+                    <p v-if="checkinStore.loadError" class="field-error checkin-error">
+                        <i class="fas fa-triangle-exclamation"></i> {{ checkinStore.loadError }}
+                    </p>
+
+                    <!-- 签到按钮（E2E：文案含「签到 +100 积分」；签到后「今日已签到」且 disabled） -->
+                    <button type="button" class="btn checkin-btn"
+                        :class="checkinStore.todayCheckedIn ? 'btn--soft' : 'btn--warm'"
+                        :disabled="submitting || checkinStore.todayCheckedIn || !isCurrentMonth"
+                        @click="handleCheckIn">
+                        <i class="fas" :class="checkinStore.todayCheckedIn ? 'fa-circle-check' : 'fa-hand-point-up'"></i>
+                        {{ checkinBtnText }}
+                    </button>
+
+                    <p class="checkin-tip">
+                        <i class="fas fa-shield-halved"></i> 签到记录由服务端按 Asia/Shanghai 结算
+                    </p>
+                </aside>
             </div>
 
-            <!-- 奖励进度 -->
-            <div class="bonus-progress">
-                <div v-for="m in checkinStore.bonusMilestones" :key="m" class="bonus-item"
-                    :class="{ 'is-reached': checkinStore.monthCount >= m }">
-                    <i class="fas" :class="checkinStore.monthCount >= m ? 'fa-check-circle' : 'fa-circle'"></i>
-                    <span class="bonus-text">第 {{ m }} 次签到额外 +{{ checkinStore.pointsPerCheckIn }} 积分</span>
-                    <span v-if="checkinStore.monthCount < m" class="bonus-remain">还差 {{ m - checkinStore.monthCount }} 次</span>
-                </div>
-            </div>
-
-            <!-- 加载失败提示 -->
-            <p v-if="checkinStore.loadError" class="checkin-error">
-                <i class="fas fa-triangle-exclamation"></i> {{ checkinStore.loadError }}
-            </p>
-
-            <!-- 签到按钮 -->
-            <div class="checkin-footer">
-                <button class="checkin-btn" :class="{
-                        'is-done': checkinStore.todayCheckedIn,
-                        'is-bonus': isCurrentMonth && nextIsBonus
-                    }"
-                    :disabled="submitting || checkinStore.todayCheckedIn || !isCurrentMonth" @click="handleCheckIn">
-                    <i class="fas" :class="checkinStore.todayCheckedIn ? 'fa-check' : 'fa-hand-point-up'"></i>
-                    {{ checkinBtnText }}
-                </button>
+            <!-- 签到成功：盖章 + 纸屑庆祝（不遮挡交互） -->
+            <div v-if="celebrating" class="checkin-celebration" aria-hidden="true">
+                <span class="checkin-stamp">
+                    <i class="fas fa-check"></i> 已签到
+                </span>
+                <span v-for="piece in confettiPieces" :key="piece.id" class="confetti" :style="piece.style"></span>
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useCheckinStore } from '@/stores/checkinStore'
 import { useTasksStore } from '@/stores/tasksStore'
 import { showToast } from '@/utils/toast'
@@ -104,8 +140,12 @@ const tasksStore = useTasksStore()
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
 const MIN_YEAR = 2000
 const MAX_YEAR = 2100
+const CONFETTI_COLORS = ['#ed4b2a', '#1d4ed8', '#c9ef4a', '#ffc53d', '#ff9ebb', '#7cc5f0']
 
 const submitting = ref(false)
+const celebrating = ref(false)
+const confettiPieces = ref([])
+let celebrateTimer = null
 
 /** 服务端「今日」（Asia/Shanghai）；未加载到时回退客户端本地日期 */
 const serverToday = computed(() => {
@@ -137,6 +177,27 @@ const grid = computed(() => {
 /** 当月已签到日期集合（后端只返回当月日期） */
 const checkedDays = computed(() => new Set(checkinStore.dates.map(d => Number(d.slice(8, 10)))))
 
+/** 本月连续签到天数：从今日（未签则从昨日）向前连续计数，仅在已加载月份内计算 */
+const streak = computed(() => {
+    if (!checkinStore.today || !checkinStore.dates.length) return 0
+    const daySet = new Set(checkinStore.dates)
+    const cursor = new Date(`${checkinStore.today}T00:00:00`)
+    if (!daySet.has(checkinStore.today)) cursor.setDate(cursor.getDate() - 1)
+    let count = 0
+    while (count < 31) {
+        if (cursor.getFullYear() !== checkinStore.year || cursor.getMonth() + 1 !== checkinStore.month) break
+        const iso = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`
+        if (!daySet.has(iso)) break
+        count += 1
+        cursor.setDate(cursor.getDate() - 1)
+    }
+    return count
+})
+
+/** 下一次签到是否命中额外奖励节点（第 7/14 次） */
+const nextBonus = computed(() =>
+    checkinStore.bonusMilestones.find(m => m > checkinStore.monthCount) ?? null)
+
 function isToday(day) {
     const t = serverToday.value
     return t.year === checkinStore.year && t.month === checkinStore.month && t.day === day
@@ -161,7 +222,6 @@ function goCurrentMonth() {
     checkinStore.loadMonth(serverToday.value.year, serverToday.value.month)
 }
 
-/** 下一次签到是否命中额外奖励节点（第 7/14 次） */
 const nextIsBonus = computed(() =>
     checkinStore.bonusMilestones.includes(checkinStore.monthCount + 1))
 
@@ -173,12 +233,38 @@ const checkinBtnText = computed(() => {
     return `签到 +${checkinStore.pointsPerCheckIn} 积分`
 })
 
+/** 签到成功庆祝：朱红印章 + 印刷色纸屑（纯 CSS 动画，不拦截点击） */
+function celebrate() {
+    if (celebrateTimer) {
+        clearTimeout(celebrateTimer)
+        celebrateTimer = null
+    }
+    celebrating.value = true
+    confettiPieces.value = Array.from({ length: 26 }, (_, i) => ({
+        id: i,
+        style: {
+            left: `${Math.round(Math.random() * 100)}%`,
+            '--confetti-x': `${Math.round((Math.random() - 0.5) * 260)}px`,
+            '--confetti-rotate': `${Math.round(Math.random() * 360)}deg`,
+            animationDelay: `${(Math.random() * 0.45).toFixed(2)}s`,
+            animationDuration: `${(1.7 + Math.random() * 0.9).toFixed(2)}s`,
+            background: CONFETTI_COLORS[i % CONFETTI_COLORS.length]
+        }
+    }))
+    celebrateTimer = setTimeout(() => {
+        celebrating.value = false
+        confettiPieces.value = []
+        celebrateTimer = null
+    }, 3200)
+}
+
 async function handleCheckIn() {
     if (submitting.value || checkinStore.todayCheckedIn || !isCurrentMonth.value) return
     submitting.value = true
     try {
         const result = await checkinStore.checkInToday()
         const bonusText = result.bonusDays ? `（第 ${result.bonusDays} 次签到额外奖励）` : ''
+        celebrate()
         showToast(`签到成功，+${result.pointsAwarded} 积分${bonusText}`, 'success')
     } catch (e) {
         showToast(e.message || '签到失败，请稍后重试', 'error')
@@ -186,136 +272,128 @@ async function handleCheckIn() {
         submitting.value = false
     }
 }
+
+function onKeydown(event) {
+    if (event.key === 'Escape' && checkinStore.modalVisible) checkinStore.closeModal()
+}
+
+onMounted(() => {
+    // 挂载时若弹层已处于打开状态（例如登录后打开），刷新当前月签到数据
+    if (checkinStore.modalVisible) checkinStore.loadMonth()
+    window.addEventListener('keydown', onKeydown)
+})
+
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', onKeydown)
+    if (celebrateTimer) clearTimeout(celebrateTimer)
+})
 </script>
 
 <style scoped>
+/* ========== 浮层 ========== */
 .checkin-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.4);
-    z-index: 2000;
+    inset: 0;
+    z-index: 260;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
-    animation: checkinFadeIn 0.25s ease;
+    padding: 22px;
+    background: rgba(28, 26, 20, 0.42);
+    animation: fade-in 0.2s var(--ease-out);
 }
 
-@keyframes checkinFadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-
+/* ========== 纸白弹层 ========== */
 .checkin-panel {
     position: relative;
-    width: 100%;
-    max-width: 420px;
+    width: min(760px, 100%);
     max-height: 92vh;
     overflow-y: auto;
-    background: #fbfaf6;
-    border-radius: 24px;
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
-    padding: 32px 26px 26px;
-    animation: checkinPopIn 0.3s ease;
+    padding: 34px 30px 26px;
+    border: 2px solid var(--ink);
+    border-radius: var(--r-lg);
+    background: var(--paper-1);
+    box-shadow: var(--shadow-float);
+    animation: pop-in 0.32s var(--ease-spring);
 }
 
-@keyframes checkinPopIn {
-    from {
-        opacity: 0;
-        transform: translateY(20px) scale(0.97);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
+/* 顶部印刷条纹 */
+.checkin-riso {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 10px;
+    background: repeating-linear-gradient(135deg, var(--vermilion) 0 10px, var(--butter) 10px 20px);
+    border-bottom: 1.5px solid var(--ink);
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    pointer-events: none;
 }
 
 .checkin-close {
     position: absolute;
-    top: 14px;
-    right: 14px;
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(120, 170, 155, 0.08);
-    color: #4c6b5b;
-    cursor: pointer;
-    font-size: 0.95rem;
-    transition: background 0.2s ease;
-}
-
-.checkin-close:hover {
-    background: rgba(120, 170, 155, 0.2);
+    top: 18px;
+    right: 16px;
+    z-index: 5;
 }
 
 /* ========== 头部 ========== */
 .checkin-head {
+    position: relative;
+    z-index: 2;
     text-align: center;
-    margin-bottom: 16px;
+    margin-bottom: 22px;
 }
 
 .checkin-title {
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: #2d4a3a;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 12px;
+    margin-top: 8px;
+    font-size: clamp(1.5rem, 3vw, 1.9rem);
 }
 
-.checkin-title i {
-    color: #9782c8;
+.checkin-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 46px;
+    border: 1.5px solid var(--ink);
+    border-radius: 13px;
+    background: var(--butter);
+    color: var(--ink);
+    font-size: 1.1rem;
+    box-shadow: 3px 3px 0 var(--ink);
 }
 
 .checkin-subtitle {
-    color: var(--gray);
-    font-size: 0.88rem;
-    margin-top: 6px;
+    margin-top: 10px;
+    color: var(--text-2);
+    font-size: 0.84rem;
+    line-height: 1.6;
 }
 
-/* ========== 统计行 ========== */
-.checkin-stats {
-    display: flex;
-    gap: 14px;
-    margin-bottom: 16px;
+/* ========== 主体双栏 ========== */
+.checkin-grid {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1.18fr) minmax(0, 0.82fr);
+    gap: 22px;
+    align-items: start;
 }
 
-.checkin-stat {
-    flex: 1;
-    background: rgba(255, 255, 255, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.6);
-    border-radius: 14px;
-    padding: 10px 8px;
-    text-align: center;
+/* ========== 月历 ========== */
+.calendar-card {
+    padding: 16px;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-md);
+    background: var(--paper-0);
+    box-shadow: 3px 3px 0 var(--ink);
 }
 
-.checkin-stat-num {
-    display: block;
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #b6862a;
-    line-height: 1.2;
-}
-
-.checkin-stat:last-child .checkin-stat-num {
-    color: #9782c8;
-}
-
-.checkin-stat-label {
-    font-size: 0.8rem;
-    color: var(--gray);
-}
-
-/* ========== 月份导航 ========== */
 .month-nav {
     display: flex;
     align-items: center;
@@ -325,241 +403,387 @@ async function handleCheckIn() {
 }
 
 .month-nav-btn {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: 1px solid rgba(151, 130, 200, 0.3);
-    background: rgba(255, 255, 255, 0.5);
-    color: #5d4a8a;
-    cursor: pointer;
-    transition: background 0.2s ease, transform 0.2s ease;
-    font-size: 0.8rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: 1.5px solid var(--ink);
+    border-radius: 8px;
+    background: var(--paper-1);
+    color: var(--ink);
+    font-size: 0.78rem;
+    box-shadow: 2px 2px 0 var(--ink);
+    transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast);
 }
 
 .month-nav-btn:hover:not(:disabled) {
-    background: rgba(151, 130, 200, 0.15);
-    transform: translateY(-1px);
+    transform: translate(-1px, -1px);
+    background: var(--butter);
 }
 
 .month-nav-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
+    opacity: 0.4;
+    box-shadow: none;
 }
 
 .month-title {
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: #2d4a3a;
-    min-width: 110px;
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 800;
+    min-width: 112px;
     text-align: center;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
 }
 
 .back-today {
-    border: none;
-    background: none;
-    color: #5d4a8a;
-    font-size: 0.8rem;
-    cursor: pointer;
-    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 auto 10px;
+    padding: 4px 12px;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-full);
+    background: var(--paper-1);
+    color: var(--cobalt);
+    font-size: 0.72rem;
+    font-weight: 700;
+    transition: background var(--dur);
 }
 
 .back-today:hover {
-    text-decoration: underline;
+    background: var(--sky);
 }
 
-/* ========== 日历 ========== */
 .calendar {
-    background: rgba(255, 255, 255, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.6);
-    border-radius: 16px;
     padding: 10px;
+    border: 1.5px solid var(--ink);
+    border-radius: 10px;
+    background: var(--paper-1);
+    transition: opacity var(--dur);
+}
+
+.calendar.is-loading {
+    opacity: 0.55;
 }
 
 .weekdays {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    margin-bottom: 4px;
+    margin-bottom: 6px;
 }
 
 .weekday {
     text-align: center;
-    font-size: 0.78rem;
-    color: #8aa398;
-    padding: 4px 0;
+    padding: 3px 0;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--text-3);
 }
 
 .days {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 4px;
+    gap: 5px;
 }
 
+/* 纸白格 + 朱红勾选 */
 .day-cell {
     position: relative;
-    aspect-ratio: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 10px;
-    font-size: 0.9rem;
-    color: #3d5a4a;
+    aspect-ratio: 1;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--paper-1);
+    color: var(--text-2);
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background var(--dur-fast), border-color var(--dur-fast), transform var(--dur-fast);
+}
+
+.day-cell:hover {
+    transform: translateY(-1px);
+    border-color: var(--ink);
 }
 
 .day-cell.is-blank {
     visibility: hidden;
 }
 
-.day-cell.is-today {
-    background: rgba(151, 130, 200, 0.16);
-    border: 1.5px solid rgba(151, 130, 200, 0.55);
-    font-weight: 700;
+.day-cell.is-checked {
+    background: var(--paper-2);
+    border-color: var(--ink);
+    color: var(--ink);
+    font-weight: 800;
 }
 
-.day-cell.is-checked {
-    background: linear-gradient(135deg, rgba(95, 168, 164, 0.22), rgba(95, 168, 164, 0.32));
-    color: #1f6b66;
-    font-weight: 600;
+.day-cell.is-today {
+    border: 2px solid var(--ink);
+    background: var(--butter);
+    color: var(--ink);
+    font-weight: 800;
 }
 
 .day-cell.is-today.is-checked {
-    background: linear-gradient(135deg, rgba(151, 130, 200, 0.25), rgba(95, 168, 164, 0.35));
+    background: var(--butter);
 }
 
-.day-dot {
+.day-mark {
     position: absolute;
-    bottom: 2px;
-    font-size: 0.55rem;
-    color: #2f7b57;
+    right: 3px;
+    bottom: 0;
+    color: var(--vermilion);
+    font-size: 0.52rem;
 }
 
-/* ========== 奖励进度 ========== */
+.month-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    font-size: 0.76rem;
+    color: var(--text-2);
+}
+
+.month-foot i {
+    margin-right: 4px;
+    color: var(--vermilion);
+}
+
+.month-foot strong {
+    font-family: var(--font-mono);
+    color: var(--ink);
+}
+
+.month-foot-next {
+    color: var(--cobalt);
+    font-weight: 700;
+}
+
+.month-foot-next.is-done {
+    color: var(--green);
+}
+
+/* ========== 右侧状态 ========== */
+.checkin-side {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.side-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.side-stat {
+    padding: 12px 14px 10px;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-sm);
+    background: var(--paper-1);
+    box-shadow: 3px 3px 0 var(--ink);
+}
+
+.side-stat:nth-child(1) {
+    background: var(--butter);
+}
+
+.side-stat:nth-child(2) {
+    background: var(--sky);
+}
+
+.side-stat-label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+}
+
+.side-stat-value {
+    display: block;
+    margin-top: 2px;
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1.05;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.side-stat-value small {
+    margin-left: 2px;
+    font-size: 0.7rem;
+}
+
 .bonus-progress {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-top: 14px;
 }
 
 .bonus-item {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 0.85rem;
-    color: var(--gray);
-    background: rgba(255, 255, 255, 0.45);
-    border-radius: 12px;
-    padding: 8px 12px;
+    padding: 9px 12px;
+    border: 1.5px solid var(--ink);
+    border-radius: 8px;
+    background: var(--paper-1);
+    box-shadow: 2px 2px 0 var(--ink);
+    font-size: 0.78rem;
+    color: var(--text-2);
 }
 
 .bonus-item i {
-    color: #b9c9c2;
+    color: var(--text-4);
+    font-size: 0.8rem;
 }
 
 .bonus-item.is-reached {
-    color: #2f7b57;
-    background: rgba(143, 207, 184, 0.14);
+    background: var(--lime);
+    color: var(--ink);
 }
 
 .bonus-item.is-reached i {
-    color: #4caf50;
+    color: var(--ink);
 }
 
 .bonus-text {
     flex: 1;
+    min-width: 0;
 }
 
 .bonus-remain {
-    font-size: 0.78rem;
-    color: #b6862a;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--vermilion);
+    white-space: nowrap;
 }
 
-/* ========== 错误提示 ========== */
 .checkin-error {
-    margin-top: 12px;
-    font-size: 0.85rem;
-    color: #a03c3c;
     text-align: center;
 }
 
 /* ========== 签到按钮 ========== */
-.checkin-footer {
-    margin-top: 18px;
-}
-
 .checkin-btn {
     width: 100%;
-    padding: 13px 20px;
-    border: none;
-    border-radius: 14px;
+    height: 52px;
+    font-size: 1rem;
+    font-weight: 800;
+}
+
+.checkin-btn .fa-circle-check {
+    color: var(--green);
+}
+
+.checkin-tip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    color: var(--text-3);
+}
+
+/* ========== 签到成功庆祝 ========== */
+.checkin-celebration {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    overflow: hidden;
+    pointer-events: none;
+    border-radius: inherit;
+}
+
+/* 朱红印章 */
+.checkin-stamp {
+    position: absolute;
+    top: 18px;
+    left: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: 3px solid var(--vermilion);
+    border-radius: 10px;
+    background: var(--paper-1);
+    color: var(--vermilion);
+    font-family: var(--font-display);
     font-size: 1.05rem;
-    font-weight: 700;
-    font-family: inherit;
-    cursor: pointer;
-    color: #fff;
-    background: linear-gradient(135deg, #5ba8a4, #3a7d79);
-    box-shadow: 0 6px 18px rgba(58, 125, 121, 0.3);
-    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    transform: rotate(-8deg);
+    animation: pop-in 0.4s var(--ease-spring);
 }
 
-.checkin-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 24px rgba(58, 125, 121, 0.4);
+.confetti {
+    position: absolute;
+    top: -12%;
+    width: 9px;
+    height: 13px;
+    border: 1px solid rgba(28, 26, 20, 0.45);
+    border-radius: 1px;
+    opacity: 0.95;
+    animation-name: confetti-fall;
+    animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
+    animation-fill-mode: forwards;
 }
 
-.checkin-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.6;
+/* ========== 响应式 ========== */
+@media (max-width: 760px) {
+    .checkin-overlay {
+        padding: 12px;
+        align-items: flex-start;
+    }
+
+    .checkin-panel {
+        max-height: 94vh;
+        padding: 30px 16px 18px;
+        border-radius: var(--r-md);
+    }
+
+    .checkin-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 18px;
+    }
+
+    .checkin-head {
+        margin-bottom: 18px;
+    }
+
+    .checkin-subtitle {
+        font-size: 0.78rem;
+    }
+
+    .checkin-stamp {
+        top: 14px;
+        left: 14px;
+        padding: 6px 12px;
+        font-size: 0.9rem;
+    }
+
+    .day-cell {
+        font-size: 0.8rem;
+        border-radius: 5px;
+    }
 }
 
-.checkin-btn.is-done {
-    background: linear-gradient(135deg, #8fcfb8, #5aa886);
-    box-shadow: none;
-}
+@media (max-width: 380px) {
+    .days {
+        gap: 4px;
+    }
 
-.checkin-btn.is-bonus {
-    background: linear-gradient(135deg, #b6862a, #8f6a1f);
-    box-shadow: 0 6px 18px rgba(182, 134, 42, 0.35);
-}
-</style>
-
-<!-- Toast 样式（与 TasksView / WrongQuestionsView 保持一致；非 scoped 以全局生效） -->
-<style>
-.custom-toast {
-    position: fixed;
-    top: 30px;
-    left: 50%;
-    transform: translateX(-50%) translateY(-20px);
-    padding: 8px 25px;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(12px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
-    font-size: 1.05rem;
-    font-weight: 500;
-    color: #2d4a3a;
-    z-index: 9999;
-    opacity: 0;
-    transition: opacity 0.3s ease, transform 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.6);
-}
-
-.custom-toast.toast-visible {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-}
-
-.custom-toast.toast-success {
-    border: 4px solid #4caf50;
-    color: #1e4a2a;
-}
-
-.custom-toast.toast-error {
-    border: 4px solid #ef5350;
-    color: #7a2a2a;
-}
-
-.custom-toast.toast-info {
-    border: 4px solid #42a5f5;
-    color: #1a3a5a;
+    .day-cell {
+        font-size: 0.74rem;
+    }
 }
 </style>

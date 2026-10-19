@@ -1,72 +1,156 @@
 <!-- src/components/admin/StudentAccountsPanel.vue -->
 <template>
-    <div>
-        <h2 class="admin-title">学生账户</h2>
-
-        <div class="student-accounts-card">
-            <div class="student-accounts-heading">
-                <p>管理员可以直接为学生设置或重置登录密码，也可以免密进入学生账号。</p>
-                <p v-if="passwordNotice" class="student-accounts-notice" role="status">{{ passwordNotice }}</p>
-                <p v-if="actionError" class="student-accounts-error" role="alert">{{ actionError }}</p>
-            </div>
-
-            <p v-if="students.length === 0" class="student-accounts-empty">暂无学生</p>
-            <ul v-else class="student-accounts-list" aria-label="学生账户列表">
-                <li v-for="student in students" :key="student.id" class="student-accounts-row">
-                    <span class="student-accounts-name">{{ student.username }}</span>
-                    <div class="student-accounts-actions">
-                        <button type="button" class="student-accounts-action"
-                            @click="openPasswordDialog(student)">
-                            <i class="fas fa-key"></i> 设置/重置密码
-                        </button>
-                        <button type="button" class="student-accounts-action is-enter"
-                            :disabled="enteringStudentId === student.id" @click="enterStudentAccount(student)">
-                            <i class="fas fa-sign-in-alt"></i>
-                            {{ enteringStudentId === student.id ? '进入中…' : '进入账号' }}
-                        </button>
-                    </div>
-                </li>
-            </ul>
-        </div>
-
-        <div v-if="passwordDialogOpen" class="password-dialog-backdrop" @click.self="closePasswordDialog">
-            <form class="password-dialog" role="dialog" aria-modal="true" aria-labelledby="password-dialog-title"
-                @submit.prevent="submitPassword">
-                <h2 id="password-dialog-title">设置学生密码</h2>
-                <p class="password-dialog-student">学生：{{ passwordTarget?.username }}</p>
-
-                <label for="student-new-password">新密码</label>
-                <input id="student-new-password" v-model="newPassword" type="password" minlength="6"
-                    maxlength="128" autocomplete="new-password" :disabled="passwordSaving" autofocus />
-
-                <label for="student-confirm-password">确认新密码</label>
-                <input id="student-confirm-password" v-model="confirmPassword" type="password" minlength="6"
-                    maxlength="128" autocomplete="new-password" :disabled="passwordSaving" />
-
-                <p class="password-dialog-hint">密码长度须为 6～128 个字符，两次输入必须一致。</p>
-                <p v-if="passwordError" class="password-error" role="alert">{{ passwordError }}</p>
-
-                <div class="password-dialog-actions">
-                    <button type="button" class="password-dialog-cancel" :disabled="passwordSaving"
-                        @click="closePasswordDialog">取消</button>
-                    <button type="submit" class="password-dialog-submit" :disabled="passwordSaving">
-                        {{ passwordSaving ? '保存中…' : '确认设置' }}
-                    </button>
+    <div class="student-accounts">
+        <div class="panel student-panel">
+            <header class="panel-head student-head">
+                <div class="student-head__copy">
+                    <h2 class="panel-title">
+                        <i class="fas fa-users-gear" aria-hidden="true"></i>
+                        学生账户
+                    </h2>
+                    <p class="text-sm text-muted">为学员设置或重置登录密码，也可以免密进入学员账号查看学习现场。</p>
+                    <p v-if="passwordNotice" class="student-notice" role="status">
+                        <i class="fas fa-circle-check"></i>
+                        {{ passwordNotice }}
+                    </p>
+                    <p v-if="actionError" class="student-error" role="alert">
+                        <i class="fas fa-triangle-exclamation"></i>
+                        {{ actionError }}
+                    </p>
                 </div>
-            </form>
+                <span class="chip chip--violet"><i class="fas fa-user-graduate"></i> {{ students.length }} 位学员</span>
+            </header>
+
+            <div class="panel-body student-body">
+                <div class="stat-grid student-stats">
+                    <div class="stat-card stat-card--cyan">
+                        <div class="stat-value">{{ students.length }}</div>
+                        <div class="stat-label">学员总数</div>
+                        <div class="stat-sub">按用户名排序</div>
+                    </div>
+                    <div class="stat-card stat-card--lime">
+                        <div class="stat-value">{{ grantedStudents }}</div>
+                        <div class="stat-label">已开通授权</div>
+                        <div class="stat-sub">至少拥有 1 篇内容</div>
+                    </div>
+                    <div class="stat-card stat-card--amber">
+                        <div class="stat-value">{{ totalGrants }}</div>
+                        <div class="stat-label">授权文章合计</div>
+                        <div class="stat-sub">跨全部学员统计</div>
+                    </div>
+                </div>
+
+                <EmptyState v-if="students.length === 0" icon="fas fa-user-plus" title="还没有学生账户"
+                    text="点击顶部的「新增」按钮创建第一位学员，然后为他配置内容授权。">
+                </EmptyState>
+
+                <ul v-else class="student-list" role="list" aria-label="学生账户列表">
+                    <li v-for="student in students" :key="student.id" class="student-row" role="listitem"
+                        :class="{ 'is-current': String(student.id) === String(selectedStudentId) }">
+                        <span class="avatar student-avatar" aria-hidden="true">{{ initialOf(student.username) }}</span>
+
+                        <span class="student-id">
+                            <span class="student-name">{{ student.username }}</span>
+                            <span class="student-sub">学员 ID · {{ student.id }}</span>
+                        </span>
+
+                        <span class="student-grants">
+                            <i class="fas fa-shield-halved"></i>
+                            {{ student.permissions.length }} 篇授权
+                        </span>
+
+                        <span class="student-status" :class="student.permissions.length ? 'is-active' : 'is-idle'">
+                            <span class="status-dot"></span>
+                            {{ student.permissions.length ? '已开通' : '待授权' }}
+                        </span>
+
+                        <span class="student-actions">
+                            <button type="button" class="btn btn--soft btn--sm" @click="openPasswordDialog(student)">
+                                <i class="fas fa-key" aria-hidden="true"></i> 设置/重置密码
+                            </button>
+                            <button type="button" class="btn btn--cyan btn--sm"
+                                :disabled="enteringStudentId === student.id" @click="enterStudentAccount(student)">
+                                <i class="fas fa-right-to-bracket" aria-hidden="true"></i>
+                                {{ enteringStudentId === student.id ? '进入中…' : '进入账号' }}
+                            </button>
+                        </span>
+                    </li>
+                </ul>
+            </div>
         </div>
+
+        <Teleport to="body">
+            <div v-if="passwordDialogOpen" class="backdrop" @click.self="closePasswordDialog">
+                <form class="modal password-modal" role="dialog" aria-modal="true"
+                    aria-labelledby="password-dialog-title" @submit.prevent="submitPassword"
+                    @keydown.esc="closePasswordDialog">
+                    <header class="modal__head">
+                        <h2 id="password-dialog-title" class="modal__title">
+                            <i class="fas fa-key text-gradient"></i>
+                            设置学生密码
+                        </h2>
+                        <button type="button" class="modal__close" aria-label="关闭密码设置"
+                            :disabled="passwordSaving" @click="closePasswordDialog">
+                            <i class="fas fa-xmark"></i>
+                        </button>
+                    </header>
+
+                    <div class="modal__body password-modal__body">
+                        <div class="password-student">
+                            <span class="avatar" aria-hidden="true">{{ initialOf(passwordTarget?.username) }}</span>
+                            <span class="password-student__text">
+                                <strong>{{ passwordTarget?.username }}</strong>
+                                <small class="text-xs text-muted">保存后立即生效，旧密码不可再用。</small>
+                            </span>
+                        </div>
+
+                        <div class="field">
+                            <label class="field-label" for="student-new-password">新密码</label>
+                            <input id="student-new-password" v-model="newPassword" class="input" type="password"
+                                minlength="6" maxlength="128" autocomplete="new-password"
+                                placeholder="6～128 个字符" :disabled="passwordSaving" autofocus />
+                        </div>
+
+                        <div class="field">
+                            <label class="field-label" for="student-confirm-password">确认新密码</label>
+                            <input id="student-confirm-password" v-model="confirmPassword" class="input" type="password"
+                                minlength="6" maxlength="128" autocomplete="new-password" placeholder="再次输入新密码"
+                                :disabled="passwordSaving" />
+                        </div>
+
+                        <p class="field-hint">密码长度须为 6～128 个字符，两次输入必须一致。</p>
+                        <p v-if="passwordError" class="password-error" role="alert">
+                            <i class="fas fa-circle-exclamation"></i>
+                            {{ passwordError }}
+                        </p>
+                    </div>
+
+                    <footer class="modal__foot">
+                        <button type="button" class="btn btn--ghost" :disabled="passwordSaving"
+                            @click="closePasswordDialog">取消</button>
+                        <button type="submit" class="btn btn--primary" :disabled="passwordSaving">
+                            <i class="fas" :class="passwordSaving ? 'fa-circle-notch fa-spin' : 'fa-key'"
+                                aria-hidden="true"></i>
+                            {{ passwordSaving ? '保存中…' : '确认设置' }}
+                        </button>
+                    </footer>
+                </form>
+            </div>
+        </Teleport>
     </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { identityGateway, IdentityGatewayError } from '@/gateways/identityGateway'
 import { showToast } from '@/utils/toast'
+import EmptyState from '@/components/ui/EmptyState.vue'
 
-defineProps({
-    students: { type: Array, default: () => [] }
+const props = defineProps({
+    students: { type: Array, default: () => [] },
+    selectedStudentId: { type: [String, Number], default: null }
 })
 
 const router = useRouter()
@@ -82,6 +166,13 @@ const passwordSaving = ref(false)
 
 const enteringStudentId = ref(null)
 const actionError = ref('')
+
+const grantedStudents = computed(() => props.students.filter(student => student.permissions.length > 0).length)
+const totalGrants = computed(() => props.students.reduce((sum, student) => sum + student.permissions.length, 0))
+
+function initialOf(username) {
+    return Array.from(String(username || '?'))[0]?.toUpperCase() || '?'
+}
 
 function clearPasswordFields() {
     newPassword.value = ''
@@ -182,235 +273,371 @@ async function enterStudentAccount(student) {
 </script>
 
 <style scoped>
-.admin-title {
-    font-size: 1.6rem;
-    font-weight: 600;
-    color: #2d4a3a;
-    margin-bottom: 20px;
+.student-accounts {
+    min-width: 0;
 }
 
-.student-accounts-card {
-    padding: 18px;
-    background: rgba(255, 255, 255, 0.7);
-    border: 1px solid rgba(120, 170, 155, 0.15);
-    border-radius: 16px;
+.student-panel {
+    overflow: hidden;
 }
 
-.student-accounts-heading {
+.student-head {
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.student-head__copy {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    margin-bottom: 14px;
+    min-width: 0;
 }
 
-.student-accounts-heading p,
-.student-accounts-empty {
-    color: var(--gray);
-    font-size: 0.9rem;
-}
-
-.student-accounts-heading .student-accounts-notice {
-    color: #28745e;
+.student-notice {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    padding: 8px 14px;
+    border-radius: var(--r-full);
+    border: 1px solid rgba(163, 230, 53, 0.32);
+    background: rgba(163, 230, 53, 0.1);
+    color: #d9f99d;
+    font-size: 0.82rem;
     font-weight: 600;
+    width: fit-content;
 }
 
-.student-accounts-heading .student-accounts-error {
-    color: #a33f4b;
+.student-error {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    padding: 8px 14px;
+    border-radius: var(--r-full);
+    border: 1px solid rgba(251, 113, 133, 0.34);
+    background: rgba(251, 113, 133, 0.1);
+    color: #fecdd3;
+    font-size: 0.82rem;
     font-weight: 600;
+    width: fit-content;
 }
 
-.student-accounts-list {
-    list-style: none;
-    display: grid;
+.student-body {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.student-stats {
+    gap: 12px;
+}
+
+.student-list {
+    display: flex;
+    flex-direction: column;
     gap: 8px;
 }
 
-.student-accounts-row {
+.student-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 10px 12px;
-    background: rgba(245, 250, 248, 0.9);
-    border-radius: 10px;
-}
-
-.student-accounts-name {
-    color: #2d4a3a;
-    font-weight: 600;
-}
-
-.student-accounts-actions {
-    display: flex;
-    gap: 8px;
+    gap: 14px;
     flex-wrap: wrap;
+    padding: 12px 14px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.03);
+    transition: border-color var(--dur), background var(--dur), transform var(--dur) var(--ease-out);
 }
 
-.student-accounts-action,
-.password-dialog-cancel,
-.password-dialog-submit {
-    border: 0;
-    border-radius: 20px;
-    padding: 7px 14px;
-    cursor: pointer;
-    font: inherit;
+.student-row:nth-child(even) {
+    background: rgba(255, 255, 255, 0.022);
+}
+
+.student-row:hover {
+    border-color: var(--line-strong);
+    background: rgba(255, 255, 255, 0.055);
+    transform: translateY(-1px);
+}
+
+.student-row.is-current {
+    border-color: rgba(34, 211, 238, 0.36);
+    box-shadow: inset 3px 0 0 var(--cyan);
+}
+
+.student-avatar {
+    background: var(--grad-ocean);
+}
+
+.student-id {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 180px;
+    min-width: 0;
+}
+
+.student-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.student-sub {
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    color: var(--text-4);
+    letter-spacing: 0.04em;
+}
+
+.student-grants {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    font-size: 0.76rem;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
-.student-accounts-action {
-    color: #2d4a3a;
-    background: rgba(123, 200, 196, 0.22);
+.student-grants i {
+    color: var(--violet-2);
+    font-size: 0.72rem;
 }
 
-.student-accounts-action.is-enter {
-    color: white;
-    background: #5BA8A4;
+.student-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 26px;
+    padding: 0 11px;
+    border-radius: var(--r-full);
+    font-size: 0.7rem;
+    font-weight: 700;
+    white-space: nowrap;
+    border: 1px solid var(--line);
 }
 
-.student-accounts-action:disabled {
-    cursor: wait;
-    opacity: 0.6;
+.student-status.is-active {
+    color: #d9f99d;
+    border-color: rgba(163, 230, 53, 0.3);
+    background: rgba(163, 230, 53, 0.1);
 }
 
-.password-dialog-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 1000;
-    display: grid;
-    place-items: center;
-    padding: 20px;
-    background: rgba(25, 45, 37, 0.38);
+.student-status.is-active .status-dot {
+    background: var(--lime);
+    box-shadow: 0 0 0 3px rgba(163, 230, 53, 0.16);
 }
 
-.password-dialog {
-    width: min(440px, 100%);
-    padding: 24px;
-    display: grid;
-    gap: 10px;
-    background: #f8fbfa;
-    border-radius: 18px;
-    box-shadow: 0 20px 60px rgba(30, 60, 50, 0.25);
+.student-status.is-idle {
+    color: var(--text-3);
+    background: rgba(255, 255, 255, 0.03);
 }
 
-.password-dialog h2 {
-    color: #2d4a3a;
+.student-status.is-idle .status-dot {
+    background: var(--text-4);
+    box-shadow: 0 0 0 3px rgba(126, 136, 168, 0.14);
 }
 
-.password-dialog-student,
-.password-dialog-hint {
-    color: var(--gray);
+.student-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-left: auto;
 }
 
-.password-dialog label {
-    margin-top: 6px;
-    color: #345143;
+/* 密码弹层 */
+.password-modal {
+    width: min(460px, 100%);
+}
+
+.password-modal__body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.password-student {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.password-student__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.password-student__text strong {
+    font-family: var(--font-display);
+    color: var(--text-1);
+    word-break: break-all;
+}
+
+.password-error {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 13px;
+    border-radius: var(--r-sm);
+    border: 1px solid rgba(251, 113, 133, 0.34);
+    background: rgba(251, 113, 133, 0.1);
+    color: #fecdd3;
+    font-size: 0.8rem;
     font-weight: 600;
 }
 
-.password-dialog input {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid rgba(120, 170, 155, 0.35);
-    border-radius: 10px;
-    font: inherit;
-}
-
-.password-dialog input:focus {
-    outline: 2px solid rgba(91, 168, 164, 0.35);
-    border-color: #5BA8A4;
-}
-
-.password-dialog-hint,
-.password-error {
-    font-size: 0.88rem;
-}
-
-.password-error {
-    color: #a33f4b;
-}
-
-.password-dialog-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.password-dialog-cancel {
-    color: #4e6658;
-    background: rgba(120, 170, 155, 0.12);
-}
-
-.password-dialog-submit {
-    color: white;
-    background: #5BA8A4;
-}
-
-.password-dialog button:disabled {
-    cursor: not-allowed;
-    opacity: 0.6;
-}
-
-/* ========== Toast（与任务中心保持一致） ========== */
-:global(.custom-toast) {
-    position: fixed;
-    top: 30px;
-    left: 50%;
-    transform: translateX(-50%) translateY(-20px);
-    padding: 8px 25px;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(12px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
-    font-size: 1.05rem;
-    font-weight: 500;
-    color: #2d4a3a;
-    z-index: 9999;
-    opacity: 0;
-    transition: opacity 0.3s ease, transform 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.6);
-}
-
-:global(.custom-toast.toast-visible) {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-}
-
-:global(.custom-toast.toast-success) {
-    border: 4px solid #4caf50;
-    color: #1e4a2a;
-}
-
-:global(.custom-toast.toast-error) {
-    border: 4px solid #ef5350;
-    color: #7a2a2a;
-}
-
-:global(.custom-toast.toast-info) {
-    border: 4px solid #42a5f5;
-    color: #1a3a5a;
-}
-
-@media (max-width: 600px) {
-    .admin-title {
-        font-size: 1.3rem;
+@media (max-width: 760px) {
+    .student-body {
+        padding: 18px;
     }
 
-    .student-accounts-heading,
-    .student-accounts-row {
-        align-items: stretch;
-        flex-direction: column;
+    .student-row {
+        align-items: flex-start;
     }
 
-    .student-accounts-actions {
-        flex-direction: column;
-    }
-
-    .student-accounts-action {
+    .student-actions {
         width: 100%;
-        justify-content: center;
+        margin-left: 0;
     }
+
+    .student-actions .btn {
+        flex: 1 1 auto;
+    }
+
+    .student-stats {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+</style>
+
+<style scoped>
+/* ==========================================================================
+   Riso Campus：纸白名单卡、墨线、印章式状态与反馈。
+   ========================================================================== */
+.panel-title i {
+    color: var(--vermilion);
+}
+
+.student-head .chip {
+    box-shadow: 2px 2px 0 var(--ink);
+}
+
+.student-notice {
+    border: 1.5px solid var(--ink);
+    border-radius: 6px;
+    background: var(--lime);
+    color: var(--ink);
+    box-shadow: 3px 3px 0 var(--ink);
+    transform: rotate(-1deg);
+}
+
+.student-error {
+    border: 1.5px solid var(--ink);
+    border-radius: 6px;
+    background: var(--coral);
+    color: var(--ink);
+    box-shadow: 3px 3px 0 var(--ink);
+}
+
+.student-row {
+    border: 1.5px solid var(--ink);
+    background: var(--paper-1);
+    box-shadow: 2px 2px 0 var(--ink);
+}
+
+.student-row:nth-child(even) {
+    background: var(--paper-0);
+}
+
+.student-row:hover {
+    border-color: var(--ink);
+    background: var(--paper-2);
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
+}
+
+.student-row.is-current {
+    border-color: var(--ink);
+    box-shadow: inset 5px 0 0 var(--vermilion), 2px 2px 0 var(--ink);
+}
+
+.student-avatar {
+    border: 1.5px solid var(--ink);
+    background: var(--butter);
+    color: var(--ink);
+}
+
+.student-name {
+    color: var(--ink);
+}
+
+.student-grants i {
+    color: var(--cobalt);
+}
+
+.student-status {
+    border: 1.5px solid var(--ink);
+    box-shadow: 1px 1px 0 var(--ink);
+}
+
+.student-status.is-active {
+    color: var(--ink);
+    background: var(--lime);
+    border-color: var(--ink);
+}
+
+.student-status.is-idle {
+    color: var(--text-3);
+    background: var(--paper-2);
+    border-color: var(--ink);
+}
+
+.student-status.is-active .status-dot {
+    background: var(--ink);
+    box-shadow: none;
+}
+
+.student-status.is-idle .status-dot {
+    background: var(--text-3);
+    box-shadow: none;
+}
+
+.password-student {
+    border: 1.5px solid var(--ink);
+    background: var(--paper-0);
+}
+
+.password-student__text strong {
+    color: var(--ink);
+}
+
+.password-error {
+    border: 1.5px solid var(--ink);
+    background: var(--coral);
+    color: var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+}
+
+.password-modal .modal__body {
+    background: var(--paper-1);
+}
+
+/* 统计数字固定高度，避免数字变化造成布局抖动 */
+.student-stats .stat-value {
+    display: flex;
+    align-items: center;
+    min-height: 2.3rem;
 }
 </style>

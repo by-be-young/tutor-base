@@ -1,5 +1,5 @@
 <!--
-  WrongQuestionsView.vue - 错题本
+  WrongQuestionsView.vue - 错题作战室
   ----------------------------------------------------------------------------
   功能说明：
     1. 展示当前学生的全部错题（手动添加 + 自动收集）
@@ -7,241 +7,380 @@
        （subject ← articles.json series；题干 ← 文章 markdown 的【题干N】标记）
     3. 统计、筛选（学科/状态/搜索）、排序、掌握标记、编辑、删除
     4. 手动添加：从文章选题（学科 → 文章 → 题号，实时预览题干）
+  视觉：Riso Campus「批改作业本」—— 奶油纸底、墨线边框、错位硬阴影、学科色条。
 -->
 <template>
-    <div class="wq-container">
+    <div class="page page--wide wq">
         <!-- 未登录 -->
-        <div v-if="!authStore.isLoggedIn" class="empty-tip">
-            请先 <router-link to="/" class="tip-link">登录</router-link> 后查看错题本。
-        </div>
+        <section v-if="!authStore.isLoggedIn" class="panel panel--pad wq-guest">
+            <span class="empty__icon"><i class="fas fa-lock"></i></span>
+            <h1 class="wq-guest__title">登录后进入错题作战室</h1>
+            <p class="empty__text">错题、错因、笔记与掌握进度都会保存在你的账号里。</p>
+            <router-link to="/" class="btn btn--primary">
+                <i class="fas fa-right-to-bracket"></i> 去登录
+            </router-link>
+        </section>
 
         <template v-else>
-            <!-- 头部 -->
-            <div class="wq-header">
-                <h1 class="wq-title">错题本</h1>
-                <p class="wq-subtitle">
-                    好记性不如烂笔头 —— 在这里整理每一道错题，直到真正掌握。
-                </p>
-            </div>
-
-            <!-- 统计栏 -->
-            <div class="wq-stats">
-                <div class="wq-stat-card">
-                    <div class="wq-stat-number">{{ stats.total }}</div>
-                    <div class="wq-stat-label">总题数</div>
+            <!-- ============ 头部 ============ -->
+            <header class="page-head page-head--row">
+                <div class="wq-head">
+                    <span class="eyebrow">NEST / 错题作战室</span>
+                    <h1 class="page-title">错题<span class="text-gradient">作战室</span></h1>
+                    <p class="page-sub">把每一道错题拆开、弄懂、逐个击破 —— 直到掌握率逼近 100%。</p>
                 </div>
-                <div class="wq-stat-card is-pending">
-                    <div class="wq-stat-number">{{ stats.unmastered }}</div>
-                    <div class="wq-stat-label">未掌握</div>
-                </div>
-                <div class="wq-stat-card is-mastered">
-                    <div class="wq-stat-number">{{ stats.mastered }}</div>
-                    <div class="wq-stat-label">已掌握</div>
-                </div>
-            </div>
-
-            <!-- 筛选工具栏 -->
-            <div class="wq-toolbar">
-                <div class="wq-status-tabs">
-                    <button v-for="tab in statusTabs" :key="tab.value" class="wq-tab"
-                        :class="{ 'is-active': statusFilter === tab.value }" @click="statusFilter = tab.value">
-                        {{ tab.label }}
+                <div class="wq-head__actions">
+                    <button type="button" class="btn wq-only-toggle"
+                        :class="{ 'is-on': statusFilter === 'unmastered' }" @click="toggleOnlyUnmastered">
+                        <i class="fas fa-crosshairs"></i> 只看未掌握
                     </button>
-                    <router-link to="/wrong-training" class="wq-tab wq-tab-training">
-                        <i class="fas fa-dumbbell"></i> 错题训练
+                    <router-link to="/wrong-training" class="btn btn--primary btn--lg">
+                        <i class="fas fa-dumbbell"></i> 开始训练
                     </router-link>
                 </div>
+            </header>
 
-                <div class="wq-toolbar-right">
-                    <select v-model="subjectFilter" class="wq-select" aria-label="按学科筛选">
-                        <option value="">全部学科</option>
-                        <option v-for="s in subjectOptions" :key="s" :value="s">{{ s }}</option>
-                    </select>
+            <!-- ============ 作战概览 ============ -->
+            <section class="wq-hero panel panel--glow" aria-label="错题概览">
+                <span class="wq-hero__tape" aria-hidden="true"></span>
 
-                    <select v-model="sortMode" class="wq-select" aria-label="排序方式">
-                        <option value="recent">最近更新</option>
-                        <option value="wrong">错误次数</option>
-                    </select>
-
-                    <div class="wq-search">
-                        <i class="fas fa-search"></i>
-                        <input v-model="searchKeyword" type="text" placeholder="搜索题目、答案、错因、标签..." />
+                <div class="stat-grid wq-hero__stats">
+                    <div class="stat-card stat-card--amber">
+                        <div class="stat-value">
+                            <CountUp :key="`total-${stats.total}`" :value="stats.total" />
+                        </div>
+                        <div class="stat-label">总题数</div>
+                        <div class="stat-sub">手动 + 自动收集</div>
+                    </div>
+                    <div class="stat-card stat-card--cyan">
+                        <div class="stat-value">
+                            <CountUp :key="`pending-${stats.unmastered}`" :value="stats.unmastered" />
+                        </div>
+                        <div class="stat-label">未掌握</div>
+                        <div class="stat-sub">优先攻克</div>
+                    </div>
+                    <div class="stat-card stat-card--lime">
+                        <div class="stat-value">
+                            <CountUp :key="`mastered-${stats.mastered}`" :value="stats.mastered" />
+                        </div>
+                        <div class="stat-label">已掌握</div>
+                        <div class="stat-sub">继续保持</div>
                     </div>
                 </div>
+
+                <div class="wq-ring">
+                    <div class="wq-ring__dial" role="img" :aria-label="`当前错题掌握率 ${masteryPercent}%`">
+                        <div class="wq-ring__inner">
+                            <span class="wq-ring__num">
+                                <CountUp :key="`mastery-${masteryPercent}`" :value="masteryPercent" suffix="%" />
+                            </span>
+                            <span class="wq-ring__cap">掌握率</span>
+                        </div>
+                    </div>
+                    <div class="wq-ring__side">
+                        <span class="chip chip--violet">
+                            <i class="fas fa-bullseye"></i>
+                            {{ stats.mastered }} / {{ stats.total }} 已掌握
+                        </span>
+                        <div class="progress" aria-hidden="true">
+                            <span class="progress__bar" :style="{ width: masteryPercent + '%' }"></span>
+                        </div>
+                        <p class="wq-ring__hint">{{ masteryHint }}</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ 筛选 ============ -->
+            <section class="wq-filters panel panel--tight" aria-label="筛选与搜索">
+                <div class="wq-filters__row">
+                    <div class="seg" role="group" aria-label="掌握状态筛选">
+                        <button v-for="tab in statusTabs" :key="tab.value" type="button" class="seg__btn"
+                            :class="{ 'is-active': statusFilter === tab.value }" :aria-pressed="statusFilter === tab.value"
+                            @click="statusFilter = tab.value">
+                            {{ tab.label }}
+                            <span class="seg__count">{{ tab.count }}</span>
+                        </button>
+                    </div>
+
+                    <div class="wq-filters__controls">
+                        <select v-model="subjectFilter" class="select wq-select" aria-label="按学科筛选">
+                            <option value="">全部学科</option>
+                            <option v-for="s in subjectOptions" :key="s" :value="s">{{ s }}</option>
+                        </select>
+
+                        <select v-model="sortMode" class="select wq-select" aria-label="排序方式">
+                            <option value="recent">最近更新</option>
+                            <option value="wrong">错误次数</option>
+                        </select>
+
+                        <div class="input-wrap wq-search">
+                            <i class="fas fa-magnifying-glass"></i>
+                            <input v-model="searchKeyword" type="text" class="input"
+                                placeholder="搜索题目、答案、错因、标签..." aria-label="搜索错题" />
+                            <button v-if="searchKeyword" type="button" class="input-wrap__action" aria-label="清空搜索"
+                                @click="searchKeyword = ''">
+                                <i class="fas fa-xmark"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="wq-filters__meta">
+                    <span class="wq-result-count">
+                        <i class="fas fa-list-check"></i>
+                        命中 <strong>{{ filteredQuestions.length }}</strong> / {{ stats.total }} 道
+                    </span>
+                    <button v-if="hasActiveFilter" type="button" class="btn btn--ghost btn--sm" @click="clearFilters">
+                        <i class="fas fa-filter-circle-xmark"></i> 清除筛选
+                    </button>
+                </div>
+            </section>
+
+            <!-- ============ 加载骨架 ============ -->
+            <div v-if="!booted" class="wq-list" aria-hidden="true">
+                <div v-for="i in 3" :key="`wq-sk-${i}`" class="panel wq-sk-card">
+                    <div class="wq-sk-card__head">
+                        <span class="skeleton wq-sk wq-sk--chip"></span>
+                        <span class="skeleton wq-sk wq-sk--tag"></span>
+                        <span class="skeleton wq-sk wq-sk--tag"></span>
+                    </div>
+                    <span class="skeleton wq-sk wq-sk--line"></span>
+                    <span class="skeleton wq-sk wq-sk--line wq-sk--short"></span>
+                </div>
             </div>
 
-            <!-- 空状态 -->
-            <div v-if="filteredQuestions.length === 0" class="empty-state">
-                <div v-if="wrongQuestionsStore.questions.length === 0" class="empty-guide">
-                    <div class="empty-icon"><i class="fas fa-book-open"></i></div>
-                    <p>还没有错题记录。</p>
-                    <p class="empty-hint">在文章答题时点击「加入错题本」手动添加；<br>被批阅为「错误」的题目会自动收集到这里。</p>
+            <!-- ============ 空状态 ============ -->
+            <section v-else-if="filteredQuestions.length === 0" class="wq-empty-wrap">
+                <!-- 一道错题都没有 -->
+                <div v-if="wrongQuestionsStore.questions.length === 0" class="panel wq-empty">
+                    <div class="wq-empty__art">
+                        <span class="wq-empty__tape" aria-hidden="true"></span>
+                        <img v-if="!emptyArtBroken" class="wq-empty__img" :src="emptyArt" alt="空错题本插画"
+                            loading="lazy" @error="emptyArtBroken = true" />
+                        <span v-else class="wq-empty__fallback" aria-hidden="true">
+                            <i class="fas fa-award"></i>
+                        </span>
+                    </div>
+                    <div class="wq-empty__body">
+                        <span class="eyebrow">零错题 · 待解锁</span>
+                        <h2 class="wq-empty__title">作战室还空着</h2>
+                        <p class="wq-empty__text">
+                            在文章答题时点击「加入错题本」，或被批阅为「错误」的题目会自动收集到这里。
+                            收录第一道错题，掌握率就从这里开始。
+                        </p>
+                        <div class="empty__actions">
+                            <router-link to="/" class="btn btn--primary">
+                                <i class="fas fa-book-open"></i> 去文章练习
+                            </router-link>
+                            <router-link to="/category" class="btn btn--ghost">
+                                <i class="fas fa-layer-group"></i> 浏览资料
+                            </router-link>
+                        </div>
+                    </div>
                 </div>
-                <div v-else class="empty-filtered">
-                    <i class="fas fa-filter"></i>
-                    <p>当前筛选条件下没有错题，换个条件试试吧。</p>
-                </div>
-            </div>
 
-            <!-- 错题卡片列表 -->
+                <!-- 有错题，但筛选为空 -->
+                <div v-else class="empty wq-empty-filtered">
+                    <span class="empty__icon"><i class="fas fa-filter-circle-xmark"></i></span>
+                    <p class="empty__title">当前筛选没有命中错题</p>
+                    <p class="empty__text">换个学科、状态或关键词试试，也可以直接清除全部筛选条件。</p>
+                    <div class="empty__actions">
+                        <button type="button" class="btn btn--soft" @click="clearFilters">
+                            <i class="fas fa-rotate-left"></i> 清除筛选
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ 错题卡片列表 ============ -->
             <div v-else ref="listContainer" class="wq-list">
-                <div v-for="q in filteredQuestions" :key="q.id" class="wq-card"
+                <article v-for="q in filteredQuestions" :key="q.id" class="wq-card panel"
                     :class="{ 'is-expanded': expandedId === q.id, 'is-mastered': q.mastered }">
-                    <!-- 卡片头部 -->
-                    <div class="wq-card-head" @click="toggleExpand(q.id)">
-                        <div class="wq-subject-badge" :class="subjectBadgeClass(resolvedOf(q).subject)">
-                            {{ resolvedOf(q).subject || '未分类' }}
+                    <span class="wq-rail" :class="subjectToneClass(resolvedOf(q).subject)" aria-hidden="true"></span>
+
+                    <div class="wq-card__body">
+                        <!-- 卡片头部 -->
+                        <button type="button" class="wq-card__head" :aria-expanded="expandedId === q.id"
+                            :aria-controls="`wq-detail-${q.id}`" @click="toggleExpand(q.id)">
+                            <span class="chip wq-subject" :class="subjectChipClass(resolvedOf(q).subject)">
+                                <i class="fas fa-bookmark"></i>
+                                {{ resolvedOf(q).subject || '未分类' }}
+                            </span>
+                            <span class="tag" :class="q.is_manual ? 'is-manual' : 'is-auto'">
+                                {{ q.is_manual ? '手动' : '自动' }}
+                            </span>
+                            <span class="wq-state" :class="q.mastered ? 'is-mastered' : 'is-pending'">
+                                <i :class="q.mastered ? 'fas fa-circle-check' : 'fas fa-hourglass-half'"></i>
+                                {{ q.mastered ? '已掌握' : '未掌握' }}
+                            </span>
+                            <span class="wq-wrong-times" :title="`共错了 ${q.wrong_count} 次`">
+                                <i class="fas fa-rotate-left"></i> 错 {{ q.wrong_count }} 次
+                            </span>
+                            <span class="wq-chev" aria-hidden="true">
+                                <i :class="expandedId === q.id ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
+                            </span>
+                        </button>
+
+                        <!-- 题目内容（动态解析，支持图片与数学公式） -->
+                        <div class="wq-question" @click="toggleExpand(q.id)" v-html="resolvedOf(q).questionText
+                            ? renderQuestionText(resolvedOf(q).questionText)
+                            : (resolvedReady ? '（无题目内容）' : '加载中…')"></div>
+
+                        <!-- 标签 -->
+                        <div v-if="q.tags && q.tags.length" class="wq-tags">
+                            <span v-for="tag in q.tags" :key="tag" class="tag"># {{ tag }}</span>
                         </div>
-                        <span class="wq-source-tag" :class="q.is_manual ? 'is-manual' : 'is-auto'">
-                            {{ q.is_manual ? '手动' : '自动' }}
-                        </span>
-                        <span class="wq-status-pill" :class="q.mastered ? 'is-mastered' : 'is-pending'">
-                            <i :class="q.mastered ? 'fas fa-check-circle' : 'fas fa-hourglass-half'"></i>
-                            {{ q.mastered ? '已掌握' : '未掌握' }}
-                        </span>
-                        <span class="wq-wrong-count" :title="`共错了 ${q.wrong_count} 次`">
-                            <i class="fas fa-times-circle"></i> {{ q.wrong_count }}
-                        </span>
-                        <span class="wq-expand-icon">
-                            <i :class="expandedId === q.id ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
-                        </span>
-                    </div>
 
-                    <!-- 题目内容（动态解析，支持图片与数学公式） -->
-                    <div class="wq-question-text" @click="toggleExpand(q.id)" v-html="resolvedOf(q).questionText
-                        ? renderQuestionText(resolvedOf(q).questionText)
-                        : (resolvedReady ? '（无题目内容）' : '加载中…')"></div>
+                        <!-- 来源文章链接 -->
+                        <div v-if="q.source_blog_id" class="wq-source">
+                            <i class="fas fa-link"></i>
+                            <span class="wq-source__text">
+                                来自《{{ blogTitleOf(q.source_blog_id) }}》第
+                                {{ resolvedOf(q).order ?? q.source_question_id }} 题
+                            </span>
+                            <router-link :to="`/blog/${q.source_blog_id}`" class="wq-source__jump">
+                                跳转原文 <i class="fas fa-arrow-right"></i>
+                            </router-link>
+                        </div>
 
-                    <!-- 标签 -->
-                    <div v-if="q.tags && q.tags.length" class="wq-tags">
-                        <span v-for="tag in q.tags" :key="tag" class="wq-tag"># {{ tag }}</span>
-                    </div>
-
-                    <!-- 来源文章链接 -->
-                    <div v-if="q.source_blog_id" class="wq-source-link">
-                        <i class="fas fa-link"></i>
-                        来自《{{ blogTitleOf(q.source_blog_id) }}》第 {{ resolvedOf(q).order ?? q.source_question_id }} 题
-                        <router-link :to="`/blog/${q.source_blog_id}`" class="wq-source-jump">
-                            跳转原文 <i class="fas fa-arrow-right"></i>
-                        </router-link>
-                    </div>
-
-                    <!-- 展开详情（支持数学公式） -->
-                    <div v-if="expandedId === q.id" class="wq-details">
-                        <div class="wq-detail-row">
-                            <div class="wq-detail-col">
-                                <div class="wq-detail-label is-my"><i class="fas fa-pen"></i> 我的答案</div>
-                                <div class="wq-detail-text" v-html="q.my_answer ? safeText(q.my_answer) : '（未填写）'">
+                        <!-- 展开详情（支持数学公式） -->
+                        <div v-if="expandedId === q.id" :id="`wq-detail-${q.id}`" class="wq-detail">
+                            <div class="wq-compare">
+                                <div class="wq-compare__col is-my">
+                                    <span class="wq-compare__label">
+                                        <i class="fas fa-pen"></i> 我的答案（错）
+                                    </span>
+                                    <div class="wq-compare__text"
+                                        v-html="q.my_answer ? safeText(q.my_answer) : '（未填写）'"></div>
+                                </div>
+                                <div class="wq-compare__col is-correct">
+                                    <span class="wq-compare__label">
+                                        <i class="fas fa-check"></i> 正确答案（对）
+                                    </span>
+                                    <div class="wq-compare__text"
+                                        v-html="resolvedOf(q).correctAnswer ? safeText(resolvedOf(q).correctAnswer) : '（未填写）'">
+                                    </div>
                                 </div>
                             </div>
-                            <div class="wq-detail-col">
-                                <div class="wq-detail-label is-correct"><i class="fas fa-check"></i> 正确答案</div>
-                                <div class="wq-detail-text"
-                                    v-html="resolvedOf(q).correctAnswer ? safeText(resolvedOf(q).correctAnswer) : '（未填写）'">
+
+                            <div v-if="q.wrong_reason || q.note" class="wq-notes">
+                                <div v-if="q.wrong_reason" class="wq-note is-reason">
+                                    <span class="wq-note__label"><i class="fas fa-lightbulb"></i> 错因分析</span>
+                                    <div class="wq-note__text" v-html="safeText(q.wrong_reason)"></div>
+                                </div>
+                                <div v-if="q.note" class="wq-note is-note">
+                                    <span class="wq-note__label"><i class="fas fa-note-sticky"></i> 笔记</span>
+                                    <div class="wq-note__text" v-html="safeText(q.note)"></div>
                                 </div>
                             </div>
                         </div>
-                        <div v-if="q.wrong_reason" class="wq-detail-block">
-                            <div class="wq-detail-label is-reason"><i class="fas fa-lightbulb"></i> 错因分析</div>
-                            <div class="wq-detail-text" v-html="safeText(q.wrong_reason)"></div>
-                        </div>
-                        <div v-if="q.note" class="wq-detail-block">
-                            <div class="wq-detail-label is-note"><i class="fas fa-sticky-note"></i> 笔记</div>
-                            <div class="wq-detail-text" v-html="safeText(q.note)"></div>
-                        </div>
-                    </div>
 
-                    <!-- 卡片操作栏 -->
-                    <div class="wq-card-actions">
-                        <span class="wq-date">{{ formatDate(q.updated_at) }}</span>
-                        <div class="wq-action-btns">
-                            <button class="wq-action-btn is-redo" @click="handleRedo(q)">
-                                <i class="fas fa-redo"></i> 重做该题
-                            </button>
-                            <button class="wq-action-btn" :class="q.mastered ? 'is-unmaster' : 'is-master'"
-                                @click="handleToggleMastered(q)" :disabled="busyIds.has(q.id)">
-                                <i :class="q.mastered ? 'fas fa-undo' : 'fas fa-check-circle'"></i>
-                                {{ q.mastered ? '取消掌握' : '标记掌握' }}
-                            </button>
-                            <button class="wq-action-btn is-edit" @click="openEditModal(q)">
-                                <i class="fas fa-edit"></i> 编辑
-                            </button>
-                            <button class="wq-action-btn is-delete" @click="requestDelete(q)">
-                                <i class="fas fa-trash-alt"></i> 删除
-                            </button>
+                        <!-- 卡片操作栏 -->
+                        <div class="wq-card__actions">
+                            <span class="wq-date"><i class="fas fa-clock"></i> {{ formatDate(q.updated_at) }}</span>
+                            <div class="wq-action-btns">
+                                <button type="button" class="btn btn--cyan btn--sm" @click="handleRedo(q)">
+                                    <i class="fas fa-rotate-right"></i> 重做该题
+                                </button>
+                                <button type="button" class="btn btn--sm"
+                                    :class="q.mastered ? 'btn--ghost' : 'btn--soft'"
+                                    :disabled="busyIds.has(q.id)" @click="handleToggleMastered(q)">
+                                    <i :class="q.mastered ? 'fas fa-undo' : 'fas fa-check-circle'"></i>
+                                    {{ q.mastered ? '取消掌握' : '标记掌握' }}
+                                </button>
+                                <button type="button" class="btn btn--ghost btn--sm" @click="openEditModal(q)">
+                                    <i class="fas fa-pen-to-square"></i> 编辑
+                                </button>
+                                <button type="button" class="btn btn--danger btn--sm" @click="requestDelete(q)">
+                                    <i class="fas fa-trash-can"></i> 删除
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
+                </article>
             </div>
         </template>
 
-        <!-- 编辑错题模态框（添加错题已移至文章答题区） -->
-        <div v-if="modalVisible" class="modal-overlay" @click.self="closeModal">
-            <div class="modal-panel" ref="modalBody">
-                <div class="modal-header">
-                    <span class="modal-title">
-                        <i class="fas fa-edit"></i> 编辑错题
-                    </span>
-                    <button class="modal-close" @click="closeModal"><i class="fas fa-times"></i></button>
+        <!-- ============ 编辑错题模态框 ============ -->
+        <div v-if="modalVisible" class="backdrop" @click.self="closeModal">
+            <div class="modal wq-modal" role="dialog" aria-modal="true" aria-labelledby="wq-edit-title">
+                <div class="modal__head">
+                    <h2 id="wq-edit-title" class="modal__title">
+                        <i class="fas fa-pen-to-square"></i> 编辑错题
+                    </h2>
+                    <button type="button" class="modal__close" aria-label="关闭编辑弹窗" @click="closeModal">
+                        <i class="fas fa-xmark"></i>
+                    </button>
                 </div>
 
-                <div class="modal-body">
+                <div class="modal__body" ref="modalBody">
                     <!-- 题干只读预览 -->
-                    <div class="form-row">
-                        <label class="form-label">题干（来自文章，不可修改）</label>
+                    <div class="field">
+                        <label class="field-label">题干（来自文章，不可修改）</label>
                         <div class="wq-preview" v-html="renderQuestionText(editPreviewText)"></div>
                     </div>
 
-                    <div class="form-row">
-                        <label class="form-label">我的答案</label>
-                        <textarea v-model="form.my_answer" class="form-textarea" rows="2"
+                    <div class="field">
+                        <label class="field-label">我的答案</label>
+                        <textarea v-model="form.my_answer" class="textarea" rows="2"
                             placeholder="你当时的作答"></textarea>
                     </div>
 
-                    <div class="form-row">
-                        <label class="form-label">错因分析</label>
-                        <textarea v-model="form.wrong_reason" class="form-textarea" rows="2"
+                    <div class="field">
+                        <label class="field-label">错因分析</label>
+                        <textarea v-model="form.wrong_reason" class="textarea" rows="2"
                             placeholder="为什么会做错？知识点没掌握、审题不清、粗心…"></textarea>
                     </div>
 
-                    <div class="form-row">
-                        <label class="form-label">知识点标签</label>
-                        <input v-model="form.tagsInput" type="text" class="form-input" placeholder="用逗号分隔，如：氧化还原, 配平" />
+                    <div class="field">
+                        <label class="field-label">
+                            知识点标签
+                            <span class="field-hint">用逗号分隔</span>
+                        </label>
+                        <input v-model="form.tagsInput" type="text" class="input"
+                            placeholder="如：氧化还原, 配平" />
                     </div>
 
-                    <div class="form-row">
-                        <label class="form-label">笔记</label>
-                        <textarea v-model="form.note" class="form-textarea" rows="2"
+                    <div class="field">
+                        <label class="field-label">笔记</label>
+                        <textarea v-model="form.note" class="textarea" rows="2"
                             placeholder="易错点提醒、总结、学习心得…"></textarea>
                     </div>
                 </div>
 
-                <div class="modal-footer">
-                    <button class="modal-btn is-cancel" @click="closeModal">取消</button>
-                    <button class="modal-btn is-save" :disabled="saving" @click="submitForm">
-                        <i class="fas" :class="saving ? 'fa-spinner fa-spin' : 'fa-save'"></i>
+                <div class="modal__foot">
+                    <button type="button" class="btn btn--ghost" @click="closeModal">取消</button>
+                    <button type="button" class="btn btn--primary" :disabled="saving" @click="submitForm">
+                        <i class="fas" :class="saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'"></i>
                         {{ saving ? '保存中...' : '保存' }}
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- 删除确认模态框 -->
-        <div v-if="confirmVisible" class="modal-overlay" @click.self="cancelDelete">
-            <div class="modal-panel modal-panel-small">
-                <div class="modal-header">
-                    <span class="modal-title"><i class="fas fa-exclamation-triangle"></i> 删除错题</span>
-                    <button class="modal-close" @click="cancelDelete"><i class="fas fa-times"></i></button>
+        <!-- ============ 删除确认模态框 ============ -->
+        <div v-if="confirmVisible" class="backdrop" @click.self="cancelDelete">
+            <div class="modal wq-modal wq-modal--danger" role="dialog" aria-modal="true"
+                aria-labelledby="wq-delete-title">
+                <div class="modal__head">
+                    <h2 id="wq-delete-title" class="modal__title">
+                        <i class="fas fa-triangle-exclamation"></i> 删除错题
+                    </h2>
+                    <button type="button" class="modal__close" aria-label="关闭删除弹窗" @click="cancelDelete">
+                        <i class="fas fa-xmark"></i>
+                    </button>
                 </div>
-                <div class="confirm-body">
-                    <p>{{ deletingItem?.is_manual
-                        ? '确定要删除这道错题吗？删除后不可恢复。'
-                        : '这道错题来自自动收集，删除后若再次做错会重新收集。确定删除吗？' }}</p>
+                <div class="modal__body">
+                    <p class="wq-confirm-text">
+                        {{ deletingItem?.is_manual
+                            ? '确定要删除这道错题吗？删除后不可恢复。'
+                            : '这道错题来自自动收集，删除后若再次做错会重新收集。确定删除吗？' }}
+                    </p>
                 </div>
-                <div class="modal-footer">
-                    <button class="modal-btn is-cancel" @click="cancelDelete">取消</button>
-                    <button class="modal-btn is-danger" :disabled="deleting" @click="confirmDelete">
-                        <i class="fas" :class="deleting ? 'fa-spinner fa-spin' : 'fa-trash-alt'"></i>
+                <div class="modal__foot">
+                    <button type="button" class="btn btn--ghost" @click="cancelDelete">取消</button>
+                    <button type="button" class="btn btn--danger" :disabled="deleting" @click="confirmDelete">
+                        <i class="fas" :class="deleting ? 'fa-spinner fa-spin' : 'fa-trash-can'"></i>
                         {{ deleting ? '删除中...' : '确认删除' }}
                     </button>
                 </div>
@@ -251,90 +390,35 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useArticleStore } from '@/stores/blogStore'
 import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
+import { useWrongQuestionsResolve } from '@/composables/useWrongQuestionsResolve'
 import { useKatex } from '@/composables/useKatex'
 import { useImageEmbed } from '@/composables/useImageEmbed'
-import { resolveQuestionText, resolveQuestionOrder, renderMarkdownTable } from '@/utils/questionText'
+import { renderMarkdownTable } from '@/utils/questionText'
+import { showToast } from '@/utils/toast'
+import CountUp from '@/components/ui/CountUp.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const blogStore = useArticleStore()
 const wrongQuestionsStore = useWrongQuestionsStore()
+const { resolvedMap, resolvedReady, resolvedOf, resolveQuestions } = useWrongQuestionsResolve()
 const { renderMath } = useKatex()
 const { processMarkdown, setBasePath } = useImageEmbed()
 setBasePath('articles/图片/')
 
+// ========== 空状态插画（站内收藏卡，失败时色块兜底） ==========
+const emptyArt = `${import.meta.env.BASE_URL}cards/cosmos-r.png`
+const emptyArtBroken = ref(false)
+
 // ========== 展示解析（题干/学科/正确答案） ==========
 // 正确答案由后端返回；静态文章只用于补充题干和学科。
-const resolvedMap = ref(new Map())   // 错题 id → { subject, questionText, correctAnswer }
-const resolvedReady = ref(false)     // 动态解析是否完成（用于区分「加载中」与「无内容」）
-const articleCache = new Map()       // blogId → markdown（缓存）
 const listContainer = ref(null)
 const modalBody = ref(null)
-
-function resolvedOf(q) {
-    return resolvedMap.value.get(q.id) || {}
-}
-
-async function loadArticle(blogId) {
-    const key = String(blogId)
-    if (articleCache.has(key)) return articleCache.get(key)
-    const blog = blogStore.blogData.find(b => Number(b.id) === Number(blogId))
-    let md = null
-    if (blog) {
-        try {
-            const res = await fetch(`${import.meta.env.BASE_URL}articles/${blog.path}`)
-            if (res.ok) md = await res.text()
-        } catch {
-            md = null
-        }
-    }
-    articleCache.set(key, md)
-    return md
-}
-
-function indexBackendAnswers() {
-    const map = new Map()
-        ; wrongQuestionsStore.questions.forEach(question => map.set(
-            `${question.source_blog_id}-${String(question.source_question_id)}`,
-            question.correct_answer || ''))
-    return map
-}
-
-// 解析全部错题的动态数据
-async function resolveAll() {
-    resolvedReady.value = false
-    const list = wrongQuestionsStore.questions
-    const blogIds = [...new Set(list.map(q => q.source_blog_id).filter(b => b != null))]
-
-    await Promise.all(blogIds.map(loadArticle))
-    const answerMap = indexBackendAnswers()
-
-    const map = new Map()
-    list.forEach(q => {
-        let subject = ''
-        let questionText = ''
-        let correctAnswer = ''
-        let order = null
-        if (q.source_blog_id != null) {
-            const blog = blogStore.blogData.find(b => Number(b.id) === Number(q.source_blog_id))
-            subject = blog?.series || ''
-            const md = articleCache.get(String(q.source_blog_id))
-            if (md) {
-                questionText = resolveQuestionText(md, q.source_question_id)
-                order = resolveQuestionOrder(md, q.source_question_id)
-            }
-            correctAnswer = answerMap.get(`${q.source_blog_id}-${String(q.source_question_id)}`) || ''
-        }
-        map.set(q.id, { subject, questionText, correctAnswer, order })
-    })
-    resolvedMap.value = map
-    resolvedReady.value = true
-}
 
 // ========== 渲染工具 ==========
 /** 题干内容渲染：markdown 表格 → <table>，图片嵌入（![[图片]] → <img>），换行转 <br>，$...$ 公式由 KaTeX 渲染 */
@@ -362,18 +446,21 @@ function scheduleFormulaRender() {
 }
 
 // ========== 筛选状态 ==========
-const statusTabs = [
-    { value: 'all', label: '全部' },
-    { value: 'unmastered', label: '未掌握' },
-    { value: 'mastered', label: '已掌握' }
-]
-
 const statusFilter = ref('all')
 const subjectFilter = ref('')
 const sortMode = ref('recent')
 const searchKeyword = ref('')
 const expandedId = ref(null)
 const busyIds = ref(new Set())
+
+const statusTabs = computed(() => [
+    { value: 'all', label: '全部', count: stats.value.total },
+    { value: 'unmastered', label: '未掌握', count: stats.value.unmastered },
+    { value: 'mastered', label: '已掌握', count: stats.value.mastered }
+])
+
+const hasActiveFilter = computed(() =>
+    statusFilter.value !== 'all' || Boolean(subjectFilter.value) || Boolean(searchKeyword.value.trim()))
 
 // ========== 统计 ==========
 const stats = computed(() => {
@@ -384,6 +471,17 @@ const stats = computed(() => {
         unmastered: all.length - mastered,
         mastered
     }
+})
+
+const masteryPercent = computed(() => {
+    if (!stats.value.total) return 0
+    return Math.round((stats.value.mastered / stats.value.total) * 100)
+})
+
+const masteryHint = computed(() => {
+    if (!stats.value.total) return '收录第一道错题，掌握率就从这里开始。'
+    if (!stats.value.unmastered) return '全部掌握，保持手感，去训练舱巩固一遍吧。'
+    return `还有 ${stats.value.unmastered} 道错题等待攻克，优先处理未掌握的题。`
 })
 
 // ========== 学科选项 ==========
@@ -435,11 +533,17 @@ const filteredQuestions = computed(() => {
 })
 
 // ========== 数据加载 ==========
+const booted = ref(false)
+
 async function loadData() {
-    await blogStore.loadArticleData()
-    const studentId = wrongQuestionsStore.getStudentId(authStore.currentUser)
-    await wrongQuestionsStore.fetchQuestions(studentId)
-    await resolveAll()
+    try {
+        await blogStore.loadArticleData()
+        const studentId = wrongQuestionsStore.getStudentId(authStore.currentUser)
+        await wrongQuestionsStore.fetchQuestions(studentId)
+        await resolveQuestions(wrongQuestionsStore.questions)
+    } finally {
+        booted.value = true
+    }
 }
 
 // ========== 卡片交互 ==========
@@ -452,10 +556,30 @@ function handleRedo(q) {
     router.push(`/wrong-training?question=${q.id}`)
 }
 
-function subjectBadgeClass(subject) {
-    if (subject === '化学') return 'is-chemistry'
+function toggleOnlyUnmastered() {
+    statusFilter.value = statusFilter.value === 'unmastered' ? 'all' : 'unmastered'
+}
+
+function clearFilters() {
+    statusFilter.value = 'all'
+    subjectFilter.value = ''
+    searchKeyword.value = ''
+}
+
+// 学科 → 卡片左侧色条（Riso 印刷色）
+function subjectToneClass(subject) {
+    if (subject === '化学') return 'is-chem'
     if (subject === '英语') return 'is-english'
+    if (subject === '初中英语') return 'is-junior'
     return 'is-other'
+}
+
+// 学科 → 徽章配色
+function subjectChipClass(subject) {
+    if (subject === '化学') return 'chip--cyan'
+    if (subject === '英语') return 'chip--pink'
+    if (subject === '初中英语') return 'chip--amber'
+    return 'chip--violet'
 }
 
 function blogTitleOf(blogId) {
@@ -474,14 +598,16 @@ function formatDate(dateStr) {
 // ========== 掌握切换 ==========
 async function handleToggleMastered(q) {
     if (busyIds.value.has(q.id)) return
-    busyIds.value.add(q.id)
+    busyIds.value = new Set(busyIds.value).add(q.id)
     try {
         await wrongQuestionsStore.toggleMastered(q.id, !q.mastered)
         showToast(q.mastered ? '已取消掌握' : '已标记掌握，继续保持！', 'success')
     } catch (e) {
         showToast(e.message || '操作失败', 'error')
     } finally {
-        busyIds.value.delete(q.id)
+        const next = new Set(busyIds.value)
+        next.delete(q.id)
+        busyIds.value = next
     }
 }
 
@@ -572,7 +698,7 @@ async function submitForm() {
         await wrongQuestionsStore.updateQuestion(editingId.value, payload)
         showToast('修改成功', 'success')
         modalVisible.value = false
-        await resolveAll()
+        await resolveQuestions(wrongQuestionsStore.questions)
     } catch (e) {
         showToast(e.message || '保存失败，请稍后重试', 'error')
     } finally {
@@ -580,40 +706,24 @@ async function submitForm() {
     }
 }
 
-// ========== Toast ==========
-let toastTimer = null
-function showToast(message, type = 'info', duration = 3000) {
-    const existing = document.querySelector('.custom-toast')
-    if (existing) {
-        existing.remove()
-        if (toastTimer) {
-            clearTimeout(toastTimer)
-            toastTimer = null
-        }
-    }
-
-    const toast = document.createElement('div')
-    toast.className = `custom-toast toast-${type}`
-    toast.textContent = message
-    document.body.appendChild(toast)
-
-    requestAnimationFrame(() => toast.classList.add('toast-visible'))
-
-    toastTimer = setTimeout(() => {
-        toast.classList.remove('toast-visible')
-        setTimeout(() => {
-            if (toast.parentNode) toast.parentNode.removeChild(toast)
-            toastTimer = null
-        }, 300)
-    }, duration)
+// ========== 键盘：Esc 关闭弹层 ==========
+function handleKeydown(event) {
+    if (event.key !== 'Escape') return
+    if (confirmVisible.value) cancelDelete()
+    else if (modalVisible.value) closeModal()
 }
 
 // ========== 生命周期 ==========
 onMounted(async () => {
+    window.addEventListener('keydown', handleKeydown)
     if (authStore.isLoggedIn) {
         await loadData()
         scheduleFormulaRender()
     }
+})
+
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handleKeydown)
 })
 
 // 登录状态变化时重新加载
@@ -631,400 +741,520 @@ watch([filteredQuestions, expandedId, modalVisible], () => {
 </script>
 
 <style scoped>
-.wq-container {
-    max-width: 1300px;
-    min-width: 800px;
-    margin: 0 auto;
-    padding: 30px 32px 100px;
-    width: 100%;
+/* ==========================================================================
+   Riso Campus · 批改作业本
+   规则：奶油纸底 / 纸白卡片 / 1.5px 墨线 / 3~5px 错位硬阴影 / 平涂印刷色。
+   不使用毛玻璃、发光、深色底与紫青渐变。
+   ========================================================================== */
+
+/* ========== 页面骨架 ========== */
+.wq {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
 }
 
-.empty-tip {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--gray);
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 24px;
+.wq-head {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 
-.tip-link {
-    color: var(--teal-dark);
+.wq-head .text-gradient {
+    padding: 0 0.06em;
 }
 
-/* ========== 头部 ========== */
-.wq-header {
-    margin-bottom: 24px;
-}
-
-.wq-title {
-    font-size: 2.2rem;
-    font-weight: 700;
-    color: #2d4a3a;
-    margin-bottom: 6px;
+.wq-head__actions {
     display: flex;
     align-items: center;
     gap: 12px;
+    flex-wrap: wrap;
 }
 
-.wq-title::before {
-    content: '\f7e6';
-    font-family: 'Font Awesome 6 Free';
-    font-weight: 900;
-    font-size: 1.8rem;
-    color: #d9ba4b;
+.wq-only-toggle.is-on {
+    color: var(--ink);
+    background: var(--lime);
+    border: 1.5px solid var(--ink);
+    box-shadow: 3px 3px 0 var(--ink);
 }
 
-.wq-subtitle {
-    color: var(--gray);
-    font-size: 0.95rem;
+.wq-only-toggle.is-on:hover {
+    text-decoration: none;
+    background: #d7f76b;
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 var(--ink);
 }
 
-/* ========== 统计栏 ========== */
-.wq-stats {
+/* ========== 未登录 ========== */
+.wq-guest {
     display: flex;
-    gap: 20px;
-    margin-bottom: 20px;
-}
-
-.wq-stat-card {
-    flex: 1;
-    background: rgba(255, 255, 255, 0.45);
-    backdrop-filter: blur(8px);
-    border-radius: 18px;
-    padding: 18px 24px;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 64px 24px;
     text-align: center;
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    box-shadow: 0 4px 16px var(--shadow);
-    transition: transform 0.25s ease;
+    margin-top: 6vh;
 }
 
-.wq-stat-card:hover {
-    transform: translateY(-2px);
+.wq-guest__title {
+    font-size: 1.4rem;
 }
 
-.wq-stat-number {
-    font-size: 2.1rem;
-    font-weight: 700;
-    color: #2d4a3a;
-    line-height: 1.2;
+/* ========== 作战概览（成绩单） ========== */
+.wq-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(290px, 350px);
+    gap: 26px;
+    align-items: center;
+    padding: 28px 24px 26px;
 }
 
-.wq-stat-card.is-pending .wq-stat-number {
-    color: #b6862a;
+/* 顶部纸胶带 */
+.wq-hero__tape {
+    position: absolute;
+    top: -14px;
+    left: 38px;
+    width: 108px;
+    height: 26px;
+    background: var(--butter);
+    border: 1.5px solid var(--ink);
+    transform: rotate(-2.5deg);
+    pointer-events: none;
 }
 
-.wq-stat-card.is-mastered .wq-stat-number {
-    color: #2f7b57;
+.wq-hero__stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
 }
 
-.wq-stat-label {
-    font-size: 0.9rem;
-    color: var(--gray);
-    margin-top: 4px;
+.wq-hero .stat-card {
+    transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 
-/* ========== 工具栏 ========== */
-.wq-toolbar {
+.wq-hero .stat-card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 5px 5px 0 var(--ink);
+}
+
+.wq-hero .stat-value {
+    color: var(--ink);
+}
+
+.wq-hero .stat-label {
+    color: var(--ink);
+}
+
+.wq-hero .stat-sub {
+    color: var(--ink-soft);
+    opacity: 0.8;
+}
+
+/* 掌握率印章 */
+.wq-ring {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    min-width: 0;
+}
+
+.wq-ring__dial {
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 128px;
+    height: 128px;
+    border-radius: 50%;
+    border: 2.5px solid var(--ink);
+    background: var(--paper-1);
+    box-shadow: 4px 4px 0 var(--ink);
+    transform: rotate(-3deg);
+}
+
+.wq-ring__dial::before {
+    content: '';
+    position: absolute;
+    inset: 7px;
+    border-radius: 50%;
+    border: 1.5px dashed var(--line-strong);
+    pointer-events: none;
+}
+
+.wq-ring__inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    text-align: center;
+}
+
+.wq-ring__num {
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.04em;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.wq-ring__cap {
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    color: var(--text-3);
+}
+
+.wq-ring__side {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+}
+
+.wq-ring__hint {
+    color: var(--text-3);
+    font-size: 0.8rem;
+    line-height: 1.6;
+}
+
+/* ========== 筛选栏 ========== */
+.wq-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.wq-filters__row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 14px;
     flex-wrap: wrap;
-    margin-bottom: 20px;
-    padding: 14px 18px;
-    background: rgba(255, 255, 255, 0.3);
-    backdrop-filter: blur(8px);
-    border-radius: 18px;
-    border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
-.wq-status-tabs {
-    display: flex;
-    gap: 8px;
-}
-
-.wq-tab {
-    padding: 6px 18px;
-    border-radius: 30px;
-    border: 1px solid transparent;
-    background: rgba(255, 255, 255, 0.3);
-    color: var(--gray);
-    font-size: 0.9rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-family: inherit;
-}
-
-.wq-tab:hover {
-    background: rgba(255, 255, 255, 0.6);
-    color: #2d4a3a;
-}
-
-.wq-tab.is-active {
-    background: rgba(91, 168, 164, 0.2);
-    color: var(--teal-dark);
-    border-color: var(--teal-dark);
-    font-weight: 600;
-}
-
-/* 错题训练入口按钮 */
-.wq-tab-training {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(217, 186, 75, 0.15);
-    color: #8a6d1a;
-    border-color: rgba(217, 186, 75, 0.25);
-    text-decoration: none;
-}
-
-.wq-tab-training:hover {
-    background: rgba(217, 186, 75, 0.28);
-    color: #705d13;
-}
-
-.wq-toolbar-right {
+.wq-filters__controls {
     display: flex;
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
+    flex: 1;
+    justify-content: flex-end;
 }
 
 .wq-select {
-    padding: 8px 12px;
-    border-radius: 12px;
-    border: 1px solid rgba(120, 170, 155, 0.25);
-    background: rgba(255, 255, 255, 0.7);
-    color: #345143;
-    font-size: 0.9rem;
-    outline: none;
-    cursor: pointer;
-    font-family: inherit;
-    transition: border-color 0.2s;
-}
-
-.wq-select:focus {
-    border-color: var(--teal-dark);
+    width: auto;
+    min-width: 132px;
+    height: 42px;
+    padding: 0 38px 0 14px;
+    font-size: 0.84rem;
+    border-radius: var(--r-full);
+    background-position: calc(100% - 19px) 18px, calc(100% - 14px) 18px;
 }
 
 .wq-search {
-    position: relative;
+    flex: 1;
+    min-width: 200px;
+    max-width: 320px;
+}
+
+.wq-search .input {
+    height: 42px;
+    font-size: 0.84rem;
+    border-radius: var(--r-full);
+    padding-right: 44px;
+}
+
+.wq-filters__meta {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding-top: 12px;
+    border-top: 1.5px dashed var(--line-strong);
 }
 
-.wq-search i {
-    position: absolute;
-    left: 14px;
-    color: rgba(90, 122, 106, 0.5);
-    font-size: 0.85rem;
+.wq-result-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text-3);
+    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    letter-spacing: 0.04em;
 }
 
-.wq-search input {
-    padding: 8px 14px 8px 36px;
-    border-radius: 30px;
-    border: 1px solid rgba(120, 170, 155, 0.25);
-    background: rgba(255, 255, 255, 0.7);
-    color: #345143;
-    font-size: 0.9rem;
-    width: 240px;
-    outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
-    font-family: inherit;
+.wq-result-count strong {
+    color: var(--ink);
+    font-size: 0.95rem;
+    padding: 0 2px;
 }
 
-.wq-search input:focus {
-    border-color: var(--teal-dark);
-    box-shadow: 0 0 0 3px rgba(91, 168, 164, 0.12);
+.wq-result-count i {
+    color: var(--vermilion);
 }
 
 /* ========== 空状态 ========== */
-.empty-state {
-    text-align: center;
-    padding: 40px 20px;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 24px;
+.wq-empty-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
 }
 
-.empty-guide .empty-icon {
-    font-size: 3.5rem;
-    color: rgba(217, 186, 75, 0.5);
-    margin-bottom: 14px;
+.wq-empty {
+    display: grid;
+    grid-template-columns: minmax(0, 250px) minmax(0, 1fr);
+    align-items: center;
+    gap: 34px;
+    padding: 34px;
 }
 
-.empty-guide p {
-    color: #3d5a4a;
-    font-size: 1.05rem;
+.wq-empty__art {
+    position: relative;
+    padding: 11px;
+    background: var(--paper-1);
+    border: 1.5px solid var(--ink);
+    box-shadow: var(--shadow-card);
+    --float-rotate: -2.5deg;
+    animation: float-y 7s ease-in-out infinite;
 }
 
-.empty-guide .empty-hint {
-    color: var(--gray);
-    font-size: 0.9rem;
-    margin-top: 8px;
-    line-height: 1.8;
+.wq-empty__tape {
+    position: absolute;
+    top: -13px;
+    left: 50%;
+    width: 92px;
+    height: 25px;
+    transform: translateX(-50%) rotate(-4deg);
+    background: var(--sky);
+    border: 1.5px solid var(--ink);
+    z-index: 2;
 }
 
-.empty-filtered {
-    color: var(--gray);
-    font-size: 0.95rem;
+.wq-empty__img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
 }
 
-.empty-filtered i {
-    font-size: 2rem;
-    margin-bottom: 10px;
-    color: rgba(120, 170, 155, 0.4);
+.wq-empty__fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    border: 1.5px solid var(--ink);
+    background: var(--butter);
+    color: var(--ink);
+    font-size: 2.6rem;
+}
+
+.wq-empty__body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.wq-empty__title {
+    font-size: 1.5rem;
+}
+
+.wq-empty__text {
+    color: var(--text-2);
+    font-size: 0.92rem;
+    max-width: 52ch;
+}
+
+.wq-empty .empty__actions {
+    margin-top: 6px;
+}
+
+.wq-empty-filtered {
+    padding: 48px 24px;
+    border: 2px dashed var(--line-strong);
+    background: var(--paper-1);
 }
 
 /* ========== 错题卡片 ========== */
 .wq-list {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px;
 }
 
 .wq-card {
-    background: rgba(255, 255, 255, 0.55);
-    backdrop-filter: blur(8px);
-    border-radius: 20px;
-    padding: 16px 22px;
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    border-left: 6px solid #d9ba4b;
-    box-shadow: 0 6px 24px var(--shadow);
-    transition: box-shadow 0.3s ease, transform 0.3s ease;
+    position: relative;
+    display: flex;
+    overflow: hidden;
+    transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 
 .wq-card:hover {
-    box-shadow: 0 10px 32px rgba(80, 130, 120, 0.12);
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--ink);
 }
 
 .wq-card.is-expanded {
-    box-shadow: 0 12px 36px rgba(80, 130, 120, 0.14);
+    box-shadow: 6px 6px 0 var(--ink);
 }
 
 .wq-card.is-mastered {
-    border-left-color: #8fcfb8;
+    background: var(--paper-1);
 }
 
-/* 卡片头部 */
-.wq-card-head {
+/* 左侧学科色条 */
+.wq-rail {
+    flex-shrink: 0;
+    width: 10px;
+    border-right: 1.5px solid var(--ink);
+    background: var(--cobalt);
+}
+
+.wq-rail.is-chem { background: var(--sky); }
+.wq-rail.is-english { background: var(--pink); }
+.wq-rail.is-junior { background: var(--butter); }
+.wq-rail.is-other { background: var(--cobalt); }
+
+.wq-card__body {
+    flex: 1;
+    min-width: 0;
+    padding: 18px 20px 16px 20px;
+}
+
+/* 卡片头部（整行可点击展开） */
+.wq-card__head {
     display: flex;
     align-items: center;
     gap: 10px;
-    cursor: pointer;
-    user-select: none;
     flex-wrap: wrap;
+    width: 100%;
+    text-align: left;
+    padding: 0;
+    color: inherit;
+    border-radius: 6px;
 }
 
-.wq-subject-badge {
-    padding: 2px 14px;
-    border-radius: 999px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #2d4a3a;
+.wq-subject {
+    height: 27px;
+    font-size: 0.74rem;
 }
 
-.wq-subject-badge.is-chemistry {
-    background: rgba(91, 168, 164, 0.18);
-    color: #2f6a66;
+.wq-card__head .tag {
+    border: 1.5px solid var(--ink);
+    background: var(--paper-1);
+    font-weight: 700;
+    color: var(--text-2);
 }
 
-.wq-subject-badge.is-english {
-    background: rgba(143, 207, 184, 0.25);
-    color: #2f6b50;
+.wq-card__head .tag.is-auto {
+    background: var(--butter);
+    color: var(--ink);
 }
 
-.wq-subject-badge.is-other {
-    background: rgba(120, 170, 155, 0.12);
-    color: #4c6b5b;
+.wq-card__head .tag.is-manual {
+    background: var(--paper-2);
+    color: var(--text-1);
 }
 
-.wq-source-tag {
-    padding: 1px 10px;
-    border-radius: 999px;
-    font-size: 0.72rem;
-    font-weight: 600;
-}
-
-.wq-source-tag.is-manual {
-    background: rgba(120, 170, 155, 0.1);
-    color: #5a7a6a;
-}
-
-.wq-source-tag.is-auto {
-    background: rgba(242, 226, 172, 0.45);
-    color: #7b6420;
-}
-
-.wq-status-pill {
+.wq-state {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 2px 12px;
-    border-radius: 999px;
-    font-size: 0.78rem;
-    font-weight: 600;
+    height: 25px;
+    padding: 0 11px;
+    border-radius: var(--r-full);
+    border: 1.5px solid var(--ink);
+    font-size: 0.72rem;
+    font-weight: 800;
+    white-space: nowrap;
 }
 
-.wq-status-pill.is-pending {
-    background: rgba(255, 224, 224, 0.7);
-    color: #b65661;
+.wq-state.is-pending {
+    background: var(--vermilion);
+    color: var(--paper-1);
 }
 
-.wq-status-pill.is-mastered {
-    background: rgba(205, 237, 221, 0.75);
-    color: #2f7b57;
+.wq-state.is-mastered {
+    background: var(--lime);
+    color: var(--ink);
 }
 
-.wq-wrong-count {
+.wq-wrong-times {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    font-size: 0.78rem;
-    color: #a87b19;
+    gap: 5px;
     margin-left: auto;
+    padding: 2px 9px;
+    border: 1.5px solid var(--vermilion);
+    border-radius: 6px;
+    color: var(--vermilion);
+    background: var(--paper-1);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transform: rotate(-1.5deg);
 }
 
-.wq-expand-icon {
-    color: rgba(90, 122, 106, 0.5);
-    font-size: 0.8rem;
+.wq-chev {
+    color: var(--text-3);
+    font-size: 0.78rem;
+    transition: color var(--dur-fast);
 }
 
-/* 题目内容（支持图片与数学公式） */
-.wq-question-text {
-    margin-top: 12px;
-    font-size: 1.05rem;
-    line-height: 1.7;
-    color: #2d4a3a;
+.wq-card__head:hover .wq-chev {
+    color: var(--ink);
+}
+
+/* 题干（作业本答题区） */
+.wq-question {
+    margin-top: 14px;
+    padding: 11px 14px 11px 16px;
+    border-left: 3px solid var(--vermilion);
+    background: var(--paper-0);
+    border-radius: 0 var(--r-xs) var(--r-xs) 0;
+    color: var(--ink);
+    font-size: 1rem;
+    line-height: 1.8;
     word-break: break-word;
     cursor: pointer;
 }
 
 /* 题干内容为 v-html 注入，须用 :deep() 才能命中 */
-.wq-question-text :deep(img) {
+.wq-question :deep(img) {
     max-width: 100%;
-    border-radius: 8px;
-    margin: 4px 0;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-xs);
+    margin: 8px 0;
+    background: var(--paper-1);
 }
 
-/* 题干中的表格 */
-.wq-question-text :deep(table) {
+.wq-question :deep(table) {
     width: 100%;
     border-collapse: collapse;
     margin: 10px 0;
-    font-size: 0.95em;
+    font-size: 0.92em;
 }
 
-.wq-question-text :deep(th),
-.wq-question-text :deep(td) {
-    border: 1px solid rgba(100, 145, 128, 0.5);
-    padding: 6px 12px;
+.wq-question :deep(th),
+.wq-question :deep(td) {
+    border: 1px solid var(--ink);
+    padding: 6px 11px;
     text-align: left;
     vertical-align: middle;
 }
 
-.wq-question-text :deep(th) {
-    background: rgba(91, 168, 164, 0.15);
-    font-weight: 600;
+.wq-question :deep(th) {
+    background: var(--butter);
+    font-weight: 800;
 }
 
 /* 标签 */
@@ -1032,558 +1262,416 @@ watch([filteredQuestions, expandedId, modalVisible], () => {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 10px;
-}
-
-.wq-tag {
-    padding: 2px 12px;
-    border-radius: 999px;
-    background: rgba(91, 168, 164, 0.08);
-    color: #3a6a60;
-    font-size: 0.8rem;
-    border: 1px solid rgba(91, 168, 164, 0.15);
-}
-
-/* 来源链接 */
-.wq-source-link {
-    margin-top: 10px;
-    font-size: 0.85rem;
-    color: var(--gray);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-}
-
-.wq-source-jump {
-    margin-left: auto;
-    color: var(--teal-dark);
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    transition: gap 0.2s ease;
-}
-
-.wq-source-jump:hover {
-    gap: 8px;
-}
-
-/* 展开详情 */
-.wq-details {
-    margin-top: 14px;
-    border-top: 1px dashed rgba(120, 170, 155, 0.2);
-    padding-top: 14px;
-    animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(6px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.wq-detail-row {
-    display: flex;
-    gap: 16px;
-}
-
-.wq-detail-col {
-    flex: 1;
-    min-width: 0;
-}
-
-.wq-detail-block {
     margin-top: 12px;
 }
 
-.wq-detail-label {
-    font-size: 0.82rem;
+.wq-tags .tag {
+    border: 1.5px solid var(--ink);
+    background: var(--paper-1);
+    color: var(--text-2);
     font-weight: 600;
-    margin-bottom: 6px;
+    font-size: 0.72rem;
+}
+
+/* 来源 */
+.wq-source {
     display: flex;
     align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    color: var(--text-3);
+    font-size: 0.8rem;
+}
+
+.wq-source__jump {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--cobalt);
+    font-weight: 700;
+    border-bottom: 1.5px solid var(--cobalt);
+    transition: gap var(--dur-fast) var(--ease-out), color var(--dur-fast);
+}
+
+.wq-source__jump:hover {
+    gap: 9px;
+    color: var(--vermilion);
+    border-bottom-color: var(--vermilion);
+}
+
+/* 展开详情 */
+.wq-detail {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1.5px dashed var(--line-strong);
+    animation: fade-up 0.3s var(--ease-out) both;
+}
+
+.wq-compare {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.wq-compare__col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px 14px;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-sm);
+    box-shadow: 3px 3px 0 var(--ink);
+    background: var(--paper-1);
+    min-width: 0;
+}
+
+/* 我的答案 = 错（朱红浅块）；正确答案 = 对（黄绿浅块） */
+.wq-compare__col.is-my {
+    border-top: 9px solid var(--vermilion);
+    background: color-mix(in srgb, var(--vermilion) 9%, var(--paper-1));
+}
+
+.wq-compare__col.is-correct {
+    border-top: 9px solid var(--lime);
+    background: color-mix(in srgb, var(--lime) 26%, var(--paper-1));
+}
+
+.wq-compare__label {
+    display: inline-flex;
+    align-items: center;
     gap: 6px;
+    font-size: 0.76rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    color: var(--ink);
 }
 
-.wq-detail-label.is-my {
-    color: #b6862a;
+.wq-compare__col.is-my .wq-compare__label i {
+    color: var(--vermilion);
 }
 
-.wq-detail-label.is-correct {
-    color: #2f7b57;
+.wq-compare__col.is-correct .wq-compare__label i {
+    color: var(--green);
 }
 
-.wq-detail-label.is-reason {
-    color: #b65661;
-}
-
-.wq-detail-label.is-note {
-    color: #4a6da8;
-}
-
-.wq-detail-text {
-    font-size: 0.95rem;
-    color: #345143;
-    background: rgba(245, 248, 246, 0.7);
-    border-radius: 12px;
-    padding: 10px 14px;
+.wq-compare__text {
+    color: var(--ink);
+    font-size: 0.92rem;
+    line-height: 1.72;
     word-break: break-word;
+}
+
+.wq-notes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.wq-note {
+    padding: 12px 14px 14px;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-sm);
+    box-shadow: 3px 3px 0 var(--ink);
+    background: var(--paper-1);
+    min-width: 0;
+}
+
+.wq-note.is-reason {
+    border-top: 9px solid var(--butter);
+    background: color-mix(in srgb, var(--butter) 16%, var(--paper-1));
+}
+
+.wq-note.is-note {
+    border-top: 9px solid var(--sky);
+    background: color-mix(in srgb, var(--sky) 18%, var(--paper-1));
+}
+
+.wq-note__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 0.76rem;
+    font-weight: 800;
+    color: var(--ink);
+}
+
+.wq-note.is-reason .wq-note__label i {
+    color: #b07d00;
+}
+
+.wq-note.is-note .wq-note__label i {
+    color: var(--cobalt);
+}
+
+.wq-note__text {
+    color: var(--ink-soft);
+    font-size: 0.9rem;
     line-height: 1.7;
+    word-break: break-word;
 }
 
 /* 操作栏 */
-.wq-card-actions {
+.wq-card__actions {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-top: 14px;
     flex-wrap: wrap;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1.5px dashed var(--line-strong);
 }
 
 .wq-date {
-    font-size: 0.78rem;
-    color: rgba(90, 122, 106, 0.6);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-3);
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    letter-spacing: 0.04em;
 }
 
 .wq-action-btns {
     display: flex;
-    gap: 8px;
+    gap: 9px;
     flex-wrap: wrap;
 }
 
-.wq-action-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 16px;
-    border-radius: 999px;
-    border: 1px solid transparent;
-    font-size: 0.85rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-family: inherit;
-}
-
-.wq-action-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-.wq-action-btn.is-master {
-    background: rgba(205, 237, 221, 0.55);
-    color: #2f7b57;
-    border-color: rgba(80, 176, 122, 0.2);
-}
-
-.wq-action-btn.is-master:hover {
-    background: rgba(205, 237, 221, 0.85);
-}
-
-.wq-action-btn.is-unmaster {
-    background: rgba(240, 244, 242, 0.6);
-    color: #6d7a72;
-    border-color: rgba(120, 170, 155, 0.2);
-}
-
-.wq-action-btn.is-unmaster:hover {
-    background: rgba(240, 244, 242, 0.9);
-}
-
-.wq-action-btn.is-redo {
-    background: rgba(91, 168, 164, 0.14);
-    color: #2f6a66;
-    border-color: rgba(91, 168, 164, 0.3);
-}
-
-.wq-action-btn.is-redo:hover {
-    background: rgba(91, 168, 164, 0.28);
-}
-
-.wq-action-btn.is-edit {
-    background: rgba(255, 251, 230, 0.7);
-    color: #8a6d1a;
-    border-color: rgba(217, 186, 75, 0.25);
-}
-
-.wq-action-btn.is-edit:hover {
-    background: rgba(255, 248, 214, 0.95);
-}
-
-.wq-action-btn.is-delete {
-    background: rgba(255, 235, 235, 0.6);
-    color: #b65661;
-    border-color: rgba(208, 116, 126, 0.2);
-}
-
-.wq-action-btn.is-delete:hover {
-    background: rgba(255, 224, 224, 0.9);
-}
-
-/* ========== 模态框 ========== */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.35);
-    z-index: 2000;
+/* ========== 加载骨架 ========== */
+.wq-sk-card {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    animation: fadeInOverlay 0.25s ease;
+    flex-direction: column;
+    gap: 14px;
+    padding: 20px 22px;
 }
 
-@keyframes fadeInOverlay {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
-}
-
-.modal-panel {
-    width: 100%;
-    max-width: 640px;
-    max-height: 90vh;
-    overflow-y: auto;
-    background: #fbfaf6;
-    border-radius: 24px;
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
-    animation: fadeInPanel 0.3s ease;
-}
-
-.modal-panel-small {
-    max-width: 440px;
-}
-
-@keyframes fadeInPanel {
-    from {
-        opacity: 0;
-        transform: translateY(20px) scale(0.97);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
-.modal-header {
+.wq-sk-card__head {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px 24px 14px;
-    border-bottom: 1px solid rgba(120, 170, 155, 0.15);
-    position: sticky;
-    top: 0;
-    background: #fbfaf6;
-    border-radius: 24px 24px 0 0;
-    z-index: 1;
-}
-
-.modal-title {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: #2d4a3a;
-    display: flex;
-    align-items: center;
     gap: 10px;
 }
 
-.modal-title i {
-    color: #d9ba4b;
-}
-
-.modal-close {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(120, 170, 155, 0.08);
-    color: #4c6b5b;
-    cursor: pointer;
-    font-size: 1rem;
-    transition: background 0.2s ease;
-}
-
-.modal-close:hover {
-    background: rgba(120, 170, 155, 0.2);
-}
-
-.modal-body {
-    padding: 20px 24px;
-}
-
-.form-row {
-    margin-bottom: 16px;
-}
-
-.form-label {
+.wq-sk {
     display: block;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #345143;
-    margin-bottom: 6px;
+    height: 14px;
+    border-radius: 4px;
 }
 
-.form-required {
-    color: #d57587;
+.wq-sk--chip {
+    width: 84px;
+    height: 26px;
 }
 
-.form-input,
-.form-select,
-.form-textarea {
+.wq-sk--tag {
+    width: 58px;
+    height: 26px;
+}
+
+.wq-sk--line {
     width: 100%;
-    padding: 10px 14px;
-    border-radius: 12px;
-    border: 1px solid rgba(120, 170, 155, 0.25);
-    background: rgba(255, 255, 255, 0.9);
-    color: #345143;
+    height: 16px;
+}
+
+.wq-sk--short {
+    width: 62%;
+}
+
+/* ========== 模态框 ========== */
+.wq-modal {
+    width: min(640px, 100%);
+}
+
+.wq-modal--danger {
+    width: min(460px, 100%);
+}
+
+.wq-confirm-text {
+    color: var(--text-2);
+    line-height: 1.75;
     font-size: 0.95rem;
-    outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
-    font-family: inherit;
-    line-height: 1.6;
 }
 
-.form-textarea {
-    resize: vertical;
-    min-height: 60px;
-}
-
-.form-input:focus,
-.form-select:focus,
-.form-textarea:focus {
-    border-color: rgba(224, 199, 106, 0.8);
-    box-shadow: 0 0 0 4px rgba(243, 227, 162, 0.25);
+.wq-modal .field + .field {
+    margin-top: 16px;
 }
 
 /* 题干预览 */
 .wq-preview {
-    padding: 10px 14px;
-    background: rgba(245, 248, 246, 0.7);
-    border-radius: 12px;
-    border: 1px solid rgba(120, 170, 155, 0.15);
-    font-size: 0.95rem;
-    color: #345143;
+    padding: 12px 14px;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-sm);
+    background: var(--paper-0);
+    color: var(--ink);
+    font-size: 0.92rem;
     line-height: 1.7;
     word-break: break-word;
-    max-height: 200px;
+    max-height: 220px;
     overflow-y: auto;
 }
 
-/* 题干预览内容为 v-html 注入，须用 :deep() 才能命中 */
 .wq-preview :deep(img) {
     max-width: 100%;
-    border-radius: 8px;
-    margin: 4px 0;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-xs);
+    margin: 6px 0;
+    background: var(--paper-1);
 }
 
-/* 题干预览中的表格 */
 .wq-preview :deep(table) {
     width: 100%;
     border-collapse: collapse;
     margin: 8px 0;
-    font-size: 0.92em;
+    font-size: 0.9em;
 }
 
 .wq-preview :deep(th),
 .wq-preview :deep(td) {
-    border: 1px solid rgba(100, 145, 128, 0.5);
+    border: 1px solid var(--ink);
     padding: 5px 10px;
     text-align: left;
     vertical-align: middle;
 }
 
 .wq-preview :deep(th) {
-    background: rgba(91, 168, 164, 0.15);
-    font-weight: 600;
-}
-
-.modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    padding: 0 24px 20px;
-}
-
-.modal-btn {
-    padding: 9px 26px;
-    border-radius: 30px;
-    border: none;
-    font-size: 0.95rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-family: inherit;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-}
-
-.modal-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-.modal-btn.is-cancel {
-    background: rgba(120, 170, 155, 0.1);
-    color: #4c6b5b;
-}
-
-.modal-btn.is-cancel:hover {
-    background: rgba(120, 170, 155, 0.2);
-}
-
-.modal-btn.is-save {
-    background: linear-gradient(135deg, rgba(255, 248, 214, 0.98), rgba(243, 227, 162, 0.92));
-    color: #705d13;
-    box-shadow: 0 6px 16px rgba(217, 186, 75, 0.3);
-}
-
-.modal-btn.is-save:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 22px rgba(217, 186, 75, 0.4);
-}
-
-.modal-btn.is-danger {
-    background: linear-gradient(135deg, #f08a8a, #e0606a);
-    color: white;
-    box-shadow: 0 6px 16px rgba(224, 96, 106, 0.3);
-}
-
-.modal-btn.is-danger:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 22px rgba(224, 96, 106, 0.4);
-}
-
-.confirm-body {
-    padding: 24px;
-    color: #345143;
-    line-height: 1.7;
-    font-size: 0.98rem;
-}
-
-/* Toast 弹窗（与文章页保持一致） */
-:global(.custom-toast) {
-    position: fixed;
-    top: 30px;
-    left: 50%;
-    transform: translateX(-50%) translateY(-20px);
-    padding: 8px 25px;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(12px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
-    font-size: 1.05rem;
-    font-weight: 500;
-    color: #2d4a3a;
-    z-index: 9999;
-    opacity: 0;
-    transition: opacity 0.3s ease, transform 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.6);
-}
-
-:global(.custom-toast.toast-visible) {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-}
-
-:global(.custom-toast.toast-success) {
-    border: 4px solid #4caf50;
-    color: #1e4a2a;
-}
-
-:global(.custom-toast.toast-error) {
-    border: 4px solid #ef5350;
-    color: #7a2a2a;
-}
-
-:global(.custom-toast.toast-info) {
-    border: 4px solid #42a5f5;
-    color: #1a3a5a;
+    background: var(--butter);
+    font-weight: 800;
 }
 
 /* ========== 响应式 ========== */
-@media (min-width: 1024px) {
-    .wq-container {
-        padding: 50px 60px 120px;
+@media (max-width: 1024px) {
+    .wq-hero {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 24px;
     }
 
-    .wq-title {
-        font-size: 2.6rem;
-    }
-}
-
-@media (min-width: 641px) and (max-width: 1023px) {
-    .wq-container {
-        padding: 30px 28px 70px;
-        min-width: auto;
+    .wq-ring {
+        justify-content: flex-start;
     }
 
-    .wq-search input {
-        width: 180px;
+    .wq-ring__side {
+        max-width: 440px;
     }
 }
 
-@media (max-width: 640px) {
-    .wq-container {
-        padding: 16px 14px 90px;
-        min-width: auto;
+@media (max-width: 760px) {
+    .wq {
+        gap: 18px;
     }
 
-    .wq-title {
-        font-size: 1.6rem;
+    .wq-hero {
+        padding: 22px 16px 20px;
     }
 
-    .wq-stats {
+    .wq-hero__tape {
+        left: 50%;
+        transform: translateX(-50%) rotate(-2.5deg);
+    }
+
+    .wq-hero__stats {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 10px;
     }
 
-    .wq-stat-card {
-        padding: 14px 8px;
+    .wq-hero .stat-card {
+        padding: 14px 12px;
     }
 
-    .wq-stat-number {
-        font-size: 1.6rem;
+    .wq-hero .stat-card .stat-sub {
+        display: none;
     }
 
-    .wq-toolbar {
+    .wq-ring {
+        gap: 16px;
+    }
+
+    .wq-ring__dial {
+        width: 112px;
+        height: 112px;
+    }
+
+    .wq-ring__num {
+        font-size: 1.35rem;
+    }
+
+    .wq-filters__row {
         flex-direction: column;
         align-items: stretch;
-        gap: 12px;
     }
 
-    .wq-search input {
+    .wq-filters__controls {
+        justify-content: stretch;
+    }
+
+    .wq-select {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .wq-search {
+        max-width: none;
+        flex-basis: 100%;
+    }
+
+    .wq-empty {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 24px;
+        padding: 22px;
+    }
+
+    .wq-empty__art {
+        max-width: 220px;
+        margin: 0 auto;
+    }
+
+    .wq-compare,
+    .wq-notes {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .wq-card__actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .wq-action-btns {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         width: 100%;
     }
 
-    .wq-card {
-        padding: 14px 16px;
+    .wq-wrong-times {
+        margin-left: 0;
     }
 
-    .wq-detail-row {
-        flex-direction: column;
-        gap: 10px;
+    .wq-chev {
+        margin-left: auto;
+    }
+}
+
+@media (max-width: 420px) {
+    .wq-head__actions .btn {
+        flex: 1;
     }
 
-    .wq-card-actions {
+    .wq-ring {
         flex-direction: column;
         align-items: flex-start;
     }
 
+    .wq-hero .stat-card {
+        padding: 12px 10px;
+    }
+
+    .wq-hero .stat-value {
+        font-size: 1.6rem;
+    }
+
+    .wq-hero .stat-label {
+        font-size: 0.72rem;
+    }
 }
 </style>

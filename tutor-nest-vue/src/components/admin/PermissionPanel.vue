@@ -1,100 +1,191 @@
 <!-- src/components/admin/PermissionPanel.vue -->
 <template>
-    <div>
-        <h2 class="admin-title">权限管理</h2>
-
-        <div class="admin-controls">
-            <div class="control-group">
-                <label><i class="fas fa-book"></i> 选择科目：</label>
-                <div class="subject-btn-group">
-                    <button v-for="subject in allSubjects" :key="subject" class="subject-btn"
-                        :class="{ 'is-active': currentSubject === subject }" @click="selectSubject(subject)">
-                        {{ subject }}
-                    </button>
-                </div>
+    <div class="panel perm-panel">
+        <header class="panel-head perm-head">
+            <div class="perm-head__copy">
+                <h2 class="panel-title">
+                    <i class="fas fa-shield-halved" aria-hidden="true"></i>
+                    权限管理
+                </h2>
+                <p class="text-sm text-muted">勾选文章即授权当前学员访问，保存后立即生效。</p>
             </div>
 
-            <div class="control-group">
-                <label><i class="fas fa-filter"></i> 显示：</label>
-                <div class="subject-btn-group">
-                    <button v-for="filter in filters" :key="filter.value" class="subject-btn"
-                        :class="{ 'is-active': activeFilter === filter.value }" @click="activeFilter = filter.value">
-                        {{ filter.label }}
-                    </button>
-                </div>
+            <div class="perm-ring" role="img" :aria-label="`已授权 ${grantedCount} / ${totalArticles} 篇文章`">
+                <svg viewBox="0 0 120 120" aria-hidden="true">
+                    <circle class="perm-ring__track" cx="60" cy="60" r="52" />
+                    <circle class="perm-ring__bar" cx="60" cy="60" r="52" :stroke-dasharray="ringLength"
+                        :stroke-dashoffset="ringOffset" />
+                </svg>
+                <span class="perm-ring__center">
+                    <strong>{{ grantedCount }}</strong>
+                    <small>/ {{ totalArticles }}</small>
+                    <em>已授权</em>
+                </span>
             </div>
-        </div>
+        </header>
 
-        <div class="admin-tree">
-            <p v-if="!selectedStudentId" class="tree-placeholder">请先选择学生</p>
-            <p v-else-if="!currentSubject" class="tree-placeholder">请选择科目</p>
-            <p v-else-if="filteredArticles.length === 0" class="tree-placeholder">
-                该筛选条件下暂无文章
-            </p>
+        <div class="panel-body perm-body">
+            <EmptyState v-if="!selectedStudentId" icon="fas fa-user-graduate" title="尚未选择学员"
+                text="在顶部切换或新增学员后，即可配置内容授权。" />
+
+            <div v-else-if="allSubjects.length === 0" class="perm-skeletons" aria-hidden="true">
+                <div class="skeleton perm-skeleton"></div>
+                <div class="skeleton perm-skeleton"></div>
+                <div class="skeleton perm-skeleton"></div>
+            </div>
+
             <template v-else>
-                <PermissionTreeNode v-for="node in treeData" :key="node.name + (node.isFile ? node.blogId : '')"
-                    :node="node" :depth="0" :permissions="currentPermissions"
-                    :initially-expanded="activeFilter === 'unauthorized'"
-                    @toggle="handlePermissionToggle" />
+                <div class="perm-subjects">
+                    <button v-for="item in subjectStats" :key="item.subject" type="button" class="perm-subject"
+                        :class="[`is-tone-${item.tone}`, { 'is-active': currentSubject === item.subject }]"
+                        :aria-pressed="currentSubject === item.subject" @click="selectSubject(item.subject)">
+                        <span class="perm-subject__name">
+                            {{ item.subject }}
+                            <i aria-hidden="true" class="fas" :class="item.granted === item.total && item.total > 0 ? 'fa-circle-check' : 'fa-layer-group'"></i>
+                        </span>
+                        <span class="perm-subject__count">{{ item.granted }}<em>/{{ item.total }}</em></span>
+                        <span class="progress perm-subject__bar">
+                            <span class="progress__bar" :style="{ width: `${item.percent}%` }"></span>
+                        </span>
+                    </button>
+                </div>
+
+                <div class="perm-toolbar">
+                    <div class="seg" role="group" aria-label="授权状态筛选">
+                        <button v-for="filter in filters" :key="filter.value" type="button"
+                            class="seg__btn" :class="{ 'is-active': activeFilter === filter.value }"
+                            :aria-pressed="activeFilter === filter.value" @click="activeFilter = filter.value">
+                            {{ filter.label }}
+                            <span class="seg__count">{{ filter.count }}</span>
+                        </button>
+                    </div>
+                    <span class="text-xs text-dim">当前学科共 {{ subjectArticles.length }} 篇 · 按目录归档</span>
+                </div>
+
+                <EmptyState v-if="!currentSubject" icon="fas fa-folder-open" title="未选择学科"
+                    text="先在上方选择一个学科，再为学员分配文章权限。" />
+
+                <EmptyState v-else-if="filteredArticles.length === 0" icon="fas fa-filter"
+                    :title="activeFilter === 'authorized' ? '该学科还没有已授权文章' : '该筛选条件下暂无文章'"
+                    text="切换筛选条件或直接浏览全部文章。">
+                    <button type="button" class="btn btn--soft btn--sm" @click="activeFilter = 'all'">
+                        查看全部
+                    </button>
+                </EmptyState>
+
+                <div v-else class="perm-tree">
+                    <PermissionTreeNode v-for="node in treeData" :key="node.name + (node.isFile ? node.blogId : '')"
+                        :node="node" :permissions="currentPermissions" :tone="currentTone"
+                        :initially-expanded="true" @toggle="handlePermissionToggle"
+                        @toggle-many="handlePermissionToggleMany" />
+                </div>
             </template>
         </div>
 
-        <div class="admin-tip">
-            <i class="fas fa-info-circle"></i>
-            勾选文章即授权该学生访问，取消勾选则禁止。修改后请点击「保存」。
-        </div>
+        <footer class="perm-footer">
+            <div class="perm-footer__info">
+                <span class="chip" :class="dirty ? 'chip--amber' : 'chip--lime'">
+                    <i aria-hidden="true" class="fas" :class="dirty ? 'fa-pen' : 'fa-circle-check'"></i>
+                    {{ dirty ? '有未保存改动' : '已同步' }}
+                </span>
+                <span class="text-sm text-muted">
+                    已授权 <strong class="perm-footer__num">{{ grantedCount }}</strong> / {{ totalArticles }} 篇
+                </span>
+            </div>
+            <button type="button" class="btn btn--primary" :disabled="!dirty || saving"
+                @click="emit('save-permissions')">
+                <i aria-hidden="true" class="fas" :class="saving ? 'fa-circle-notch fa-spin' : 'fa-cloud-arrow-up'"></i>
+                {{ saving ? '保存中…' : '保存授权' }}
+            </button>
+        </footer>
     </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useAdminStore } from '@/stores/adminStore'
+import EmptyState from '@/components/ui/EmptyState.vue'
 import PermissionTreeNode from './PermissionTreeNode.vue'
 
 const props = defineProps({
     students: { type: Array, default: () => [] },
     selectedStudentId: { type: [String, Number], default: null },
     blogData: { type: Array, default: () => [] },
-    allSubjects: { type: Array, default: () => [] }
+    allSubjects: { type: Array, default: () => [] },
+    dirty: { type: Boolean, default: false },
+    saving: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['permission-change'])
+const emit = defineEmits(['permission-change', 'save-permissions'])
 
 const adminStore = useAdminStore()
 
 const currentSubject = ref('')
-const activeFilter = ref('unauthorized')
+const activeFilter = ref('all')
 
-const filters = [
-    { value: 'unauthorized', label: '未授权' },
-    { value: 'authorized', label: '已授权' },
-    { value: 'all', label: '全部' }
-]
+const RING_RADIUS = 52
+const ringLength = 2 * Math.PI * RING_RADIUS
+
+function subjectTone(subject) {
+    if (!subject) return 'violet'
+    if (subject.includes('初中英语')) return 'amber'
+    if (subject.includes('化学')) return 'cyan'
+    if (subject.includes('英语')) return 'violet'
+    return 'pink'
+}
 
 const currentPermissions = computed(() => {
-    const student = props.students.find(s => String(s.id) === String(props.selectedStudentId))
+    const student = props.students.find(item => String(item.id) === String(props.selectedStudentId))
     return student?.permissions || []
 })
 
-const subjectArticles = computed(() => {
-    return props.blogData.filter(b => b.series === currentSubject.value)
+const totalArticles = computed(() => props.blogData.length)
+const grantedCount = computed(() => currentPermissions.value.length)
+
+const ringOffset = computed(() => {
+    const ratio = totalArticles.value ? Math.min(1, grantedCount.value / totalArticles.value) : 0
+    return ringLength * (1 - ratio)
+})
+
+const subjectStats = computed(() => props.allSubjects.map(subject => {
+    const articles = props.blogData.filter(blog => blog.series === subject)
+    const granted = articles.filter(blog => currentPermissions.value.includes(Number(blog.id))).length
+    return {
+        subject,
+        tone: subjectTone(subject),
+        total: articles.length,
+        granted,
+        percent: articles.length ? Math.round((granted / articles.length) * 100) : 0
+    }
+}))
+
+const currentTone = computed(() => subjectTone(currentSubject.value))
+
+const subjectArticles = computed(() => props.blogData.filter(blog => blog.series === currentSubject.value))
+
+const filters = computed(() => {
+    const articles = subjectArticles.value
+    const authorized = articles.filter(blog => currentPermissions.value.includes(Number(blog.id))).length
+    return [
+        { value: 'unauthorized', label: '未授权', count: articles.length - authorized },
+        { value: 'authorized', label: '已授权', count: authorized },
+        { value: 'all', label: '全部', count: articles.length }
+    ]
 })
 
 const filteredArticles = computed(() => {
     let articles = subjectArticles.value
 
     if (activeFilter.value === 'authorized') {
-        articles = articles.filter(b => currentPermissions.value.includes(Number(b.id)))
+        articles = articles.filter(blog => currentPermissions.value.includes(Number(blog.id)))
     } else if (activeFilter.value === 'unauthorized') {
-        articles = articles.filter(b => !currentPermissions.value.includes(Number(b.id)))
+        articles = articles.filter(blog => !currentPermissions.value.includes(Number(blog.id)))
     }
 
     return articles
 })
 
-const treeData = computed(() => {
-    return buildTree(filteredArticles.value)
-})
+const treeData = computed(() => buildTree(filteredArticles.value))
 
 function buildTree(articles) {
     const root = { children: [] }
@@ -108,7 +199,7 @@ function buildTree(articles) {
         for (let i = 0; i < dirParts.length; i++) {
             const part = dirParts[i]
             if (i === dirParts.length - 1) {
-                if (!current.children.find(c => c.name === title && c.isFile)) {
+                if (!current.children.find(child => child.name === title && child.isFile)) {
                     current.children.push({
                         name: title,
                         isFile: true,
@@ -118,7 +209,7 @@ function buildTree(articles) {
                     })
                 }
             } else {
-                let dirNode = current.children.find(c => c.name === part && !c.isFile)
+                let dirNode = current.children.find(child => child.name === part && !child.isFile)
                 if (!dirNode) {
                     dirNode = { name: part, isFile: false, children: [] }
                     current.children.push(dirNode)
@@ -130,11 +221,11 @@ function buildTree(articles) {
 
     function sortNode(node) {
         if (!node.children) return
-        node.children.sort((a, b) => {
-            if (a.isFile !== b.isFile) return a.isFile ? 1 : -1
-            return a.name.localeCompare(b.name)
+        node.children.sort((left, right) => {
+            if (left.isFile !== right.isFile) return left.isFile ? 1 : -1
+            return left.name.localeCompare(right.name)
         })
-        node.children.forEach(c => { if (!c.isFile) sortNode(c) })
+        node.children.forEach(child => { if (!child.isFile) sortNode(child) })
     }
     sortNode(root)
 
@@ -150,152 +241,390 @@ function handlePermissionToggle(blogId, checked) {
     emit('permission-change')
 }
 
-// 初始化默认科目
-watch(() => props.allSubjects, (subjects) => {
-    if (subjects.length > 0 && !currentSubject.value) {
-        currentSubject.value = subjects[0]
-    }
+function handlePermissionToggleMany(blogIds, checked) {
+    blogIds.forEach(blogId => adminStore.updatePermissions(blogId, checked))
+    emit('permission-change')
+}
+
+// 初始化默认科目：优先选中第一个确实有文章的学科，首屏直接渲染文章树
+watch(() => [props.allSubjects, props.blogData], ([subjects, articles]) => {
+    if (!subjects.length) return
+    const hasArticles = subject => articles.some(blog => blog.series === subject)
+    if (currentSubject.value && hasArticles(currentSubject.value)) return
+    currentSubject.value = subjects.find(hasArticles) || subjects[0]
 }, { immediate: true })
 </script>
 
 <style scoped>
-.admin-title {
-    font-size: 1.6rem;
-    font-weight: 600;
-    color: #2d4a3a;
-    margin-bottom: 20px;
+.perm-panel {
+    overflow: hidden;
 }
 
-.admin-controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 24px 40px;
-    margin-bottom: 18px;
-    padding: 14px 18px;
-    background: rgba(255, 255, 255, 0.5);
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    align-items: flex-end;
+.perm-head {
+    align-items: flex-start;
+    gap: 18px;
 }
 
-.control-group {
+.perm-head__copy {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    flex: 0 1 auto;
-    min-width: 140px;
+    min-width: 0;
 }
 
-.control-group label {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #4c6b5b;
+.perm-head__copy .panel-title i {
+    font-size: 0.98em;
+}
+
+/* 环形授权指示 */
+.perm-ring {
+    position: relative;
+    width: 108px;
+    height: 108px;
+    flex-shrink: 0;
+}
+
+.perm-ring svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.perm-ring__track {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.08);
+    stroke-width: 9;
+}
+
+.perm-ring__bar {
+    fill: none;
+    stroke: var(--cyan);
+    stroke-width: 9;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.55));
+    transition: stroke-dashoffset var(--dur-slow) var(--ease-out);
+}
+
+.perm-ring__center {
+    position: absolute;
+    inset: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 4px;
+    justify-content: center;
+    line-height: 1;
 }
 
-.subject-btn-group {
+.perm-ring__center strong {
+    font-family: var(--font-display);
+    font-size: 1.45rem;
+    font-weight: 800;
+    color: var(--text-1);
+    font-variant-numeric: tabular-nums;
+}
+
+.perm-ring__center small {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    color: var(--text-3);
+    margin-top: -2px;
+}
+
+.perm-ring__center em {
+    font-style: normal;
+    font-size: 0.58rem;
+    letter-spacing: 0.16em;
+    color: var(--text-4);
+    margin-top: 5px;
+}
+
+/* 学科统计卡 */
+.perm-skeletons {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 4px 0;
-    align-items: center;
-}
-
-.subject-btn {
-    padding: 6px 18px;
-    border-radius: 20px;
-    border: 1.5px solid rgba(120, 170, 155, 0.3);
-    background: rgba(255, 255, 255, 0.8);
-    color: #4c6b5b;
-    font-size: 0.85rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-    font-family: inherit;
-}
-
-.subject-btn:hover {
-    background: rgba(120, 170, 155, 0.15);
-    border-color: rgba(120, 170, 155, 0.6);
-    transform: translateY(-1px);
-}
-
-.subject-btn.is-active {
-    background: linear-gradient(135deg, rgba(255, 248, 214, 0.95), rgba(243, 227, 162, 0.85));
-    border-color: #d9ba4b;
-    color: #705d13;
-    box-shadow: 0 2px 10px rgba(217, 186, 75, 0.2);
-}
-
-.admin-tree {
-    margin-top: 4px;
-    min-height: 200px;
-    background: rgba(255, 255, 255, 0.7);
-    border-radius: 12px;
-    border: 1px solid rgba(120, 170, 155, 0.12);
-    padding: 8px 0;
-}
-
-.tree-placeholder {
-    color: #adb5bd;
-    text-align: center;
-    padding: 40px 20px;
-    font-size: 15px;
-}
-
-.admin-tip {
-    margin-top: 24px;
-    padding: 14px 20px;
-    background: rgba(255, 248, 214, 0.55);
-    border-radius: 16px;
-    border: 1px solid rgba(224, 199, 106, 0.15);
-    color: #3d5a4a;
-    font-size: 0.95rem;
-    display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 10px;
 }
 
-.admin-tip i {
-    color: #d0a93d;
-    font-size: 1.2rem;
+.perm-skeleton {
+    height: 62px;
+    border-radius: var(--r-md);
 }
 
-@media (max-width: 820px) {
-    .admin-controls {
-        gap: 16px;
-        padding: 12px 14px;
+.perm-subjects {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.perm-subject {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px 14px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.03);
+    text-align: left;
+    position: relative;
+    overflow: hidden;
+    transition: border-color var(--dur), background var(--dur), transform var(--dur) var(--ease-out);
+}
+
+.perm-subject::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--tone-color, var(--violet-2));
+    opacity: 0.55;
+}
+
+.perm-subject:hover {
+    transform: translateY(-2px);
+    border-color: var(--tone-line, var(--line-strong));
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.perm-subject.is-active {
+    border-color: var(--tone-line, rgba(139, 92, 246, 0.4));
+    background: linear-gradient(140deg, var(--tone-soft, rgba(139, 92, 246, 0.14)), rgba(255, 255, 255, 0.02) 70%);
+    box-shadow: 0 18px 40px -30px var(--tone-color, var(--violet));
+}
+
+.perm-subject__name {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--text-1);
+}
+
+.perm-subject__name i {
+    font-size: 0.74rem;
+    color: var(--tone-color, var(--violet-2));
+    opacity: 0.85;
+}
+
+.perm-subject__count {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--tone-color, var(--text-2));
+    font-variant-numeric: tabular-nums;
+}
+
+.perm-subject__count em {
+    font-style: normal;
+    font-weight: 500;
+    color: var(--text-4);
+}
+
+.perm-subject__bar {
+    display: block;
+    height: 5px;
+}
+
+.perm-subject__bar .progress__bar {
+    background: var(--tone-color, var(--violet-2));
+}
+
+.perm-subject__bar .progress__bar::after {
+    display: none;
+}
+
+/* 工具栏 */
+.perm-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+/* 树 */
+.perm-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* 底部保存条 */
+.perm-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 16px 24px;
+    border-top: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.015);
+}
+
+.perm-footer__info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.perm-footer__num {
+    color: var(--text-1);
+    font-family: var(--font-mono);
+}
+
+/* 学科色调变量 */
+.is-tone-cyan { --tone-color: var(--cyan); --tone-soft: rgba(34, 211, 238, 0.13); --tone-line: rgba(34, 211, 238, 0.34); }
+.is-tone-violet { --tone-color: var(--violet-2); --tone-soft: rgba(139, 92, 246, 0.15); --tone-line: rgba(139, 92, 246, 0.36); }
+.is-tone-amber { --tone-color: var(--amber); --tone-soft: rgba(251, 191, 36, 0.13); --tone-line: rgba(251, 191, 36, 0.34); }
+.is-tone-pink { --tone-color: var(--pink); --tone-soft: rgba(244, 114, 182, 0.13); --tone-line: rgba(244, 114, 182, 0.34); }
+
+@media (max-width: 760px) {
+    .perm-head {
+        align-items: center;
     }
 
-    .control-group {
-        min-width: 100%;
-        flex-basis: 100%;
+    .perm-ring {
+        width: 86px;
+        height: 86px;
+    }
+
+    .perm-ring__center strong {
+        font-size: 1.2rem;
+    }
+
+    .perm-subjects {
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    }
+
+    .perm-body {
+        padding: 18px;
+    }
+
+    .perm-footer {
+        padding: 14px 18px;
+    }
+
+    .perm-footer .btn {
+        width: 100%;
     }
 }
 
-@media (max-width: 600px) {
-    .admin-title {
-        font-size: 1.3rem;
+@media (max-width: 420px) {
+    .perm-subjects {
+        grid-template-columns: minmax(0, 1fr);
     }
+}
+</style>
 
-    .admin-controls {
-        flex-direction: column;
+<style scoped>
+/* ==========================================================================
+   Riso Campus：墨线卡片 + 学科纯色块 + 印章式状态。
+   ========================================================================== */
+.panel-title i {
+    color: var(--vermilion);
+}
+
+.perm-ring__track {
+    stroke: var(--paper-3);
+}
+
+.perm-ring__bar {
+    stroke: var(--vermilion);
+    filter: none;
+    transition: stroke-dashoffset var(--dur-slow) var(--ease-out);
+}
+
+.perm-ring__center strong {
+    color: var(--ink);
+}
+
+.perm-ring__center small,
+.perm-ring__center em {
+    color: var(--text-3);
+}
+
+.perm-subject {
+    border: 1.5px solid var(--ink);
+    background: var(--paper-1);
+    box-shadow: 3px 3px 0 var(--ink);
+}
+
+.perm-subject::before {
+    width: 5px;
+    opacity: 1;
+    background: var(--tone-color);
+}
+
+.perm-subject:hover {
+    transform: translate(-1px, -1px);
+    border-color: var(--ink);
+    background: var(--paper-2);
+    box-shadow: 4px 4px 0 var(--ink);
+}
+
+.perm-subject.is-active {
+    border-color: var(--ink);
+    background: var(--tone-color);
+    color: var(--tone-text);
+    box-shadow: 4px 4px 0 var(--ink);
+}
+
+.perm-subject.is-active .perm-subject__name,
+.perm-subject.is-active .perm-subject__count,
+.perm-subject.is-active .perm-subject__name i {
+    color: var(--tone-text);
+}
+
+.perm-subject.is-active .perm-subject__count em {
+    color: var(--tone-text);
+    opacity: 0.72;
+}
+
+.perm-subject.is-active .progress {
+    background: var(--paper-1);
+}
+
+.perm-subject__bar .progress__bar {
+    background: var(--tone-color);
+}
+
+.perm-footer {
+    border-top: 1.5px solid var(--ink);
+    background: var(--paper-2);
+}
+
+.perm-footer .chip {
+    box-shadow: 2px 2px 0 var(--ink);
+}
+
+.perm-footer__num {
+    color: var(--ink);
+}
+
+/* 学科色：化学=青绿，英语=钴蓝，初中英语=奶油黄，其他=粉 */
+.is-tone-cyan { --tone-color: var(--teal); --tone-text: var(--paper-1); }
+.is-tone-violet { --tone-color: var(--cobalt); --tone-text: var(--paper-1); }
+.is-tone-amber { --tone-color: var(--butter); --tone-text: var(--ink); }
+.is-tone-pink { --tone-color: var(--pink); --tone-text: var(--ink); }
+
+/* 宽屏双列：目录树按两列铺排，减少右半屏大片空白 */
+.perm-tree {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+}
+
+@media (min-width: 1200px) {
+    .perm-tree {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 12px;
-        padding: 12px 14px;
-    }
-
-    .subject-btn {
-        padding: 5px 12px;
-        font-size: 0.8rem;
-    }
-
-    .admin-tip {
-        font-size: 0.85rem;
-        padding: 10px 14px;
-        flex-wrap: wrap;
     }
 }
 </style>

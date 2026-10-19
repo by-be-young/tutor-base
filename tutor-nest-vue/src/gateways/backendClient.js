@@ -20,9 +20,11 @@ async function parseResponse(response) {
 
 async function getCsrfToken(force = false) {
   if (csrfToken && !force) return csrfToken
-  const response = await fetch(`${API_BASE_URL}/csrf`, {
+  // 加时间戳并禁用缓存：避免浏览器复用旧的 401 响应导致登录一直失败
+  const response = await fetch(`${API_BASE_URL}/csrf?_=${Date.now()}`, {
     method: 'GET',
     credentials: 'include',
+    cache: 'no-store',
     headers: { Accept: 'application/json' }
   })
   const body = await parseResponse(response)
@@ -43,6 +45,7 @@ async function request(path, options = {}, retryCsrf = true) {
     method,
     headers,
     credentials: 'include',
+    cache: 'no-store',
     body: options.body === undefined ? undefined : JSON.stringify(options.body)
   })
 

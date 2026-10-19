@@ -191,9 +191,11 @@ export function useDrawing() {
         ctx.beginPath()
         ctx.moveTo(lastX, lastY)
         ctx.lineTo(x, y)
-        ctx.strokeStyle = '#FF007F'
-        ctx.lineWidth = 4
+        // 视觉：钴蓝墨水笔迹，在奶油纸面上像钢笔批注（不影响坐标与事件）
+        ctx.strokeStyle = '#1D4ED8'
+        ctx.lineWidth = 3
         ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
         ctx.stroke()
 
         lastX = x

@@ -167,6 +167,22 @@
 - 未达到里程碑返回 `409 milestone_not_reached`；重复领取返回 `409 reward_already_claimed`。
 - 积分读取、资格校验与卡片写入在一个数据库事务内完成；数据库唯一约束是并发重复领取的最终防线。
 
+### Growth
+
+| Method | Path | Auth | 语义 |
+| --- | --- | --- | --- |
+| GET | `/achievements` | learner | 返回分级成就、当前指标、等级状态与可领取等级 |
+| POST | `/achievements/{key}/claims` | learner | 领取下一级已达成成就；由服务端决定奖励积分并原子累加 |
+| GET | `/tasks/board` | learner | 返回每日、每周、限时任务及刷新时间、进度、状态 |
+| POST | `/tasks/{key}/accept` | learner | 接取限时任务；服务端写入接取时间与宽松截止时间 |
+| POST | `/tasks/{key}/claims` | learner | 领取已完成任务奖励；同一周期/同一次接取只能领取一次 |
+
+- 学习者身份只从服务端会话取得；客户端不得提交 `studentId`、奖励积分、截止时间或完成状态。
+- 任务与成就的完成条件、进度窗口和奖励全部由服务端目录与 SQL 推导；周期任务按 Asia/Shanghai 自然日/自然周刷新。
+- 限时任务的接取与截止时间由服务端生成，期限刻意覆盖工作日；过期后返回 `409 task_expired`，可重新接取。
+- 领取记录使用数据库唯一约束兜底，重复领取返回 `409 achievement_already_claimed` / `409 task_already_claimed`。
+- 领取记录写入与积分累加在同一数据库事务内完成。
+
 ### Administration
 
 | Method | Path | Auth | 语义 |

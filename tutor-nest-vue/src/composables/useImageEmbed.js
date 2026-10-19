@@ -341,9 +341,10 @@ function injectImageStyles() {
     
     .image-caption {
       display: block;
-      margin-top: 0.5em;
-      font-size: 0.9em;
-      color: #666;
+      margin-top: 0.55em;
+      font-size: 0.85em;
+      color: var(--text-3, #7b7362);
+      letter-spacing: 0.02em;
       text-align: center;
     }
     
@@ -351,7 +352,7 @@ function injectImageStyles() {
     .image-figure img {
       max-width: 100%;
       height: auto;
-      border-radius: 4px;
+      border-radius: var(--r-sm, 12px);
       transition: opacity 0.3s ease;
     }
     
@@ -519,11 +520,12 @@ export function useImageEmbed() {
                         placeholderEl.textContent = '图片加载失败'
                         placeholderEl.style.cssText = `
               display: inline-block;
-              padding: 20px;
-              background: #f0f0f0;
-              color: #999;
-              border-radius: 4px;
-              font-size: 0.9em;
+              padding: 14px 18px;
+              background: var(--paper-2, #ebe1cd);
+              color: var(--text-3, #7b7362);
+              border: 1px solid var(--line-strong, rgba(28, 26, 20, 0.42));
+              border-radius: var(--r-sm, 12px);
+              font-size: 0.88em;
             `
                         parent.appendChild(placeholderEl)
                     }
