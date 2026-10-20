@@ -8,10 +8,9 @@ import java.util.stream.IntStream;
 /** Server-owned collectible-card catalog and draw policy. */
 final class RewardCatalog {
 
-    static final int MILESTONE_STEP = 200;
-    static final int MAX_MILESTONE = 6_000;
-
-    private static final List<String> SET_KEYS = List.of("puppy", "ocean", "cosmos", "dessert", "sport");
+    private static final List<String> SET_KEYS = List.of(
+            "puppy", "ocean", "cosmos", "dessert", "sport",
+            "milkfrog", "delta", "opossum", "verify", "softgun");
     private static final List<CardDefinition> COMMON_CARDS = SET_KEYS.stream()
             .flatMap(setKey -> IntStream.range(0, 6)
                     .mapToObj(slot -> new CardDefinition(setKey + "-c" + slot, setKey, "common")))
@@ -23,21 +22,14 @@ final class RewardCatalog {
     private RewardCatalog() {
     }
 
-    static CardDefinition cardFor(long milestonePoints, Set<String> ownedCardKeys) {
-        if (milestonePoints < MILESTONE_STEP
-                || milestonePoints > MAX_MILESTONE
-                || milestonePoints % MILESTONE_STEP != 0) {
-            throw new InvalidRewardMilestone();
-        }
-
-        List<CardDefinition> pool = milestonePoints % 1_000 == 0 ? RARE_CARDS : COMMON_CARDS;
-        List<CardDefinition> missing = pool.stream()
-                .filter(card -> !ownedCardKeys.contains(card.cardKey()))
-                .toList();
-        List<CardDefinition> candidates = missing.isEmpty() ? pool : missing;
-        return candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
+    record CardDefinition(String cardKey, String setKey, String rarity) {
     }
 
-    record CardDefinition(String cardKey, String setKey, String rarity) {
+    static List<CardDefinition> commonCards() {
+        return COMMON_CARDS;
+    }
+
+    static List<CardDefinition> rareCards() {
+        return RARE_CARDS;
     }
 }

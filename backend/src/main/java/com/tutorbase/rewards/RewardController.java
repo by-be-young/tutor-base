@@ -1,20 +1,17 @@
 package com.tutorbase.rewards;
 
-import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 
 import com.tutorbase.identity.AccountPrincipal;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -36,16 +33,12 @@ public class RewardController {
                 .body(RewardSummaryResponse.from(rewards.summary(learnerId)));
     }
 
-    @PostMapping("/milestones/{milestonePoints}/claims")
-    ResponseEntity<CardRewardResponse> claim(
-            @AuthenticationPrincipal AccountPrincipal principal,
-            @PathVariable @Min(RewardCatalog.MILESTONE_STEP) @Max(RewardCatalog.MAX_MILESTONE)
-            long milestonePoints) {
+    @PostMapping("/draws")
+    ResponseEntity<DrawResponse> draw(@AuthenticationPrincipal AccountPrincipal principal,
+                                      @RequestBody @jakarta.validation.Valid DrawRequest request) {
         long learnerId = requireLearner(principal);
-        CardRewardResponse response = CardRewardResponse.from(rewards.claim(learnerId, milestonePoints));
-        return ResponseEntity.created(URI.create("/api/v1/rewards/milestones/" + milestonePoints + "/claims"))
-                .cacheControl(CacheControl.noStore())
-                .body(response);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(DrawResponse.from(rewards.draw(learnerId, request.count())));
     }
 
     private static long requireLearner(AccountPrincipal principal) {
@@ -55,19 +48,30 @@ public class RewardController {
         return principal.learnerId();
     }
 
-    record RewardSummaryResponse(long points, List<CardRewardResponse> collection) {
+    record RewardSummaryResponse(long points, long lifetimePoints, List<CardRewardResponse> collection) {
         static RewardSummaryResponse from(RewardService.RewardSummary summary) {
             return new RewardSummaryResponse(
-                    summary.points(),
+                    summary.points(), summary.lifetimePoints(),
                     summary.collection().stream().map(CardRewardResponse::from).toList());
         }
     }
 
-    record CardRewardResponse(long id, long milestonePoints, String cardKey, String setKey, String rarity,
+    record CardRewardResponse(long id, String cardKey, String setKey, String rarity,
                               Instant claimedAt) {
         static CardRewardResponse from(RewardService.CardReward reward) {
-            return new CardRewardResponse(reward.id(), reward.milestonePoints(), reward.cardKey(),
+            return new CardRewardResponse(reward.id(), reward.cardKey(),
                     reward.setKey(), reward.rarity(), reward.claimedAt());
+        }
+
+    }
+
+    record DrawRequest(@jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(10) int count) {
+    }
+
+    record DrawResponse(long points, long lifetimePoints, List<CardRewardResponse> cards) {
+        static DrawResponse from(RewardService.DrawResult result) {
+            return new DrawResponse(result.points(), result.lifetimePoints(),
+                    result.cards().stream().map(CardRewardResponse::from).toList());
         }
     }
 }

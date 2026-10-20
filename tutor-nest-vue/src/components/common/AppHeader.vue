@@ -27,7 +27,7 @@
 
         <button v-if="authStore.isLoggedIn" type="button" class="level-chip" :title="levelTooltip"
           @click="router.push('/tasks?tab=achievements')">
-          <LevelBadge :points="tasksStore.points" size="xs" />
+          <LevelBadge :points="tasksStore.lifetimePoints" size="xs" />
           <span class="level-chip__title">{{ levelInfo.title }}</span>
         </button>
 
@@ -138,7 +138,7 @@ const userMenuItems = computed(() => {
 })
 
 const userInitial = computed(() => (authStore.username || 'N').slice(0, 1).toUpperCase())
-const levelInfo = computed(() => levelFromPoints(tasksStore.points))
+const levelInfo = computed(() => levelFromPoints(tasksStore.lifetimePoints))
 const levelTooltip = computed(() =>
   `LV.${levelInfo.value.level} ${levelInfo.value.title} · ${levelInfo.value.points} 积分 · 距下一级还差 ${levelInfo.value.toNext}`)
 

@@ -66,7 +66,7 @@
 
             <!-- ========== 成长等级横幅（不区分学科） ========== -->
             <section v-if="activeTab !== 'achievements'" class="level-banner panel" aria-label="成长等级">
-                <LevelBadge :points="tasksStore.points" size="lg" />
+                <LevelBadge :points="tasksStore.lifetimePoints" size="lg" />
                 <div class="level-banner__side">
                     <div class="level-banner__stat">
                         <strong>{{ levelInfo.level }}</strong>
@@ -91,17 +91,16 @@
                         <div class="hero-number">
                             <CountUp :key="tasksStore.points" :value="tasksStore.points" :duration="900" />
                         </div>
-                        <p v-if="nextMilestone" class="hero-next">
-                            距 <strong>{{ nextMilestone.pts }}</strong> 积分里程碑还差
-                            <strong>{{ pointsToNext }}</strong> 积分
+                        <p class="hero-next">
+                            单抽消耗 <strong>{{ DRAW_COST }}</strong> 积分 · 当前积分可抽
+                            <strong>{{ Math.floor(tasksStore.points / DRAW_COST) }}</strong> 次
                         </p>
-                        <p v-else class="hero-next">全部里程碑已点亮，继续保持！</p>
                         <span class="progress progress--cyan hero-progress">
                             <span class="progress__bar" :style="{ width: nextProgressPercent + '%' }"></span>
                         </span>
                         <div class="hero-actions">
-                            <button type="button" class="btn btn--soft btn--sm" @click="scrollToMilestones">
-                                <i class="fas fa-trophy"></i> 里程碑轨迹
+                            <button type="button" class="btn btn--soft btn--soft" @click="scrollToMilestones">
+                                <i class="fas fa-wand-magic-sparkles"></i> 前往卡池
                             </button>
                             <button type="button" class="btn btn--ghost btn--sm" @click="switchTab('collection')">
                                 <i class="fas fa-book-open"></i> 收藏室
@@ -126,12 +125,12 @@
 
                         <ul class="hero-metrics">
                             <li>
-                                <i class="fas fa-trophy" aria-hidden="true"></i>
-                                <div><strong>{{ reachedCount }}</strong><span>已达成里程碑</span></div>
+                                <i class="fas fa-dice" aria-hidden="true"></i>
+                                <div><strong>{{ collection.length }}</strong><span>累计抽卡</span></div>
                             </li>
                             <li>
-                                <i class="fas fa-gift" aria-hidden="true"></i>
-                                <div><strong>{{ claimableCount }}</strong><span>待领取奖励</span></div>
+                                <i class="fas fa-star" aria-hidden="true"></i>
+                                <div><strong>{{ rareCount }}</strong><span>稀有卡数</span></div>
                             </li>
                             <li>
                                 <i class="fas fa-layer-group" aria-hidden="true"></i>
@@ -229,62 +228,73 @@
                     </div>
                 </section>
 
-                <!-- 里程碑轨迹 -->
-                <section ref="milestoneSection" class="milestones-section panel" aria-label="里程碑轨迹">
+                <!-- 卡池 -->
+                <section ref="milestoneSection" class="gacha-section panel" aria-label="收藏卡池">
                     <div class="panel-head">
                         <h2 class="panel-title">
-                            <i class="fas fa-trophy milestone-title-icon" aria-hidden="true"></i> 里程碑轨迹
+                            <i class="fas fa-wand-magic-sparkles gacha-title-icon" aria-hidden="true"></i> 收藏卡池
                         </h2>
                         <div class="legend">
-                            <span class="chip chip--amber"><i class="fas fa-gift" aria-hidden="true"></i> 待领取</span>
-                            <span class="chip chip--lime"><i class="fas fa-check" aria-hidden="true"></i> 已领取</span>
-                            <span class="chip"><i class="fas fa-lock" aria-hidden="true"></i> 未达成</span>
+                            <span class="chip chip--amber"><i class="fas fa-star" aria-hidden="true"></i> 稀有 5%</span>
+                            <span class="chip chip--vermilion"><i class="fas fa-fire" aria-hidden="true"></i> 其中 50% 为 UP</span>
+                            <span class="chip"><i class="fas fa-coins" aria-hidden="true"></i> {{ DRAW_COST }} 积分/抽</span>
                         </div>
                     </div>
 
-                    <div class="panel-body">
-                        <div class="track-bar">
-                            <span class="section-note">
-                                <i class="fas fa-route" aria-hidden="true"></i>
-                                每 200 积分点亮一个节点 · 每 1000 积分为稀有卡节点
-                            </span>
-                            <div class="track-actions">
-                                <button type="button" class="btn btn--sm btn--ghost" @click="scrollToClaimed">
-                                    <i class="fas fa-arrow-left" aria-hidden="true"></i> 查看已领取
-                                </button>
-                                <button type="button" class="btn btn--sm btn--ghost" @click="scrollToLatest">
-                                    <i class="fas fa-arrow-right" aria-hidden="true"></i> 回到最新
-                                </button>
+                    <div class="panel-body gacha-body">
+                        <!-- 左：当期 UP 卡 -->
+                        <div class="up-side">
+                            <div class="up-label">
+                                <span class="up-tag"><i class="fas fa-fire" aria-hidden="true"></i> 本周 UP</span>
+                                <span class="up-cycle">每周轮换</span>
+                            </div>
+                            <div class="up-stage">
+                                <span class="up-aura" aria-hidden="true"></span>
+                                <img :src="upCard.img" :alt="upCard.name" class="up-img" @error="onImageError" />
+                            </div>
+                            <div class="up-meta">
+                                <strong>{{ upCard.name }}</strong>
+                                <span class="up-set">{{ upCard.setName }}</span>
                             </div>
                         </div>
 
-                        <div ref="trackScroll" class="reward-track-scroll">
-                            <div class="reward-track">
-                                <template v-for="(m, i) in milestones" :key="m.pts">
-                                    <span v-if="i > 0" class="connector" :class="connectorClass(m)" aria-hidden="true"></span>
-                                    <button type="button" class="milestone-node"
-                                        :class="[milestoneClass(m), { 'is-rare': m.isRare }]"
-                                        :data-pts="m.pts"
-                                        :disabled="milestoneClass(m) !== 'is-claimable'"
-                                        :aria-label="`${m.pts} 积分里程碑，${milestoneLabel(m)}`" @click="openClaim(m)">
-                                        <span class="node-orb">
-                                            <img v-if="claimedCard(m)" :src="claimedCard(m).img" alt="" loading="lazy"
-                                                @error="onImageError" />
-                                            <i v-else :class="milestoneIcon(m)" aria-hidden="true"></i>
-                                            <span v-if="milestoneClass(m) === 'is-claimed'" class="node-check"
-                                                aria-hidden="true"><i class="fas fa-check"></i></span>
-                                        </span>
-                                        <span class="node-pts">{{ m.pts }}</span>
-                                        <span class="node-state">{{ milestoneLabel(m) }}</span>
-                                    </button>
-                                </template>
+                        <!-- 右：抽卡操作 -->
+                        <div class="draw-side">
+                            <p class="gacha-note">
+                                <i class="fas fa-circle-info" aria-hidden="true"></i>
+                                每抽消耗 <strong>{{ DRAW_COST }}</strong> 积分 · 稀有卡概率 5% ·
+                                若出稀有，有 50% 概率为当期 UP · 已拥有的卡会重复掉落并计入收藏
+                            </p>
+
+                            <div class="draw-actions">
+                                <button type="button" class="btn btn--warm draw-btn" :disabled="tasksStore.points < DRAW_COST || drawing"
+                                    @click="drawOnce">
+                                    <i class="fas fa-dice" aria-hidden="true"></i>
+                                    {{ drawing ? '抽取中…' : `抽一次 · ${DRAW_COST} 积分` }}
+                                </button>
+                                <button type="button" class="btn btn--primary draw-btn"
+                                    :disabled="tasksStore.points < DRAW_COST * 10 || drawing" @click="drawTen">
+                                    <i class="fas fa-layer-group" aria-hidden="true"></i>
+                                    {{ drawing ? '抽取中…' : `十连抽 · ${DRAW_COST * 10} 积分` }}
+                                </button>
+                                <span class="draw-balance">
+                                    剩余积分 <strong>{{ tasksStore.points }}</strong>
+                                    <span v-if="tasksStore.points < DRAW_COST" class="draw-poor">不足一次</span>
+                                </span>
+                            </div>
+
+                            <!-- 近期抽卡结果小条 -->
+                            <div class="recent-draws" aria-label="最近抽卡记录">
+                                <span class="recent-label">最近掉落</span>
+                                <div class="recent-strip">
+                                    <img v-for="(row, i) in recentDraws" :key="row.id"
+                                        :src="recentCardImg(row)" alt="" loading="lazy"
+                                        class="recent-thumb" :class="{ 'is-rare': row.rarity === 'rare' }"
+                                        @error="onImageError" />
+                                    <span v-if="recentDraws.length === 0" class="recent-empty">还没有抽过卡，来一发试试手气</span>
+                                </div>
                             </div>
                         </div>
-
-                        <p class="scroll-hint">
-                            <i class="fas fa-arrows-left-right" aria-hidden="true"></i>
-                            左右滚动查看全部 {{ milestones.length }} 个里程碑；点击亮色印章节点领取卡片。
-                        </p>
                     </div>
                 </section>
 
@@ -311,7 +321,7 @@
                                 <i class="fas fa-arrow-right" aria-hidden="true"></i> 进入收藏室
                             </button>
                             <span class="entry-note">
-                                <i class="fas fa-star" aria-hidden="true"></i> 每 1000 积分必得稀有卡
+                                <i class="fas fa-star" aria-hidden="true"></i> 5% 概率出稀有 · UP 每周轮换
                             </span>
                         </div>
                     </div>
@@ -326,7 +336,8 @@
         <!-- ========== 领取卡片弹窗（Teleport 到 body，避免被页面堆叠上下文裁切） ========== -->
         <Teleport to="body">
             <div v-if="claimVisible" class="backdrop" @click.self="closeClaim">
-                <div class="modal claim-panel" role="dialog" aria-modal="true" aria-label="领取卡片">
+                <div class="modal claim-panel" :class="{ 'claim-panel--ten': drawResults.length > 1 }"
+                    role="dialog" aria-modal="true" aria-label="领取卡片">
                 <button type="button" class="modal__close claim-close" aria-label="关闭领取弹窗" @click="closeClaim">
                     <i class="fas fa-times" aria-hidden="true"></i>
                 </button>
@@ -338,7 +349,7 @@
                 </div>
 
                 <!-- 卡片 3D 翻转 -->
-                <div class="claim-scene" :class="{ 'is-flipped': flipped }">
+                <div v-if="drawResults.length <= 1" class="claim-scene" :class="{ 'is-flipped': flipped }">
                     <div class="claim-inner">
                         <!-- 背面（揭晓前） -->
                         <div class="claim-face claim-back">
@@ -358,16 +369,35 @@
                                 <span v-if="currentReward?.card" class="card-type"
                                     :class="{ 'is-rare': currentReward.milestone.isRare }">
                                     {{ currentReward.milestone.isRare ? '✦ 稀有卡片' : '普通卡片' }}
+                                    <em v-if="currentReward.isUp" class="up-flag">UP</em>
                                 </span>
                                 <h3 v-if="currentReward?.card" class="card-name">
                                     {{ currentReward.card.name }}
                                 </h3>
                                 <span v-if="currentReward?.duplicate" class="card-duplicate">
-                                    <i class="fas fa-repeat" aria-hidden="true"></i> 该稀有度卡片已集齐，本次为重复卡
+                                    <i class="fas fa-repeat" aria-hidden="true"></i> 重复掉落，已计入收藏
                                 </span>
-                                <span class="card-points">达成 {{ currentReward?.milestone.pts }} 积分奖励</span>
+                                <span v-if="!currentReward?.isDraw && currentReward?.milestone.pts" class="card-points">
+                                    达成 {{ currentReward?.milestone.pts }} 积分奖励
+                                </span>
+                                <span v-else-if="currentReward?.isDraw" class="card-points">
+                                消耗 {{ currentReward.drawCount > 1 ? DRAW_COST * currentReward.drawCount : DRAW_COST }} 积分 ·
+                                {{ currentReward.drawCount > 1 ? '十连抽结果' : '单抽结果' }}
+                                </span>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <div v-if="flipped && drawResults.length > 1" class="draw-results" aria-label="十连抽结果">
+                    <div class="draw-results__title">
+                        <i class="fas fa-sparkles" aria-hidden="true"></i> 十连抽结果
+                        <span>{{ drawResults.filter(result => result.rarity === 'rare').length }} 张稀有</span>
+                    </div>
+                    <div v-for="(result, index) in drawResults" :key="`${result.cardKey}-${index}`"
+                        class="draw-result" :class="{ 'is-rare': result.rarity === 'rare' }">
+                        <img :src="result.card.img" :alt="result.card.name" @error="onImageError" />
+                        <span>{{ result.card.name }}</span>
                     </div>
                 </div>
 
@@ -393,7 +423,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useCheckinStore } from '@/stores/checkinStore'
 import { useTasksStore } from '@/stores/tasksStore'
-import { CARD_SETS, buildMilestones, findCard } from '@/data/cardCatalog'
+import { CARD_SETS, buildMilestones, findCard, getWeeklyUpCard, DRAW_COST } from '@/data/cardCatalog'
 import { showToast } from '@/utils/toast'
 import { levelFromPoints } from '@/utils/level'
 import CountUp from '@/components/ui/CountUp.vue'
@@ -422,7 +452,7 @@ const milestones = buildMilestones(MAX_DISPLAY)
 
 // ========== 标签页 ==========
 const activeTab = ref('tasks')
-const levelInfo = computed(() => levelFromPoints(tasksStore.points))
+const levelInfo = computed(() => levelFromPoints(tasksStore.lifetimePoints))
 const VALID_TABS = ['tasks', 'achievements', 'collection']
 
 function applyTabFromQuery() {
@@ -452,6 +482,16 @@ const nextProgressPercent = computed(() => {
 })
 const ringOffset = computed(() =>
     RING_CIRCUMFERENCE * (1 - Math.min(100, collectedPercent.value) / 100))
+
+// ========== 卡池 ==========
+const upCard = computed(() => getWeeklyUpCard())
+const rareCount = computed(() => collection.value.filter(row => row.rarity === 'rare').length)
+const recentDraws = computed(() => collection.value.slice(0, 6))
+
+function recentCardImg(row) {
+    const c = findCard(row.set_key, row.card_key)
+    return c ? c.img : ''
+}
 
 // ========== 签到推导信息 ==========
 const nextBonus = computed(() =>
@@ -594,8 +634,74 @@ function switchTab(tab) {
 const claimVisible = ref(false)
 const flipped = ref(false)
 const currentReward = ref(null)
+const drawResults = ref([])
 const claimingMilestone = ref(false)
+const drawing = ref(false)
 let flipTimer = null
+
+/** 卡池单抽：扣积分 → 随机 → 翻卡弹窗揭晓 */
+function drawOnce() {
+    if (tasksStore.points < DRAW_COST || drawing.value) return
+    drawing.value = true
+    flipped.value = false
+    // 先给一个空的正面，等抽卡结果回来再填
+    currentReward.value = { milestone: { isRare: false }, card: null, duplicate: false, isUp: false, isDraw: true }
+    claimVisible.value = true
+    // 模拟一点抽取延迟，让翻牌动画有仪式感
+    setTimeout(async () => {
+        try {
+            const result = await tasksStore.drawCard()
+            currentReward.value = {
+                milestone: { isRare: result.rarity === 'rare' },
+                card: result.card,
+                duplicate: result.duplicate,
+                isUp: result.isUp,
+                isDraw: true
+            }
+            drawResults.value = [currentReward.value]
+            flipTimer = setTimeout(() => { flipped.value = true }, 800)
+        } catch (e) {
+            claimVisible.value = false
+            showToast(e.message, 'error')
+        } finally {
+            drawing.value = false
+        }
+
+    }, 400)
+}
+
+function drawTen() {
+    const totalCost = DRAW_COST * 10
+    if (tasksStore.points < totalCost || drawing.value) return
+    drawing.value = true
+    flipped.value = false
+    claimVisible.value = true
+    currentReward.value = {
+        milestone: { isRare: false },
+        card: null,
+        duplicate: false,
+        isUp: false,
+        isDraw: true,
+        drawCount: 10
+    }
+    setTimeout(async () => {
+        try {
+            drawResults.value = (await tasksStore.drawCards(10)).map(result => ({
+                ...result,
+                milestone: { isRare: result.rarity === 'rare' },
+                isDraw: true,
+                drawCount: 10
+            }))
+            currentReward.value = drawResults.value[0]
+            flipTimer = setTimeout(() => { flipped.value = true }, 800)
+        } catch (e) {
+            claimVisible.value = false
+            showToast(e.message, 'error')
+        } finally {
+            drawing.value = false
+        }
+    }, 350)
+}
 
 async function openClaim(m) {
     if (m.pts > tasksStore.points || tasksStore.claimedMilestones.has(m.pts) || claimingMilestone.value) return
@@ -619,19 +725,33 @@ async function openClaim(m) {
 
 function confirmClaim() {
     if (!currentReward.value || !flipped.value || claimingMilestone.value) return
-    const { card, duplicate } = currentReward.value
+    const { card, duplicate, isUp } = currentReward.value
     claimVisible.value = false
-    showToast(
-        duplicate ? `卡片「${card.name}」为重复卡，已计入收藏` : `卡片「${card.name}」已收入收藏室`,
-        duplicate ? 'info' : 'success'
-    )
-    scrollToLatest()
+    if (currentReward.value.isDraw) {
+        const results = drawResults.value.length > 1 ? drawResults.value : [currentReward.value]
+        const rareCount = results.filter(result => result.rarity === 'rare').length
+        if (results.length > 1) {
+            showToast(`十连抽完成：获得 ${rareCount} 张稀有卡、${results.length - rareCount} 张普通卡`, rareCount ? 'success' : 'info')
+            return
+        }
+        const tag = isUp ? '【UP】' : ''
+        showToast(
+            duplicate ? `${tag}「${card.name}」重复掉落，已计入收藏` : `${tag}「${card.name}」已收入收藏室`,
+            duplicate ? 'info' : 'success'
+        )
+    } else {
+        showToast(
+            duplicate ? `卡片「${card.name}」为重复卡，已计入收藏` : `卡片「${card.name}」已收入收藏室`,
+            duplicate ? 'info' : 'success'
+        )
+    }
 }
 
 function closeClaim() {
     // 揭晓动画进行中不允许关闭，避免状态错乱
     if (!flipped.value || claimingMilestone.value) return
     claimVisible.value = false
+    drawResults.value = []
 }
 
 // 稀有卡片周围散落的纸屑位置
@@ -1187,6 +1307,238 @@ onBeforeUnmount(() => {
     font-weight: 800;
 }
 
+/* ========== 卡池 ========== */
+.gacha-section {
+    margin-bottom: 26px;
+}
+
+.gacha-title-icon {
+    color: var(--vermilion);
+}
+
+.legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.gacha-body {
+    display: grid;
+    grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+    gap: 32px;
+    align-items: start;
+    padding: 24px;
+    background:
+        radial-gradient(circle at 82% 12%, rgba(240, 178, 122, 0.22), transparent 30%),
+        var(--paper-1);
+}
+
+/* 左侧 UP 卡 */
+.up-side {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.up-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.up-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-full);
+    background: var(--vermilion);
+    color: var(--paper-1);
+    font-size: 0.72rem;
+    font-weight: 800;
+    transform: rotate(-3deg);
+    box-shadow: 2px 2px 0 var(--ink);
+}
+
+.up-cycle {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-3);
+}
+
+.up-stage {
+    position: relative;
+    padding: 16px;
+    background: var(--paper-2);
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-card);
+    transform: rotate(-1.4deg);
+}
+
+.up-aura {
+    position: absolute;
+    inset: 8px;
+    border: 2px dashed rgba(212, 58, 58, 0.55);
+    border-radius: var(--r-sm);
+    pointer-events: none;
+}
+
+.up-img {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    border: 1.5px solid var(--ink);
+}
+
+.up-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.up-meta strong {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--ink);
+}
+
+.up-set {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--text-3);
+}
+
+/* 右侧抽卡操作 */
+.draw-side {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-width: 0;
+}
+
+.gacha-note {
+    margin: 0;
+    padding: 12px 14px;
+    border: 1.5px dashed var(--ink-soft);
+    border-radius: var(--r-md);
+    background: var(--paper-2);
+    color: var(--text-2);
+    font-size: 0.82rem;
+    line-height: 1.65;
+}
+
+.gacha-note i {
+    color: var(--cobalt);
+    margin-right: 4px;
+}
+
+.gacha-note strong {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.draw-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 16px;
+    border: 2px solid var(--ink);
+    border-radius: var(--r-md);
+    background: var(--paper-2);
+    box-shadow: 4px 4px 0 var(--ink);
+}
+
+.draw-btn {
+    font-size: 1rem;
+    padding: 14px 28px;
+    font-weight: 800;
+}
+
+.draw-balance {
+    font-size: 0.88rem;
+    color: var(--text-2);
+}
+
+.draw-balance strong {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.draw-poor {
+    margin-left: 8px;
+    padding: 2px 8px;
+    border: 1px solid var(--vermilion);
+    border-radius: var(--r-full);
+    color: var(--vermilion);
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.recent-draws {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.recent-label {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-3);
+    letter-spacing: 0.04em;
+}
+
+.recent-strip {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    min-height: 88px;
+    flex-wrap: wrap;
+}
+
+.recent-thumb {
+    width: 56px;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    border: 3px solid var(--paper-1);
+    outline: 1.5px solid var(--ink);
+    box-shadow: 2px 2px 0 rgba(28, 26, 20, 0.85);
+    transform: rotate(-2deg);
+}
+
+.recent-thumb:nth-child(even) { transform: rotate(2deg); }
+.recent-thumb.is-rare { outline: 2px solid var(--vermilion); }
+
+.recent-empty {
+    font-size: 0.8rem;
+    color: var(--text-3);
+    padding: 12px;
+    border: 1.5px dashed var(--ink-soft);
+    border-radius: var(--r-md);
+    flex: 1;
+    text-align: center;
+}
+
+.up-flag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    background: var(--vermilion);
+    color: var(--paper-1);
+    border-radius: 4px;
+    font-style: normal;
+    font-size: 0.66rem;
+    font-weight: 800;
+}
+
 /* ========== 里程碑轨迹（印章本） ========== */
 .milestones-section {
     margin-bottom: 26px;
@@ -1496,6 +1848,14 @@ onBeforeUnmount(() => {
     background: var(--paper-1);
 }
 
+.claim-panel--ten {
+    width: min(720px, 100%);
+    background:
+        radial-gradient(circle at 15% 10%, rgba(240, 178, 122, 0.24), transparent 26%),
+        radial-gradient(circle at 88% 82%, rgba(143, 123, 224, 0.2), transparent 28%),
+        var(--paper-1);
+}
+
 .claim-close {
     position: absolute;
     top: 14px;
@@ -1678,6 +2038,89 @@ onBeforeUnmount(() => {
     margin-top: 20px;
 }
 
+.draw-results {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 16px;
+    padding: 12px;
+    border: 2px solid var(--ink);
+    border-radius: var(--r-md);
+    background: rgba(255, 255, 255, 0.45);
+    box-shadow: 5px 5px 0 var(--ink);
+    animation: results-pop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+.draw-results__title {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 2px;
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 800;
+}
+
+.draw-results__title i {
+    color: var(--vermilion);
+}
+
+.draw-results__title span {
+    margin-left: auto;
+    padding: 3px 8px;
+    border-radius: var(--r-full);
+    background: var(--vermilion);
+    color: var(--paper-1);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+}
+
+.draw-result {
+    min-width: 0;
+    padding: 5px;
+    border: 1px solid var(--line);
+    background: var(--paper-1);
+    text-align: center;
+    font-size: 0.62rem;
+    font-weight: 700;
+}
+
+.draw-result.is-rare {
+    border: 2px solid var(--coral);
+    background: #fff1e8;
+    box-shadow: 0 0 0 2px rgba(208, 96, 143, 0.2), 0 0 18px rgba(208, 96, 143, 0.45);
+    animation: rare-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.draw-result img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    margin-bottom: 4px;
+}
+
+.draw-result span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@keyframes results-pop {
+    from { opacity: 0; transform: translateY(16px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes rare-pulse {
+    from { transform: translateY(0); }
+    to { transform: translateY(-4px); }
+}
+
 .claim-btn {
     min-width: 210px;
     height: 50px;
@@ -1752,6 +2195,21 @@ onBeforeUnmount(() => {
 
     .mini-calendar {
         max-width: 420px;
+    }
+}
+
+@media (max-width: 760px) {
+    .gacha-body {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 22px;
+    }
+    .up-side {
+        align-items: center;
+        text-align: center;
+    }
+    .up-stage {
+        width: 60%;
+        max-width: 230px;
     }
 }
 

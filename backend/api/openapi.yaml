@@ -243,33 +243,45 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
-  /rewards/milestones/{milestonePoints}/claims:
+  /rewards/draws:
     post:
-      operationId: claimRewardMilestone
-      summary: 领取一个已达成的积分里程碑卡片
-      description: 卡片由服务端从对应稀有度卡池抽取并优先返回尚未收藏的卡片；同一学习者的同一里程碑只可领取一次。
+      operationId: drawRewardCards
+      summary: 抽取收藏卡片
       security:
         - sessionCookie: []
       parameters:
         - $ref: '#/components/parameters/CsrfHeader'
-        - name: milestonePoints
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-            minimum: 200
-            maximum: 6000
-            multipleOf: 200
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [count]
+              properties:
+                count:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
       responses:
-        '201':
-          description: 领取成功，返回由服务端确定的卡片。
+        '200':
+          description: 抽卡后的最新积分与卡片结果
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CardReward'
-        '400':
-          $ref: '#/components/responses/Problem'
+                type: object
+                required: [points, lifetimePoints, cards]
+                properties:
+                  points:
+                    type: integer
+                    format: int64
+                  lifetimePoints:
+                    type: integer
+                    format: int64
+                  cards:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CardReward'
         '401':
           $ref: '#/components/responses/Problem'
         '403':
@@ -1226,18 +1238,12 @@ components:
     CardReward:
       type: object
       additionalProperties: false
-      required: [id, milestonePoints, cardKey, setKey, rarity, claimedAt]
+      required: [id, cardKey, setKey, rarity, claimedAt]
       properties:
         id:
           type: integer
           format: int64
           minimum: 1
-        milestonePoints:
-          type: integer
-          format: int64
-          minimum: 200
-          maximum: 6000
-          multipleOf: 200
         cardKey:
           type: string
           minLength: 1

@@ -87,7 +87,9 @@ class CheckInService {
                 INSERT INTO public.user_points (student_id, points, updated_at)
                 VALUES (:studentId, :awarded, now())
                 ON CONFLICT (student_id) DO UPDATE
-                    SET points = user_points.points + EXCLUDED.points, updated_at = now()
+                    SET points = user_points.points + EXCLUDED.points,
+                        lifetime_points = user_points.lifetime_points + EXCLUDED.points,
+                        updated_at = now()
                 RETURNING points
                 """)
                 .param("studentId", learnerId)

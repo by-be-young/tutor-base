@@ -24,6 +24,7 @@ final class ApiExceptionHandler {
                 "Database request failed for {} ({})",
                 request.getRequestURI(),
                 exception.getClass().getSimpleName());
+        LOGGER.warn("Database failure detail", exception);
         return ApiProblem.create(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 "dependency_unavailable",

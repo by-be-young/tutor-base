@@ -16,21 +16,9 @@ final class RewardHttpExceptionHandler {
                 "当前账户未关联学习者身份，无法执行该操作。", request);
     }
 
-    @ExceptionHandler(InvalidRewardMilestone.class)
-    ProblemDetail invalidMilestone(InvalidRewardMilestone exception, HttpServletRequest request) {
-        return ApiProblem.create(HttpStatus.BAD_REQUEST, "validation_failed", "奖励里程碑无效",
-                "奖励里程碑必须是当前目录中的有效积分节点。", request);
-    }
-
-    @ExceptionHandler(RewardMilestoneNotReached.class)
-    ProblemDetail milestoneNotReached(RewardMilestoneNotReached exception, HttpServletRequest request) {
-        return ApiProblem.create(HttpStatus.CONFLICT, "milestone_not_reached", "奖励里程碑尚未达成",
-                "当前积分不足以领取该奖励。", request);
-    }
-
-    @ExceptionHandler(RewardAlreadyClaimed.class)
-    ProblemDetail alreadyClaimed(RewardAlreadyClaimed exception, HttpServletRequest request) {
-        return ApiProblem.create(HttpStatus.CONFLICT, "reward_already_claimed", "奖励已经领取",
-                "同一奖励里程碑只能领取一次。", request);
+    @ExceptionHandler(RewardInsufficientPoints.class)
+    ProblemDetail insufficientPoints(RewardInsufficientPoints exception, HttpServletRequest request) {
+        return ApiProblem.create(HttpStatus.CONFLICT, "insufficient_points", "积分不足",
+                "当前积分不足以完成抽卡。", request);
     }
 }

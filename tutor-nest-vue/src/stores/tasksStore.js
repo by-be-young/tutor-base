@@ -7,6 +7,7 @@ import { rewardGateway } from '@/gateways/rewardGateway'
 
 export const useTasksStore = defineStore('tasks', () => {
     const points = ref(0)
+    const lifetimePoints = ref(0)
     const claimedTaskIds = reactive(new Set())
     const claimedMilestones = reactive(new Set())
     const collection = ref([])
@@ -25,14 +26,14 @@ export const useTasksStore = defineStore('tasks', () => {
         claimedMilestones.clear()
         collection.value = []
         points.value = 0
+        lifetimePoints.value = 0
         if (!sid) return
 
         isLoading.value = true
         loadError.value = null
         try {
             const summary = await rewardGateway.getSummary()
-            points.value = Number(summary.points ?? 0)
-            collection.value = (summary.collection || []).map(card => ({
+            const serverCollection = (summary.collection || []).map(card => ({
                 id: card.id,
                 milestone_points: card.milestonePoints,
                 card_key: card.cardKey,
@@ -40,6 +41,9 @@ export const useTasksStore = defineStore('tasks', () => {
                 rarity: card.rarity,
                 claimed_at: card.claimedAt
             }))
+            collection.value = serverCollection
+            points.value = Number(summary.points ?? 0)
+            lifetimePoints.value = Number(summary.lifetimePoints ?? summary.points ?? 0)
             collection.value.forEach(row => claimedMilestones.add(Number(row.milestone_points)))
         } catch (e) {
             console.error('加载任务数据失败:', e)
@@ -84,13 +88,57 @@ export const useTasksStore = defineStore('tasks', () => {
         return new Set(collection.value.map(row => row.card_key))
     }
 
+    /**
+     * 卡池单抽：消耗 DRAW_COST 积分，随机抽一张（可重复）
+     * 抽卡逻辑在前端完成，本地扣积分并把卡片加入收藏。
+     * @returns {{card: object, setKey: string, cardKey: string, rarity: string, isUp: boolean, duplicate: boolean}}
+     */
+    async function drawCard() {
+        const response = await rewardGateway.draw(1)
+        points.value = Number(response.points ?? points.value)
+        lifetimePoints.value = Math.max(lifetimePoints.value, Number(response.lifetimePoints ?? lifetimePoints.value))
+        const result = response.cards[0]
+        const duplicate = obtainedCardKeys().has(result.cardKey)
+        collection.value = [{
+            id: result.id,
+            milestone_points: result.milestonePoints,
+            card_key: result.cardKey,
+            set_key: result.setKey,
+            rarity: result.rarity,
+            claimed_at: result.claimedAt
+        }, ...collection.value]
+        return { ...result, card: findCard(result.setKey, result.cardKey), duplicate }
+    }
+
+    async function drawCards(count = 10) {
+        const response = await rewardGateway.draw(count)
+        points.value = Number(response.points ?? points.value)
+        lifetimePoints.value = Math.max(lifetimePoints.value, Number(response.lifetimePoints ?? lifetimePoints.value))
+        const results = response.cards.map(result => ({
+            ...result,
+            card: findCard(result.setKey, result.cardKey),
+            duplicate: collection.value.some(row => row.card_key === result.cardKey)
+        }))
+        collection.value = [...response.cards.map(result => ({
+            id: result.id,
+            milestone_points: result.milestonePoints,
+            card_key: result.cardKey,
+            set_key: result.setKey,
+            rarity: result.rarity,
+            claimed_at: result.claimedAt
+        })), ...collection.value]
+        return results
+    }
+
     /** 后端（每日签到等）发放积分后同步本地显示 */
     function syncPoints(next) {
         points.value = next
+        lifetimePoints.value = Math.max(lifetimePoints.value, Number(next) || 0)
     }
 
     return {
         points,
+        lifetimePoints,
         claimedTaskIds,
         claimedMilestones,
         collection,
@@ -99,6 +147,8 @@ export const useTasksStore = defineStore('tasks', () => {
         getStudentId,
         load,
         claimMilestone,
+        drawCard,
+        drawCards,
         obtainedCardKeys,
         syncPoints
     }

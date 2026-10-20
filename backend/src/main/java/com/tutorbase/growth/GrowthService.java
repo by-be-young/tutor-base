@@ -358,6 +358,7 @@ class GrowthService {
                 VALUES (:studentId, :amount, now())
                 ON CONFLICT (student_id) DO UPDATE
                     SET points = public.user_points.points + EXCLUDED.points,
+                        lifetime_points = public.user_points.lifetime_points + EXCLUDED.points,
                         updated_at = now()
                 RETURNING points
                 """).param("studentId", learnerId).param("amount", amount)

@@ -18,7 +18,7 @@
                         <i class="fas fa-book-open"></i> 收藏室
                     </h2>
                     <p class="section-note">
-                        共收集 {{ collection.length }} / {{ TOTAL_CARDS }} 张卡片 · 已集齐 {{ completeSets }} / {{ CARD_SETS.length }} 套卡组
+                        共收集 {{ uniqueCount }} / {{ TOTAL_CARDS }} 张不同卡片 · 累计抽卡 {{ collection.length }} 次 · 已集齐 {{ completeSets }} / {{ CARD_SETS.length }} 套卡组
                     </p>
                 </div>
                 <div class="room-progress">
@@ -119,6 +119,8 @@
                     <div class="rare-stage">
                         <span class="rare-aura" aria-hidden="true"></span>
                         <CardVisual :card="rareCard(activeSet)" rarity="rare" large class="rare-visual" />
+                        <span v-if="rareCard(activeSet) && cardCount(activeSet, `${activeSet.key}-r`) > 1"
+                            class="dup-badge dup-badge--rare">×{{ cardCount(activeSet, `${activeSet.key}-r`) }}</span>
                     </div>
                     <span class="rare-hint">
                         {{ rareCard(activeSet) ? '恭喜！这张稀有卡已收入你的收藏室' : '每 1000 积分里程碑随机获得一张稀有卡' }}
@@ -133,8 +135,12 @@
                     </div>
                     <div class="commons-grid">
                         <div v-for="(common, i) in activeSet.commons" :key="i" class="common-cell">
-                            <CardVisual :card="obtained(activeSet, `${activeSet.key}-c${i}`) ? common : null"
-                                rarity="common" />
+                            <div class="cell-wrap">
+                                <CardVisual :card="obtained(activeSet, `${activeSet.key}-c${i}`) ? common : null"
+                                    rarity="common" />
+                                <span v-if="obtained(activeSet, `${activeSet.key}-c${i}`) && cardCount(activeSet, `${activeSet.key}-c${i}`) > 1"
+                                    class="dup-badge">×{{ cardCount(activeSet, `${activeSet.key}-c${i}`) }}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -156,8 +162,15 @@ const TOTAL_CARDS = CARD_SETS.reduce((sum, set) => sum + 1 + set.commons.length,
 const collection = computed(() => tasksStore.collection)
 const activeSet = ref(null)
 
+/** 已收集的不同卡片 key 总数（去重） */
+const uniqueCount = computed(() => new Set(collection.value.map(r => r.card_key)).size)
 const completeSets = computed(() => CARD_SETS.filter(set => isComplete(set)).length)
-const totalPercent = computed(() => Math.round((collection.value.length / TOTAL_CARDS) * 100))
+const totalPercent = computed(() => Math.round((uniqueCount.value / TOTAL_CARDS) * 100))
+
+/** 某张卡被抽中几次 */
+function cardCount(set, cardKey) {
+    return collection.value.filter(row => row.set_key === set.key && row.card_key === cardKey).length
+}
 
 /** 卡组主色：使用目录里的第一个印刷色，平涂不渐变 */
 function setColor(colors) {
@@ -174,7 +187,16 @@ function photoTilt(index) {
 }
 
 function obtainedIn(set) {
-    return collection.value.filter(row => row.set_key === set.key)
+    // 去重：每个 card_key 只算一次
+    const seen = new Set()
+    const rows = []
+    for (const row of collection.value) {
+        if (row.set_key !== set.key) continue
+        if (seen.has(row.card_key)) continue
+        seen.add(row.card_key)
+        rows.push(row)
+    }
+    return rows
 }
 
 function obtained(set, cardKey) {
@@ -629,6 +651,34 @@ function onImageError(event) {
 
 .common-cell {
     min-width: 0;
+}
+
+.cell-wrap {
+    position: relative;
+}
+
+.dup-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    padding: 2px 8px;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-full);
+    background: var(--butter);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 800;
+    box-shadow: 2px 2px 0 var(--ink);
+    transform: rotate(3deg);
+    z-index: 2;
+}
+
+.dup-badge--rare {
+    top: 20px;
+    right: 20px;
+    background: var(--vermilion);
+    color: var(--paper-1);
 }
 
 .common-cell:nth-child(1) .card-visual { --card-tilt: -1.8deg; }

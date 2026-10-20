@@ -10,5 +10,11 @@ export const rewardGateway = {
       `/rewards/milestones/${encodeURIComponent(milestonePoints)}/claims`,
       { method: 'POST' }
     )
+  },
+  draw(count = 1) {
+    return backendClient.request('/rewards/draws', {
+      method: 'POST',
+      body: { count }
+    })
   }
 }

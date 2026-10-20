@@ -242,12 +242,12 @@ import CountUp from '@/components/ui/CountUp.vue'
  * - accent      驱动文件夹卡片的印刷色标签（cyan/violet/amber → 天蓝/钴蓝/奶油黄）
  * - coverClass  驱动杂志封面的色块配色（化学=钴蓝+天蓝，英语=朱红+奶油黄，初中英语=黄绿+墨黑）
  */
-const CARD_BASE = `${import.meta.env.BASE_URL}cards/`
+const CARD_BASE = `${import.meta.env.BASE_URL}`
 
 const SUBJECT_THEMES = {
   '化学': {
     accent: 'cyan',
-    cover: `${CARD_BASE}cosmos-c1.png`,
+    cover: `${CARD_BASE}subjects/chem-bg.png`,
     coverClass: 'cover--cobalt',
     icon: 'fa-flask',
     code: 'CHEM / 01',
@@ -256,7 +256,7 @@ const SUBJECT_THEMES = {
   },
   '英语': {
     accent: 'violet',
-    cover: `${CARD_BASE}ocean-r.png`,
+    cover: `${CARD_BASE}subjects/en-bg.png`,
     coverClass: 'cover--vermilion',
     icon: 'fa-language',
     code: 'ENG / 02',
@@ -265,7 +265,7 @@ const SUBJECT_THEMES = {
   },
   '初中英语': {
     accent: 'amber',
-    cover: `${CARD_BASE}dessert-r.png`,
+    cover: `${CARD_BASE}subjects/junior-en-bg.png`,
     coverClass: 'cover--lime',
     icon: 'fa-graduation-cap',
     code: 'J-ENG / 03',
@@ -276,7 +276,7 @@ const SUBJECT_THEMES = {
 
 const DEFAULT_THEME = {
   accent: 'violet',
-  cover: `${CARD_BASE}cosmos-r.png`,
+  cover: `${CARD_BASE}subjects/chem-bg.png`,
   coverClass: 'cover--cobalt',
   icon: 'fa-book-open',
   code: 'NEST / 00',
