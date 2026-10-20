@@ -2,10 +2,10 @@
   CollectionRoom.vue - 收藏室（任务中心内部，Riso Campus 拍立得卡片墙）
   ----------------------------------------------------------------------------
   展示当前用户获得的卡片：
-    - 总览：按卡组陈列（每个卡组 1 稀有 + 6 普通），用 /cards 卡图做拍立得照片墙，
-      显示已收集进度、集齐徽章；平面印刷色块 + 墨线，不用发光
-    - 卡组详情：左侧一张大稀有卡（奶油黄相框），右侧 2 行 3 列普通卡网格
-  未获得的卡片以虚线相框 + 剪影锁显示；所有卡图均为站内 /cards/*.png。
+    - 卡组、卡片、稀有度与总数全部来自 /api/v1/rewards/catalog，不再硬编码卡组/卡片数量
+    - 总览：按服务端卡组陈列，统计使用 /api/v1/rewards 的 stats（不同卡片 / 累计获得 / 累计抽卡）
+    - 卡组详情：左侧大稀有卡，右侧普通卡网格；未获得卡片以虚线相框 + 剪影锁显示
+  所有卡图均为服务端返回的站内 /cards/*.png 相对路径，由目录 store 补全 BASE_URL。
 -->
 <template>
     <div class="collection-room">
@@ -18,88 +18,119 @@
                         <i class="fas fa-book-open"></i> 收藏室
                     </h2>
                     <p class="section-note">
-                        共收集 {{ uniqueCount }} / {{ TOTAL_CARDS }} 张不同卡片 · 累计抽卡 {{ collection.length }} 次 · 已集齐 {{ completeSets }} / {{ CARD_SETS.length }} 套卡组
+                        共收集 {{ uniqueCount }} / {{ totalCatalogCards }} 张不同卡片 ·
+                        累计获得 {{ totalObtained }} 张 · 累计抽卡 {{ totalDraws }} 次 ·
+                        已集齐 {{ completeSets }} / {{ totalSets }} 套卡组
                     </p>
                 </div>
-                <div class="room-progress">
-                    <span class="progress progress--cyan">
-                        <span class="progress__bar" :style="{ width: totalPercent + '%' }"></span>
-                    </span>
-                    <span class="room-progress-label">{{ totalPercent }}%</span>
+                <div class="room-head-side">
+                    <button type="button" class="btn btn--warm btn--sm" @click="goDraw">
+                        <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i> 前往卡池
+                    </button>
+                    <div class="room-progress">
+                        <span class="progress progress--cyan">
+                            <span class="progress__bar" :style="{ width: totalPercent + '%' }"></span>
+                        </span>
+                        <span class="room-progress-label">{{ totalPercent }}%</span>
+                    </div>
                 </div>
             </div>
 
-            <div class="set-grid">
-                <button v-for="set in CARD_SETS" :key="set.key" class="set-card"
-                    :class="{ 'is-complete': isComplete(set), 'is-empty': obtainedIn(set).length === 0 }"
-                    @click="openSet(set)">
-                    <!-- 卡组封面：站内卡图拍立得照片墙 -->
-                    <span class="set-photos" aria-hidden="true">
-                        <img v-for="(img, i) in collage(set)" :key="i" :src="img" alt="" loading="lazy"
-                            class="set-photo" :style="{ '--photo-tilt': photoTilt(i) }" @error="onImageError" />
-                    </span>
-
-                    <span class="set-body">
-                        <span class="set-top">
-                            <span class="set-emblem" :style="{ background: setColor(set.colors) }">
-                                <i :class="set.emblem"></i>
-                            </span>
-                            <span class="set-headings">
-                                <span class="set-name">{{ set.name }}</span>
-                                <span class="set-theme">{{ set.theme }} · {{ set.style }}</span>
-                            </span>
-                            <span v-if="isComplete(set)" class="set-badge">
-                                <i class="fas fa-crown"></i> 集齐
-                            </span>
-                            <span v-else-if="rareObtained(set)" class="set-badge is-rare">
-                                <i class="fas fa-star"></i> 稀有入手
-                            </span>
-                        </span>
-
-                        <span class="set-progress">
-                            <span class="progress" :class="progressClass(set)">
-                                <span class="progress__bar" :style="{ width: progress(set) + '%' }"></span>
-                            </span>
-                            <span class="progress-count">{{ obtainedIn(set).length }}/7</span>
-                        </span>
-
-                        <span class="set-foot">
-                            <span class="set-foot-text">
-                                <i class="fas fa-star"></i> 1 稀有
-                                <span class="dot">·</span>
-                                <i class="fas fa-gift"></i> 6 普通
-                            </span>
-                            <i class="fas fa-arrow-right set-arrow"></i>
-                        </span>
-                    </span>
-                </button>
+            <div v-if="catalogStore.loading && !catalogStore.loaded" class="loading-line">
+                <span class="spinner" aria-hidden="true"></span> 正在同步卡池目录…
+            </div>
+            <div v-else-if="catalogStore.error && !catalogStore.loaded" class="empty room-error">
+                <span class="empty__icon"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i></span>
+                <p class="empty__title">卡池目录加载失败</p>
+                <p class="empty__text">{{ catalogStore.error }}</p>
+                <button type="button" class="btn btn--soft btn--sm" @click="retryCatalog">重试</button>
+            </div>
+            <div v-else-if="sets.length === 0" class="empty room-error">
+                <span class="empty__icon"><i class="fas fa-images" aria-hidden="true"></i></span>
+                <p class="empty__title">卡池暂时没有可展示的卡组</p>
+                <p class="empty__text">卡组会定期更新，稍后再来看看。</p>
+                <button type="button" class="btn btn--soft btn--sm" @click="retryCatalog">刷新目录</button>
             </div>
 
-            <p v-if="collection.length === 0" class="room-hint">
-                <i class="fas fa-lightbulb"></i>
-                还没有收集到卡片。每 200 积分解锁一个里程碑，达到后即可领取卡片；整千积分的里程碑必得稀有卡。
-            </p>
+            <template v-else>
+                <div class="set-grid">
+                    <button v-for="set in sets" :key="set.key" class="set-card"
+                        :class="{ 'is-complete': isComplete(set), 'is-empty': obtainedIn(set).length === 0 }"
+                        @click="openSet(set)">
+                        <!-- 卡组封面：站内卡图拍立得照片墙 -->
+                        <span class="set-photos" aria-hidden="true">
+                            <img v-for="(card, i) in collage(set)" :key="`${set.key}-${i}`" :src="card.img" alt=""
+                                loading="lazy" class="set-photo" :style="{ '--photo-tilt': photoTilt(i) }"
+                                @error="onImageError" />
+                        </span>
+
+                        <span class="set-body">
+                            <span class="set-top">
+                                <span class="set-emblem" :style="{ background: set.colors[0] || 'var(--butter)' }">
+                                    <i :class="set.emblem"></i>
+                                </span>
+                                <span class="set-headings">
+                                    <span class="set-name">{{ set.name }}</span>
+                                    <span class="set-theme">{{ set.theme || '卡组' }}<template v-if="set.style"> ·
+                                        {{ set.style }}</template></span>
+                                </span>
+                                <span v-if="isComplete(set)" class="set-badge">
+                                    <i class="fas fa-crown"></i> 集齐
+                                </span>
+                                <span v-else-if="rareObtained(set)" class="set-badge is-rare">
+                                    <i class="fas fa-star"></i> 稀有入手
+                                </span>
+                            </span>
+
+                            <span class="set-progress">
+                                <span class="progress" :class="progressClass(set)">
+                                    <span class="progress__bar" :style="{ width: progress(set) + '%' }"></span>
+                                </span>
+                                <span class="progress-count">{{ obtainedIn(set).length }}/{{ cardCount(set) }}</span>
+                            </span>
+
+                            <span class="set-foot">
+                                <span class="set-foot-text">
+                                    <i class="fas fa-star"></i> 1 稀有
+                                    <span class="dot">·</span>
+                                    <i class="fas fa-gift"></i> {{ set.commons.length }} 普通
+                                </span>
+                                <i class="fas fa-arrow-right set-arrow"></i>
+                            </span>
+                        </span>
+                    </button>
+                </div>
+
+                <p v-if="collection.length === 0" class="room-hint">
+                    <i class="fas fa-lightbulb"></i>
+                    还没有收集到卡片。前往卡池抽卡即可开始收集；重复卡片会累计获得次数，但不重复计入收集进度。
+                    <button type="button" class="btn btn--soft btn--sm room-hint__btn" @click="goDraw">
+                        前往卡池
+                    </button>
+                </p>
+            </template>
         </template>
 
         <!-- ========== 卡组详情 ========== -->
         <template v-else>
             <div class="detail-head">
-                <button class="btn btn--ghost btn--sm back-btn" @click="activeSet = null">
+                <button class="btn btn--ghost btn--sm back-btn" @click="closeSet">
                     <i class="fas fa-arrow-left"></i> 返回收藏室
                 </button>
 
                 <div class="detail-title">
-                    <span class="set-emblem is-small" :style="{ background: setColor(activeSet.colors) }">
+                    <span class="set-emblem is-small" :style="{ background: activeSet.colors[0] || 'var(--butter)' }">
                         <i :class="activeSet.emblem"></i>
                     </span>
                     <h2 class="section-title">{{ activeSet.name }}</h2>
-                    <span class="detail-progress">{{ obtainedIn(activeSet).length }}/7</span>
+                    <span class="detail-progress">{{ obtainedIn(activeSet).length }}/{{ cardCount(activeSet) }}</span>
                     <span v-if="isComplete(activeSet)" class="set-badge">
                         <i class="fas fa-crown"></i> 已集齐
                     </span>
                 </div>
 
-                <span class="detail-theme">{{ activeSet.theme }} · {{ activeSet.style }}</span>
+                <span class="detail-theme">{{ activeSet.theme || '卡组' }}<template v-if="activeSet.style"> ·
+                    {{ activeSet.style }}</template></span>
             </div>
 
             <div class="detail-progress-bar">
@@ -119,27 +150,32 @@
                     <div class="rare-stage">
                         <span class="rare-aura" aria-hidden="true"></span>
                         <CardVisual :card="rareCard(activeSet)" rarity="rare" large class="rare-visual" />
-                        <span v-if="rareCard(activeSet) && cardCount(activeSet, `${activeSet.key}-r`) > 1"
-                            class="dup-badge dup-badge--rare">×{{ cardCount(activeSet, `${activeSet.key}-r`) }}</span>
+                        <span v-if="activeSet.rare && cardCount(activeSet, activeSet.rare.cardKey) > 1"
+                            class="dup-badge dup-badge--rare">×{{ cardCount(activeSet, activeSet.rare.cardKey) }}</span>
                     </div>
                     <span class="rare-hint">
-                        {{ rareCard(activeSet) ? '恭喜！这张稀有卡已收入你的收藏室' : '每 1000 积分里程碑随机获得一张稀有卡' }}
+                        {{ rareObtained(activeSet)
+                            ? '恭喜！这张稀有卡已收入你的收藏室'
+                            : `抽卡有 ${catalogStore.rareRatePercent} 概率获得稀有卡` }}
                     </span>
                 </div>
 
-                <!-- 右侧：2 行 3 列普通卡网格 -->
+                <!-- 右侧：普通卡网格 -->
                 <div class="commons-side">
                     <div class="common-label">
                         <i class="fas fa-gift"></i> 普通卡片
-                        <span class="common-count">{{ obtainedIn(activeSet).filter(r => r.rarity === 'common').length }}/6</span>
+                        <span class="common-count">
+                            {{ obtainedIn(activeSet).filter(row => row.rarity === 'common').length }}/{{ activeSet.commons.length }}
+                        </span>
                     </div>
                     <div class="commons-grid">
-                        <div v-for="(common, i) in activeSet.commons" :key="i" class="common-cell">
+                        <div v-for="(common, i) in activeSet.commons" :key="common.cardKey" class="common-cell"
+                            :style="{ '--card-index': i }">
                             <div class="cell-wrap">
-                                <CardVisual :card="obtained(activeSet, `${activeSet.key}-c${i}`) ? common : null"
+                                <CardVisual :card="obtained(activeSet, common.cardKey) ? common : null"
                                     rarity="common" />
-                                <span v-if="obtained(activeSet, `${activeSet.key}-c${i}`) && cardCount(activeSet, `${activeSet.key}-c${i}`) > 1"
-                                    class="dup-badge">×{{ cardCount(activeSet, `${activeSet.key}-c${i}`) }}</span>
+                                <span v-if="obtained(activeSet, common.cardKey) && cardCount(activeSet, common.cardKey) > 1"
+                                    class="dup-badge">×{{ cardCount(activeSet, common.cardKey) }}</span>
                             </div>
                         </div>
                     </div>
@@ -150,70 +186,90 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { CARD_SETS } from '@/data/cardCatalog'
+import { computed, ref } from 'vue'
+import { useCardCatalogStore } from '@/stores/cardCatalogStore'
 import { useTasksStore } from '@/stores/tasksStore'
 import CardVisual from './CardVisual.vue'
 
+const emit = defineEmits(['go-draw'])
+
+const catalogStore = useCardCatalogStore()
 const tasksStore = useTasksStore()
 
-const TOTAL_CARDS = CARD_SETS.reduce((sum, set) => sum + 1 + set.commons.length, 0)
-
 const collection = computed(() => tasksStore.collection)
-const activeSet = ref(null)
+const sets = computed(() => catalogStore.sets)
+const activeSetKey = ref('')
+const activeSet = computed(() =>
+    activeSetKey.value ? catalogStore.setOf(activeSetKey.value) : null)
 
-/** 已收集的不同卡片 key 总数（去重） */
-const uniqueCount = computed(() => new Set(collection.value.map(r => r.card_key)).size)
-const completeSets = computed(() => CARD_SETS.filter(set => isComplete(set)).length)
-const totalPercent = computed(() => Math.round((uniqueCount.value / TOTAL_CARDS) * 100))
+/** 已收集的不同卡片 key 集合（去重，重复掉落不计入收集进度） */
+const ownedKeys = computed(() => new Set(collection.value.map(row => row.cardKey)))
+const uniqueCount = computed(() => {
+    const serverUnique = Number(tasksStore.stats.uniqueCards)
+    if (Number.isFinite(serverUnique) && serverUnique > 0) return serverUnique
+    return ownedKeys.value.size
+})
+const totalCatalogCards = computed(() =>
+    Number(catalogStore.totalCards) || Number(tasksStore.stats.totalCatalogCards) || 0)
+const totalSets = computed(() =>
+    Number(catalogStore.totalSets) || Number(tasksStore.stats.totalSets) || sets.value.length)
+const totalDraws = computed(() => Number(tasksStore.stats.totalDraws) || 0)
+const totalObtained = computed(() =>
+    Number(tasksStore.stats.totalCards) || collection.value.length)
+const totalPercent = computed(() =>
+    totalCatalogCards.value > 0 ? Math.round((uniqueCount.value / totalCatalogCards.value) * 100) : 0)
+const completeSets = computed(() =>
+    sets.value.filter(set => isComplete(set)).length)
 
-/** 某张卡被抽中几次 */
+/** 卡组卡片总数（1 稀有 + N 普通），来自服务端目录 */
 function cardCount(set, cardKey) {
-    return collection.value.filter(row => row.set_key === set.key && row.card_key === cardKey).length
+    if (cardKey) {
+        return collection.value.filter(row => row.cardKey === cardKey).length
+    }
+    return set ? catalogStore.cardsInSet(set).length : 0
 }
 
-/** 卡组主色：使用目录里的第一个印刷色，平涂不渐变 */
-function setColor(colors) {
-    return colors[0]
-}
-
-/** 卡组封面拼贴：稀有卡 + 3 张普通卡（站内图片），交替微旋转 */
+/** 卡组封面拼贴：稀有卡 + 最多 3 张普通卡（站内图片），交替微旋转 */
 function collage(set) {
-    return [set.rare.img, ...set.commons.slice(0, 3).map(common => common.img)]
+    const cards = []
+    if (set.rare) cards.push(set.rare)
+    cards.push(...set.commons.slice(0, 3))
+    return cards
 }
 
 function photoTilt(index) {
     return ['-3deg', '2.4deg', '-1.4deg', '3deg'][index % 4]
 }
 
+/** 某卡组已获得的不同卡片（每个 card_key 只算一次） */
 function obtainedIn(set) {
-    // 去重：每个 card_key 只算一次
-    const seen = new Set()
+    if (!set) return []
     const rows = []
+    const seen = new Set()
     for (const row of collection.value) {
-        if (row.set_key !== set.key) continue
-        if (seen.has(row.card_key)) continue
-        seen.add(row.card_key)
+        if (row.setKey !== set.key) continue
+        if (seen.has(row.cardKey)) continue
+        seen.add(row.cardKey)
         rows.push(row)
     }
     return rows
 }
 
 function obtained(set, cardKey) {
-    return obtainedIn(set).some(row => row.card_key === cardKey)
+    return ownedKeys.value.has(cardKey)
 }
 
 function rareObtained(set) {
-    return obtainedIn(set).some(row => row.rarity === 'rare')
+    return !!set?.rare && ownedKeys.value.has(set.rare.cardKey)
 }
 
 function rareCard(set) {
-    const row = obtainedIn(set).find(r => r.rarity === 'rare')
-    return row ? set.rare : null
+    return rareObtained(set) ? set.rare : null
 }
 
 function progress(set) {
-    return Math.round((obtainedIn(set).length / 7) * 100)
+    const total = cardCount(set)
+    return total > 0 ? Math.round((obtainedIn(set).length / total) * 100) : 0
 }
 
 function progressClass(set) {
@@ -222,11 +278,24 @@ function progressClass(set) {
 }
 
 function isComplete(set) {
-    return obtainedIn(set).length >= 7
+    if (!set) return false
+    return obtainedIn(set).length >= cardCount(set) && cardCount(set) > 0
 }
 
 function openSet(set) {
-    activeSet.value = set
+    activeSetKey.value = set.key
+}
+
+function closeSet() {
+    activeSetKey.value = ''
+}
+
+function goDraw() {
+    emit('go-draw')
+}
+
+async function retryCatalog() {
+    await catalogStore.load(true)
 }
 
 function onImageError(event) {
@@ -264,12 +333,20 @@ function onImageError(event) {
     color: var(--vermilion);
 }
 
+.room-head-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+}
+
 .room-progress {
     display: flex;
     align-items: center;
     gap: 12px;
     min-width: 200px;
-    flex: 0 1 300px;
+    width: 300px;
+    max-width: 100%;
 }
 
 .room-progress .progress {
@@ -283,6 +360,15 @@ function onImageError(event) {
     font-weight: 800;
     color: var(--ink);
     font-variant-numeric: tabular-nums;
+}
+
+.room-error {
+    margin: 0;
+}
+
+.room-hint__btn {
+    margin-left: 8px;
+    vertical-align: middle;
 }
 
 /* ========== 卡组网格（拍立得卡片墙） ========== */
@@ -491,8 +577,9 @@ function onImageError(event) {
 .room-hint {
     margin-top: 20px;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 10px;
+    flex-wrap: wrap;
     padding: 14px 16px;
     border: 1.5px dashed var(--ink-soft);
     border-radius: var(--r-md);
@@ -634,7 +721,7 @@ function onImageError(event) {
     line-height: 1.55;
 }
 
-/* 右侧：2 行 3 列普通卡网格（拍立得微旋转） */
+/* 右侧：普通卡网格（拍立得微旋转） */
 .commons-side {
     display: flex;
     flex-direction: column;
@@ -645,7 +732,6 @@ function onImageError(event) {
 .commons-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: repeat(2, auto);
     gap: 22px;
 }
 
@@ -681,12 +767,12 @@ function onImageError(event) {
     color: var(--paper-1);
 }
 
-.common-cell:nth-child(1) .card-visual { --card-tilt: -1.8deg; }
-.common-cell:nth-child(2) .card-visual { --card-tilt: 1.4deg; }
-.common-cell:nth-child(3) .card-visual { --card-tilt: -1deg; }
-.common-cell:nth-child(4) .card-visual { --card-tilt: 1.8deg; }
-.common-cell:nth-child(5) .card-visual { --card-tilt: -1.4deg; }
-.common-cell:nth-child(6) .card-visual { --card-tilt: 1deg; }
+.common-cell:nth-child(6n + 1) .card-visual { --card-tilt: -1.8deg; }
+.common-cell:nth-child(6n + 2) .card-visual { --card-tilt: 1.4deg; }
+.common-cell:nth-child(6n + 3) .card-visual { --card-tilt: -1deg; }
+.common-cell:nth-child(6n + 4) .card-visual { --card-tilt: 1.8deg; }
+.common-cell:nth-child(6n + 5) .card-visual { --card-tilt: -1.4deg; }
+.common-cell:nth-child(6n) .card-visual { --card-tilt: 1deg; }
 
 /* ========== 响应式 ========== */
 @media (max-width: 900px) {
@@ -701,6 +787,15 @@ function onImageError(event) {
 }
 
 @media (max-width: 760px) {
+    .room-head {
+        align-items: flex-start;
+    }
+
+    .room-head-side {
+        width: 100%;
+        align-items: flex-start;
+    }
+
     .set-grid {
         grid-template-columns: minmax(0, 1fr);
     }
@@ -741,12 +836,9 @@ function onImageError(event) {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .commons-grid .common-cell:nth-child(n + 5) {
-        padding-top: 6px;
-    }
-
     .room-progress {
-        flex: 1 1 100%;
+        min-width: 0;
+        width: 100%;
     }
 }
 </style>

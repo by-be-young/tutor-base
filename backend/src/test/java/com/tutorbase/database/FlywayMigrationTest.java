@@ -40,7 +40,9 @@ class FlywayMigrationTest {
             "task_claims",
             "card_collection",
             "achievement_claims",
-            "task_assignments");
+            "task_assignments",
+            "card_sets",
+            "card_definitions");
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
@@ -62,7 +64,7 @@ class FlywayMigrationTest {
                     .count();
         }
         assertThat(result.migrationsExecuted).isEqualTo((int) expectedMigrations);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("6");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("10");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
         try (Connection connection = POSTGRES.createConnection("")) {
@@ -85,9 +87,20 @@ class FlywayMigrationTest {
             assertThat(hasConstraint(connection, "task_claims_student_id_fkey")).isTrue();
             assertThat(hasConstraint(connection, "task_claims_student_task_unique")).isTrue();
             assertThat(hasConstraint(connection, "card_collection_student_id_fkey")).isTrue();
-            assertThat(hasConstraint(connection, "card_collection_milestone_positive")).isTrue();
             assertThat(hasConstraint(connection, "card_collection_rarity_check")).isTrue();
-            assertThat(hasConstraint(connection, "card_collection_student_milestone_unique")).isTrue();
+            assertThat(hasColumn(connection, "card_collection", "milestone_points")).isFalse();
+            assertThat(hasColumn(connection, "user_points", "lifetime_points")).isTrue();
+            assertThat(hasColumn(connection, "user_points", "draw_count")).isTrue();
+            assertThat(isColumnNullable(connection, "user_points", "draw_count")).isFalse();
+            assertThat(readCount(connection, "SELECT count(*) FROM public.card_sets")).isEqualTo(10);
+            assertThat(readCount(connection, "SELECT count(*) FROM public.card_definitions")).isEqualTo(70);
+            assertThat(readCount(connection, """
+                    SELECT count(*) FROM public.card_definitions
+                    WHERE rarity = 'rare'
+                    """)).isEqualTo(10);
+            assertThat(readCount(connection, """
+                    SELECT count(DISTINCT set_key) FROM public.card_definitions
+                    """)).isEqualTo(10);
 
             execute(connection, Files.readString(
                     Path.of("..", "database", "audit", "post_v3_identity_checks.sql")));
@@ -103,6 +116,15 @@ class FlywayMigrationTest {
                     Path.of("..", "database", "operations", "revoke_browser_table_access.sql")));
             execute(connection, Files.readString(
                     Path.of("..", "database", "audit", "browser_table_access_checks.sql")));
+            // reconciliation 必须可重复执行，且不会破坏 Flyway 已经建好的结构/种子数据。
+            String gachaReconciliation = Files.readString(Path.of(
+                    "..", "database", "reconciliation", "2026-10-20_gacha_card_pool.sql"));
+            execute(connection, gachaReconciliation);
+            execute(connection, gachaReconciliation);
+            assertThat(readCount(connection, "SELECT count(*) FROM public.card_sets")).isEqualTo(10);
+            assertThat(readCount(connection, "SELECT count(*) FROM public.card_definitions")).isEqualTo(70);
+            assertThat(hasColumn(connection, "user_points", "draw_count")).isTrue();
+            assertThat(hasColumn(connection, "card_collection", "milestone_points")).isFalse();
             assertThat(readCount(connection, """
                     SELECT count(*)
                     FROM pg_class AS table_class
@@ -112,10 +134,10 @@ class FlywayMigrationTest {
                           'student', 'account', 'account_activation', 'account_session',
                           'daily_check_in', 'user_points', 'task_claims', 'card_collection',
                           'article_answer_keys', 'article_question_submissions', 'wrong_questions',
-                          'achievement_claims', 'task_assignments'
+                          'achievement_claims', 'task_assignments', 'card_sets', 'card_definitions'
                       ])
                       AND table_class.relrowsecurity
-                    """)).isEqualTo(13);
+                    """)).isEqualTo(15);
 
             assertDatabaseRejectsInvalidStates(connection);
             assertWrongQuestionsFollowStudentLifecycle(connection);
@@ -266,6 +288,26 @@ class FlywayMigrationTest {
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, constraintName);
+            try (ResultSet row = statement.executeQuery()) {
+                row.next();
+                return row.getBoolean(1);
+            }
+        }
+    }
+
+    private boolean hasColumn(Connection connection, String tableName, String columnName) throws SQLException {
+        String sql = """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = ?
+                      AND column_name = ?
+                )
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, tableName);
+            statement.setString(2, columnName);
             try (ResultSet row = statement.executeQuery()) {
                 row.next();
                 return row.getBoolean(1);

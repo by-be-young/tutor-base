@@ -16,7 +16,8 @@ BEGIN
                 'public.student, public.account, public.account_activation, public.account_session, '
                 'public.article_answer_keys, public.article_question_submissions, '
                 'public.wrong_questions, public.daily_check_in, public.user_points, '
-                'public.task_claims, public.card_collection',
+                'public.task_claims, public.card_collection, '
+                'public.card_sets, public.card_definitions',
                 role_name);
             EXECUTE format(
                 'REVOKE ALL PRIVILEGES ON SEQUENCE %s FROM %I',

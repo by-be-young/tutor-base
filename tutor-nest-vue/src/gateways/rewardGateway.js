@@ -5,12 +5,11 @@ export const rewardGateway = {
     return backendClient.request('/rewards')
   },
 
-  claimMilestone(milestonePoints) {
-    return backendClient.request(
-      `/rewards/milestones/${encodeURIComponent(milestonePoints)}/claims`,
-      { method: 'POST' }
-    )
+  /** 卡池目录：卡组、卡片、当期 UP、抽卡价格与概率 */
+  getCatalog() {
+    return backendClient.request('/rewards/catalog')
   },
+
   draw(count = 1) {
     return backendClient.request('/rewards/draws', {
       method: 'POST',

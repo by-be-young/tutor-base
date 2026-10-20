@@ -2,7 +2,8 @@ WITH application_table(table_name) AS (
     VALUES ('student'), ('account'), ('account_activation'), ('account_session'),
            ('article_answer_keys'), ('article_question_submissions'),
            ('wrong_questions'), ('daily_check_in'), ('user_points'),
-           ('task_claims'), ('card_collection')
+           ('task_claims'), ('card_collection'),
+           ('card_sets'), ('card_definitions')
 ), application_sequence(sequence_name) AS (
     VALUES ('student_id_seq'), ('account_id_seq'), ('account_activation_id_seq'),
            ('account_session_id_seq'), ('daily_check_in_id_seq'),

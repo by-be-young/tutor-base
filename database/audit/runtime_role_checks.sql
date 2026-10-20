@@ -37,7 +37,9 @@ WITH expected_privilege(table_name, privilege_type) AS (
         ('achievement_claims', 'INSERT'),
         ('task_assignments', 'SELECT'),
         ('task_assignments', 'INSERT'),
-        ('task_assignments', 'UPDATE')
+        ('task_assignments', 'UPDATE'),
+        ('card_sets', 'SELECT'),
+        ('card_definitions', 'SELECT')
 ), expected_sequence(sequence_name) AS (
     VALUES
         ('student_id_seq'),
@@ -56,7 +58,7 @@ WITH expected_privilege(table_name, privilege_type) AS (
     VALUES ('student'), ('account'), ('account_activation'), ('account_session'),
         ('daily_check_in'), ('user_points'), ('task_claims'), ('card_collection'),
         ('article_answer_keys'), ('article_question_submissions'), ('wrong_questions'),
-        ('achievement_claims'), ('task_assignments')
+        ('achievement_claims'), ('task_assignments'), ('card_sets'), ('card_definitions')
 ), expected_policy(table_name, policy_name, command, using_expression, check_expression) AS (
     VALUES
         ('student', 'tutor_base_runtime_student_select', 'r', 'true', NULL),
@@ -84,7 +86,9 @@ WITH expected_privilege(table_name, privilege_type) AS (
         ('wrong_questions', 'tutor_base_runtime_wrong_questions_all', '*', 'true', 'true'),
         ('task_claims', 'tutor_base_runtime_task_claims_all', '*', 'true', 'true'),
         ('achievement_claims', 'tutor_base_runtime_achievement_claims_all', '*', 'true', 'true'),
-        ('task_assignments', 'tutor_base_runtime_task_assignments_all', '*', 'true', 'true')
+        ('task_assignments', 'tutor_base_runtime_task_assignments_all', '*', 'true', 'true'),
+        ('card_sets', 'tutor_base_runtime_card_sets_select', 'r', 'true', NULL),
+        ('card_definitions', 'tutor_base_runtime_card_definitions_select', 'r', 'true', NULL)
 ), checks AS (
     SELECT 'runtime roles missing or unsafe' AS check_name, count(*)::bigint AS anomaly_count
     FROM (VALUES ('tutor_base_runtime'), ('tutor_base_app')) AS expected(role_name)
@@ -124,7 +128,11 @@ WITH expected_privilege(table_name, privilege_type) AS (
         ('card_collection', 'UPDATE'), ('card_collection', 'DELETE'), ('card_collection', 'TRUNCATE'),
         ('article_answer_keys', 'TRUNCATE'),
         ('article_question_submissions', 'DELETE'), ('article_question_submissions', 'TRUNCATE'),
-        ('wrong_questions', 'TRUNCATE')
+        ('wrong_questions', 'TRUNCATE'),
+        ('card_sets', 'INSERT'), ('card_sets', 'UPDATE'), ('card_sets', 'DELETE'),
+        ('card_sets', 'TRUNCATE'),
+        ('card_definitions', 'INSERT'), ('card_definitions', 'UPDATE'), ('card_definitions', 'DELETE'),
+        ('card_definitions', 'TRUNCATE')
     ) AS denied(table_name, privilege_type)
     WHERE has_table_privilege('tutor_base_app', format('public.%I', table_name), privilege_type)
 

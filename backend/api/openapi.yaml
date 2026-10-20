@@ -228,13 +228,13 @@ paths:
   /rewards:
     get:
       operationId: getRewardSummary
-      summary: 获取当前学习者的积分与卡片收藏
+      summary: 获取当前学习者的积分、卡片收藏与收藏统计
       description: 学习者身份只从服务端会话取得，不接受客户端传入 student_id。
       security:
         - sessionCookie: []
       responses:
         '200':
-          description: 当前学习者的积分余额与收藏卡片，卡片按领取时间倒序。
+          description: 当前学习者的积分余额、收藏卡片与统计，卡片按领取时间倒序。
           content:
             application/json:
               schema:
@@ -243,10 +243,34 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+  /rewards/catalog:
+    get:
+      operationId: getRewardCatalog
+      summary: 获取服务端卡池目录与当期 UP 卡
+      description: 概率、卡组、卡片和 UP 轮换均由服务端数据库提供，新增卡组无需改动前端。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 抽卡价格、概率、当期 UP、全部启用卡组与卡片总数。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RewardCatalog'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
   /rewards/draws:
     post:
       operationId: drawRewardCards
       summary: 抽取收藏卡片
+      description: 服务端按卡池目录决定卡片与 UP 标记，客户端不能指定卡片或概率。
       security:
         - sessionCookie: []
       parameters:
@@ -265,23 +289,13 @@ paths:
                   maximum: 10
       responses:
         '200':
-          description: 抽卡后的最新积分与卡片结果
+          description: 抽卡后的最新积分、当期 UP 与卡片结果（可包含重复卡）。
           content:
             application/json:
               schema:
-                type: object
-                required: [points, lifetimePoints, cards]
-                properties:
-                  points:
-                    type: integer
-                    format: int64
-                  lifetimePoints:
-                    type: integer
-                    format: int64
-                  cards:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/CardReward'
+                $ref: '#/components/schemas/RewardDrawResult'
+        '400':
+          $ref: '#/components/responses/Problem'
         '401':
           $ref: '#/components/responses/Problem'
         '403':
@@ -1100,16 +1114,176 @@ components:
     RewardSummary:
       type: object
       additionalProperties: false
-      required: [points, collection]
+      required: [points, lifetimePoints, collection, stats]
       properties:
         points:
           type: integer
           format: int64
           minimum: 0
+          description: 当前可用积分（抽卡会消耗）。
+        lifetimePoints:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 累计获得积分，只增不减；前端据此计算等级。
         collection:
           type: array
           items:
             $ref: '#/components/schemas/CardReward'
+        stats:
+          $ref: '#/components/schemas/RewardStats'
+    RewardStats:
+      type: object
+      additionalProperties: false
+      required: [totalDraws, totalCards, uniqueCards, totalCatalogCards, totalSets]
+      properties:
+        totalDraws:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 累计抽卡次数（含重复）。
+        totalCards:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 收藏中的卡片总数（含重复）。
+        uniqueCards:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 收藏中不重复的卡片数量。
+        totalCatalogCards:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 当前启用卡池的卡片总数。
+        totalSets:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 当前启用卡组数量。
+    RewardUpCard:
+      type: object
+      additionalProperties: false
+      required: [setKey, cardKey, name, setName, image, rotatesAt]
+      properties:
+        setKey: { type: string }
+        cardKey: { type: string }
+        name: { type: string }
+        setName: { type: string }
+        image:
+          type: string
+          description: 卡片图片相对路径（无前导斜杠，如 cards/puppy-r.png）。
+        rotatesAt:
+          type: string
+          format: date-time
+          description: 下一期 UP 生效时间：ISO-8601，Asia/Shanghai 下周一 00:00。
+    RewardCatalog:
+      type: object
+      additionalProperties: false
+      required: [drawCost, rareRate, upRateWhenRare, currentUp, sets, totalCards, totalSets]
+      properties:
+        drawCost:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 单抽消耗积分。
+        rareRate:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: 每张卡为稀有卡的概率。
+        upRateWhenRare:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: 抽到稀有卡时命中当期 UP 卡的概率。
+        currentUp:
+          $ref: '#/components/schemas/RewardUpCard'
+        sets:
+          type: array
+          items:
+            $ref: '#/components/schemas/RewardCatalogSet'
+        totalCards:
+          type: integer
+          minimum: 0
+        totalSets:
+          type: integer
+          minimum: 0
+    RewardCatalogSet:
+      type: object
+      additionalProperties: false
+      required: [key, name, theme, style, emblem, colorA, colorB, rare, commons]
+      properties:
+        key: { type: string }
+        name: { type: string }
+        theme: { type: string }
+        style: { type: string }
+        emblem: { type: string }
+        colorA: { type: string }
+        colorB: { type: string }
+        rare:
+          $ref: '#/components/schemas/RewardCatalogCard'
+        commons:
+          type: array
+          items:
+            $ref: '#/components/schemas/RewardCatalogCard'
+    RewardCatalogCard:
+      type: object
+      additionalProperties: false
+      required: [cardKey, name, image, rarity]
+      properties:
+        cardKey: { type: string }
+        name: { type: string }
+        image:
+          type: string
+          description: 卡片图片相对路径（无前导斜杠）。
+        rarity:
+          type: string
+          enum: [common, rare]
+    RewardDrawResult:
+      type: object
+      additionalProperties: false
+      required: [points, lifetimePoints, currentUp, cards, stats]
+      properties:
+        points:
+          type: integer
+          format: int64
+          minimum: 0
+        lifetimePoints:
+          type: integer
+          format: int64
+          minimum: 0
+        currentUp:
+          $ref: '#/components/schemas/RewardUpCard'
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/DrawnCard'
+        stats:
+          $ref: '#/components/schemas/RewardStats'
+    DrawnCard:
+      type: object
+      additionalProperties: false
+      required: [id, cardKey, setKey, rarity, claimedAt, isUp]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        cardKey: { type: string, minLength: 1 }
+        setKey: { type: string, minLength: 1 }
+        rarity:
+          type: string
+          enum: [common, rare]
+        claimedAt:
+          type: string
+          format: date-time
+        isUp:
+          type: boolean
+          description: 是否为当期 UP 卡（只有稀有卡可能为 true）。
     ArticleProgress:
       type: object
       additionalProperties: false
@@ -1249,7 +1423,7 @@ components:
           minLength: 1
         setKey:
           type: string
-          enum: [puppy, ocean, cosmos, dessert, sport]
+          description: 卡组 key，取值由服务端卡池目录决定。
         rarity:
           type: string
           enum: [common, rare]

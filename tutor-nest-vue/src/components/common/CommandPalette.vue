@@ -83,7 +83,7 @@ const allGroups = computed(() => {
 
   if (authStore.isLoggedIn) {
     navigation.push(
-      { id: 'nav-tasks', label: '任务中心', hint: '签到、积分与里程碑', icon: 'fas fa-list-check', to: '/tasks', meta: '页面' },
+      { id: 'nav-tasks', label: '任务中心', hint: '签到、抽卡与成就', icon: 'fas fa-list-check', to: '/tasks', meta: '页面' },
       { id: 'nav-achievements', label: '成就', hint: '等级、成就与积分奖励', icon: 'fas fa-medal', to: '/tasks?tab=achievements', meta: '页面' },
       { id: 'nav-wrong', label: '错题本', hint: '整理、掌握与重做', icon: 'fas fa-book-medical', to: '/wrong-questions', meta: '页面' },
       { id: 'nav-training', label: '错题训练', hint: '沉浸式重做错题', icon: 'fas fa-dumbbell', to: '/wrong-training', meta: '页面' },

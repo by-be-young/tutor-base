@@ -53,7 +53,8 @@ class GrowthService {
                 WHERE student_id = :studentId
                 """).param("studentId", learnerId).query(String.class).list());
 
-        List<AchievementView> views = AchievementCatalog.ALL.stream()
+        List<Achievement> achievementCatalog = AchievementCatalog.all(catalogCardCount());
+        List<AchievementView> views = achievementCatalog.stream()
                 .map(achievement -> achievementView(learnerId, achievement, claimedKeys))
                 .toList();
 
@@ -63,7 +64,7 @@ class GrowthService {
                 WHERE student_id = :studentId
                 """).param("studentId", learnerId).query(Long.class).single();
         int claimedTiers = claimedKeys.size();
-        int totalTiers = AchievementCatalog.ALL.stream().mapToInt(item -> item.tiers().size()).sum();
+        int totalTiers = achievementCatalog.stream().mapToInt(item -> item.tiers().size()).sum();
         long points = points(learnerId);
         return new AchievementSummary(points, earnedPoints, claimedTiers, totalTiers, views);
     }
@@ -95,7 +96,8 @@ class GrowthService {
 
     @Transactional
     ClaimResult claimAchievement(long learnerId, String key) {
-        Achievement achievement = AchievementCatalog.find(key).orElseThrow(InvalidGrowthKey::new);
+        Achievement achievement = AchievementCatalog.find(catalogCardCount(), key)
+                .orElseThrow(InvalidGrowthKey::new);
         Set<Integer> claimedLevels = new HashSet<>(jdbc.sql("""
                 SELECT tier_level FROM public.achievement_claims
                 WHERE student_id = :studentId AND achievement_key = :achievementKey
@@ -307,10 +309,24 @@ class GrowthService {
                                   WHERE answers.blog_id = keyed.blog_id)
                     ) completed
                     """, learnerId);
-            case CARDS -> count("""
+            case UNIQUE_CARDS -> count("""
+                    SELECT COUNT(DISTINCT card_key) FROM public.card_collection WHERE student_id = :studentId
+                    """, learnerId);
+            case OBTAINED_CARDS -> count("""
                     SELECT COUNT(*) FROM public.card_collection WHERE student_id = :studentId
                     """, learnerId);
         };
+    }
+
+    /** 当前启用卡池的卡片总数，用于按百分比缩放“收藏家”成就档位。 */
+    private int catalogCardCount() {
+        long count = jdbc.sql("""
+                SELECT COUNT(*)
+                FROM public.card_definitions AS d
+                JOIN public.card_sets AS s ON s.set_key = d.set_key AND s.active = true
+                WHERE d.active = true
+                """).query(Long.class).single();
+        return (int) count;
     }
 
     long windowMetric(long learnerId, TaskCatalog.Metric metric, OffsetDateTime since, OffsetDateTime until) {

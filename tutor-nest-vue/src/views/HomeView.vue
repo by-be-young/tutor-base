@@ -37,7 +37,7 @@
               <span>门学科</span>
             </div>
             <div class="hero__stat">
-              <strong>{{ publicStats.cards }}</strong>
+              <strong>{{ publicStats.cards ?? '—' }}</strong>
               <span>张收藏卡</span>
             </div>
             <div class="hero__stat is-accent">
@@ -98,7 +98,7 @@
                 </li>
                 <li>
                   <span class="perk-dot perk-dot--lime"><i class="fas fa-gift" aria-hidden="true"></i></span>
-                  <div><strong>签到与收藏</strong><span>积分里程碑兑换 35 张卡</span></div>
+                  <div><strong>签到与收藏</strong><span>积分抽卡收集限定卡组</span></div>
                 </li>
               </ul>
 
@@ -202,7 +202,7 @@
           </button>
         </div>
 
-        <div class="marquee cards-marquee">
+        <div v-if="galleryCards.length" class="marquee cards-marquee">
           <div class="marquee__track">
             <figure v-for="(card, index) in galleryCards" :key="`a-${index}`" class="gallery-card">
               <img :src="card.img" :alt="card.name" loading="lazy" />
@@ -220,6 +220,10 @@
             </figure>
           </div>
         </div>
+        <p v-else class="cards-section__empty">
+          <i class="fas fa-images" aria-hidden="true"></i>
+          卡池目录加载中，登录后即可查看完整收藏卡池。
+        </p>
       </section>
     </template>
 
@@ -252,7 +256,7 @@
           <div class="dash-hero__chips">
             <span class="chip chip--amber"><i class="fas fa-coins" aria-hidden="true"></i> {{ tasksStore.points }} 积分</span>
             <span class="chip chip--lime"><i class="fas fa-fire" aria-hidden="true"></i> 连续 {{ streak }} 天</span>
-            <span class="chip chip--cyan"><i class="fas fa-gift" aria-hidden="true"></i> {{ tasksStore.collection.length }} 张卡</span>
+            <span class="chip chip--cyan"><i class="fas fa-gift" aria-hidden="true"></i> {{ totalOwnedCards }} 张卡</span>
           </div>
         </div>
 
@@ -264,7 +268,7 @@
               <strong class="level-card__level">LV.{{ levelInfo.level }}</strong>
               <span class="level-card__title">{{ levelInfo.title }}</span>
             </div>
-            <strong class="level-card__points">{{ tasksStore.points }}<small>pts</small></strong>
+            <strong class="level-card__points">{{ tasksStore.lifetimePoints }}<small>累计 pts</small></strong>
             <div class="level-card__bar">
               <span :style="{ width: levelInfo.progress + '%' }"></span>
             </div>
@@ -274,7 +278,7 @@
             </div>
           </div>
           <router-link to="/tasks" class="level-card__link">
-            查看里程碑 <i class="fas fa-arrow-right" aria-hidden="true"></i>
+            前往卡池 <i class="fas fa-arrow-right" aria-hidden="true"></i>
           </router-link>
         </div>
       </section>
@@ -390,7 +394,7 @@
               </router-link>
               <router-link to="/tasks" class="quick-item quick-item--amber">
                 <span class="quick-item__icon"><i class="fas fa-trophy" aria-hidden="true"></i></span>
-                <span class="quick-item__text"><strong>任务中心</strong><small>{{ tasksStore.collection.length }} 张收藏卡</small></span>
+                <span class="quick-item__text"><strong>任务中心</strong><small>{{ totalOwnedCards }} 张收藏卡</small></span>
               </router-link>
               <router-link to="/settings/password" class="quick-item quick-item--sky">
                 <span class="quick-item__icon"><i class="fas fa-key" aria-hidden="true"></i></span>
@@ -449,10 +453,10 @@ import { useCheckinStore } from '@/stores/checkinStore'
 import { useArticleStore } from '@/stores/blogStore'
 import { useWrongQuestionsStore } from '@/stores/wrongQuestionsStore'
 import { useTasksStore } from '@/stores/tasksStore'
+import { useCardCatalogStore } from '@/stores/cardCatalogStore'
 import { useUiStore } from '@/stores/uiStore'
 import { learningGateway } from '@/gateways/learningGateway'
 import { levelFromPoints } from '@/utils/level'
-import { CARD_SETS, findCard } from '@/data/cardCatalog'
 import BrandMark from '@/components/common/BrandMark.vue'
 import CountUp from '@/components/ui/CountUp.vue'
 import RevealOnScroll from '@/components/ui/RevealOnScroll.vue'
@@ -463,6 +467,7 @@ const blogStore = useArticleStore()
 const wrongQuestionsStore = useWrongQuestionsStore()
 const checkinStore = useCheckinStore()
 const tasksStore = useTasksStore()
+const catalogStore = useCardCatalogStore()
 const uiStore = useUiStore()
 
 const base = import.meta.env.BASE_URL
@@ -486,7 +491,7 @@ const publicStats = computed(() => {
   return {
     articles: blogStore.blogData.length || 35,
     subjects: subjects.size || 3,
-    cards: CARD_SETS.reduce((total, set) => total + 1 + set.commons.length, 0)
+    cards: Number(catalogStore.totalCards) || null
   }
 })
 
@@ -587,10 +592,8 @@ const streak = computed(() => {
 })
 
 const levelInfo = computed(() => levelFromPoints(tasksStore.lifetimePoints))
-const nextMilestoneGap = computed(() => {
-  const next = (Math.floor(tasksStore.points / 200) + 1) * 200
-  return Math.max(0, next - tasksStore.points)
-})
+const totalOwnedCards = computed(() =>
+  Number(tasksStore.stats.totalCards) || tasksStore.collection.length)
 
 const todayLabel = computed(() => new Intl.DateTimeFormat('zh-CN', {
   month: 'long', day: 'numeric', weekday: 'long'
@@ -606,29 +609,39 @@ const greeting = computed(() => {
 
 const galleryCards = computed(() => {
   const cards = []
-  for (const set of CARD_SETS) {
-    cards.push({ name: set.rare.name, img: asset(set.rare.img), rare: true })
-    cards.push({ name: set.commons[0].name, img: asset(set.commons[0].img), rare: false })
-    cards.push({ name: set.commons[2].name, img: asset(set.commons[2].img), rare: false })
+  for (const set of catalogStore.sets) {
+    if (set.rare) cards.push({ name: set.rare.name, img: set.rare.img, rare: true })
+    const commonA = set.commons[0]
+    const commonB = set.commons[2] || set.commons[1]
+    if (commonA) cards.push({ name: commonA.name, img: commonA.img, rare: false })
+    if (commonB) cards.push({ name: commonB.name, img: commonB.img, rare: false })
   }
   return cards
 })
 
 const ownedCards = computed(() => tasksStore.collection
   .map(row => {
-    const card = findCard(row.set_key, row.card_key)
+    const card = catalogStore.findCard(row.setKey, row.cardKey)
     if (!card) return null
-    return { name: card.name, img: asset(card.img), rare: row.rarity === 'rare' }
+    return { name: card.name, img: card.img, rare: row.rarity === 'rare' }
   })
   .filter(Boolean)
   .slice(0, 5))
 
-const features = [
+const features = computed(() => [
   { title: '分级讲义', desc: '按学科与章节组织的内容目录，找到下一课。', meta: 'CONTENT', icon: 'fas fa-layer-group', tone: 'butter' },
   { title: '错题批改', desc: '收题、归因、掌握，一眼看清薄弱点。', meta: 'REVIEW', icon: 'fas fa-book-medical', tone: 'coral' },
   { title: '沉浸训练', desc: '重做、自判、写回，直到真正掌握。', meta: 'TRAINING', icon: 'fas fa-dumbbell', tone: 'lime' },
-  { title: '收藏卡池', desc: '积分里程碑开出 5 套 35 张卡。', meta: 'REWARDS', icon: 'fas fa-gift', tone: 'sky' }
-]
+  {
+    title: '收藏卡池',
+    desc: catalogStore.totalCards
+      ? `积分抽卡收集 ${catalogStore.totalSets} 套 ${catalogStore.totalCards} 张卡片。`
+      : '积分抽卡收集卡组，卡池会定期更新。',
+    meta: 'REWARDS',
+    icon: 'fas fa-gift',
+    tone: 'sky'
+  }
+])
 
 const SUBJECT_META = {
   化学: { key: 'chem', icon: 'fa-flask', cover: 'subjects/chem-bg.png' },
@@ -658,6 +671,8 @@ async function loadPublicData() {
   } catch {
     /* 保持默认统计 */
   }
+  // 卡池目录需要登录会话；未登录时静默失败，页面显示占位信息
+  await catalogStore.load()
 }
 
 async function loadDashboardData() {
@@ -1430,6 +1445,24 @@ defineExpose({
 
 .eyebrow--light {
   color: rgba(255, 253, 246, 0.6);
+}
+
+.cards-section__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 34px 18px;
+  margin: 0;
+  border: 1.5px dashed rgba(255, 253, 246, 0.4);
+  border-radius: var(--r-md);
+  color: rgba(255, 253, 246, 0.72);
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+.cards-section__empty i {
+  color: var(--lime);
 }
 
 .eyebrow--light::before {

@@ -69,6 +69,20 @@ database/operations/provision_runtime_role.sql
 第二条授予运行角色权限、启用 RLS 策略并补齐序列权限。执行后重启后端，`/api/v1/achievements`
 与 `/api/v1/tasks/board` 才会返回 200。
 
+## 数据库：抽卡卡池（V7–V10）
+
+卡池改为数据驱动（`card_sets` / `card_definitions`），并新增累计抽卡数与 `lifetime_points`。
+已有 Supabase 库在 SQL Editor 继续执行：
+
+```text
+database/reconciliation/2026-10-20_gacha_card_pool.sql
+database/operations/provision_runtime_role.sql
+```
+
+第一条可重复执行，补齐 V7（移除里程碑领取约束）、V8（`lifetime_points` 回填）、
+V9（删除 `milestone_points`）与 V10（卡组/卡片目录种子、`draw_count`）。
+第二条给运行角色授予目录表只读权限并启用 RLS。执行后重启后端。
+
 ## 常见问题
 
 - **改完配置或依赖后白屏 / 页面空白**：Vite dev 的旧模块缓存导致，`Ctrl+C` 重启 `npm run dev`，浏览器 `Ctrl+Shift+R` 硬刷新。页面已内置路由进度条、chunk 加载失败自动刷新与渲染异常兜底页。

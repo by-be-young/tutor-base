@@ -66,6 +66,9 @@ GRANT SELECT, INSERT, UPDATE ON TABLE public.article_question_submissions TO tut
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.wrong_questions TO tutor_base_runtime;
 GRANT SELECT, INSERT ON TABLE public.achievement_claims TO tutor_base_runtime;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.task_assignments TO tutor_base_runtime;
+-- 卡池目录由运营通过 migration/reconciliation 维护，运行角色只读。
+GRANT SELECT ON TABLE public.card_sets TO tutor_base_runtime;
+GRANT SELECT ON TABLE public.card_definitions TO tutor_base_runtime;
 GRANT USAGE ON SEQUENCE public.student_id_seq, public.account_id_seq,
     public.account_activation_id_seq, public.account_session_id_seq,
     public.daily_check_in_id_seq, public.task_claims_id_seq, public.card_collection_id_seq,
@@ -88,6 +91,8 @@ ALTER TABLE public.article_question_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.wrong_questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.achievement_claims ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.task_assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.card_sets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.card_definitions ENABLE ROW LEVEL SECURITY;
 
 DO $policies$
 BEGIN
@@ -220,6 +225,16 @@ BEGIN
                    AND polname = 'tutor_base_runtime_task_assignments_all') THEN
         CREATE POLICY tutor_base_runtime_task_assignments_all ON public.task_assignments
             FOR ALL TO tutor_base_runtime USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.card_sets'::regclass
+                   AND polname = 'tutor_base_runtime_card_sets_select') THEN
+        CREATE POLICY tutor_base_runtime_card_sets_select ON public.card_sets
+            FOR SELECT TO tutor_base_runtime USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.card_definitions'::regclass
+                   AND polname = 'tutor_base_runtime_card_definitions_select') THEN
+        CREATE POLICY tutor_base_runtime_card_definitions_select ON public.card_definitions
+            FOR SELECT TO tutor_base_runtime USING (true);
     END IF;
 END
 $policies$;

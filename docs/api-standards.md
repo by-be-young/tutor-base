@@ -160,12 +160,15 @@
 
 | Method | Path | Auth | 语义 |
 | --- | --- | --- | --- |
-| GET | `/rewards` | learner | 返回当前学习者的积分余额与卡片收藏 |
-| POST | `/rewards/milestones/{milestonePoints}/claims` | learner | 领取已达成的积分里程碑；卡片选择由服务端目录决定，同一里程碑只能领取一次 |
+| GET | `/rewards` | learner | 返回当前学习者的可用积分、累计积分、卡片收藏与收藏统计（抽卡次数/总数/不重复数/卡池规模） |
+| GET | `/rewards/catalog` | learner | 返回服务端卡池目录：抽卡价格、稀有概率、UP 概率、当期 UP 卡（下周一 00:00 Asia/Shanghai 轮换）与全部启用卡组 |
+| POST | `/rewards/draws` | learner | 抽取 `count` 张卡（1–10）；每张 80 积分，服务端决定稀有度、UP 与卡片，写入收藏并累加抽卡次数 |
 
-- 客户端只发送里程碑积分，不得发送或决定 `studentId`、`cardKey`、`setKey` 或 `rarity`。
-- 未达到里程碑返回 `409 milestone_not_reached`；重复领取返回 `409 reward_already_claimed`。
-- 积分读取、资格校验与卡片写入在一个数据库事务内完成；数据库唯一约束是并发重复领取的最终防线。
+- 卡组、卡片、概率与 UP 轮换来自数据库表 `card_sets` / `card_definitions`，新增卡组只需插入数据行，无写死数量。
+- UP 卡组按启用卡组的 `sort_order, set_key` 顺序，以 ISO 周数取模确定，确定性轮换；抽到稀有卡时 50% 为当期 UP。
+- 客户端只能提交 `count`，不得发送或决定 `studentId`、`cardKey`、`setKey`、`rarity` 或 `isUp`。
+- 抽卡只扣 `points`，累计积分 `lifetime_points` 只增不减并用于等级计算；`draw_count` 记录累计抽卡次数。
+- 积分不足返回 `409 insufficient_points`；抽卡、收藏写入与计数更新在同一数据库事务内完成。
 
 ### Growth
 
@@ -178,6 +181,7 @@
 | POST | `/tasks/{key}/claims` | learner | 领取已完成任务奖励；同一周期/同一次接取只能领取一次 |
 
 - 学习者身份只从服务端会话取得；客户端不得提交 `studentId`、奖励积分、截止时间或完成状态。
+- 卡片类成就按两种指标区分：“收藏家”按不重复卡片数（`COUNT(DISTINCT card_key)`）并以当前卡池总量百分比缩放档位；“欧气收集家”按累计获得卡片数（含重复）。
 - 任务与成就的完成条件、进度窗口和奖励全部由服务端目录与 SQL 推导；周期任务按 Asia/Shanghai 自然日/自然周刷新。
 - 限时任务的接取与截止时间由服务端生成，期限刻意覆盖工作日；过期后返回 `409 task_expired`，可重新接取。
 - 领取记录使用数据库唯一约束兜底，重复领取返回 `409 achievement_already_claimed` / `409 task_already_claimed`。

@@ -58,7 +58,7 @@
                     <p class="user-menu__sub">
                       <span v-if="authStore.isAdministrator" class="chip chip--coral">管理员</span>
                       <span v-else class="chip chip--cyan">学习者</span>
-                      <span class="user-menu__points">LV.{{ levelInfo.level }} {{ levelInfo.title }} · {{ tasksStore.points }} pts</span>
+                      <span class="user-menu__points">LV.{{ levelInfo.level }} {{ levelInfo.title }} · {{ tasksStore.lifetimePoints }} pts</span>
                     </p>
                   </div>
                 </div>

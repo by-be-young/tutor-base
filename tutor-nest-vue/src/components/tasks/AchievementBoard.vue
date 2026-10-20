@@ -112,7 +112,7 @@ const loading = ref(true)
 const error = ref('')
 const acting = ref('')
 
-const points = computed(() => summary.value.points || tasksStore.points)
+const points = computed(() => tasksStore.lifetimePoints)
 
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
 
