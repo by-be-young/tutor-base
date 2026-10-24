@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.random.RandomGenerator;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,7 +34,10 @@ class RewardService {
 
     @Autowired
     RewardService(JdbcClient jdbc, Clock clock, ZoneId zone) {
-        this(jdbc, clock, zone, RandomGenerator.getDefault());
+        // ThreadLocalRandom: 不依赖 RandomGeneratorFactory 的提供者查找，
+        // 兼容 Temurin JRE 镜像（该镜像缺少 L32X64MixRandom 提供者，getDefault() 会启动失败），
+        // 且线程安全，适合并发抽卡请求。
+        this(jdbc, clock, zone, ThreadLocalRandom.current());
     }
 
     /** Test seam: inject a deterministic random source. */
