@@ -108,7 +108,14 @@ test('administrator and learner complete the protected learning journey', async 
   const rewards = await api(page, '/rewards')
   expect(rewards.status).toBe(200)
   expect(rewards.body.points).toBe(100)
-  expect((await api(page, '/rewards/milestones/200/claims', { method: 'POST' })).status).toBe(409)
+  const catalog = await api(page, '/rewards/catalog')
+  expect(catalog.status).toBe(200)
+  expect(catalog.body.drawCost).toBeGreaterThan(0)
+  const overdrawCount = Math.min(10, Math.floor(rewards.body.points / catalog.body.drawCost) + 1)
+  const overdraw = await api(page, '/rewards/draws', { method: 'POST', body: { count: overdrawCount } })
+  expect(overdraw.status).toBe(409)
+  expect(overdraw.body.code).toBe('insufficient_points')
+  expect((await api(page, '/rewards')).body.points).toBe(100)
 
   expect((await api(page, '/session', { method: 'DELETE' })).status).toBe(204)
   expect((await api(page, '/sessions', {
