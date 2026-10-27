@@ -28,7 +28,10 @@ smoke 后，使用 `database/operations/revoke_browser_table_access.sql` 撤销 
 2. 为 `tutor_base_app` 生成独立的随机长密码。不要复用项目 `postgres` 密码、管理员登录密码或 CSRF secret。
 3. 在受控的交互式 `psql` 会话中执行 `\password tutor_base_app`，按提示输入两次新密码。这样密码不会写入仓库脚本。
 4. 运行 `database/audit/runtime_role_checks.sql`。所有 `anomaly_count` 必须为 `0`，并确认
-   `connection_limit=5`。PostgreSQL 的受限角色视图不能可靠证明密码是否已设置，必须通过下一步实际连接验证。
+   `connection_limit=20`（对应脚本中的 `CONNECTION LIMIT 20`）。PostgreSQL 的受限角色视图不能可靠证明密码
+   是否已设置，必须通过下一步实际连接验证。
+   - 若 `dangerous table privileges granted` 为 `1`，确认它恰好是 `account.DELETE`：删除学员需要删除 `account`
+     行，这是有意授予的权限；`article_answer_keys` / `wrong_questions` 的 `UPDATE` 同样是保存答案和编辑错题所必需。
 5. 使用新密码实际连接一次。Java 后端使用 Session Pooler 时，用户名格式为
    `tutor_base_app.<project-ref>`，端口为 `5432`；
    JDBC URL 继续启用 SSL。

@@ -165,6 +165,57 @@ class FlywayMigrationTest {
     }
 
     @Test
+    void givenV11SchemaAppliedManuallyWhenFlywayReplaysV11ThenMigrationIsIdempotent() throws Exception {
+        // 生产事故回归：先手工执行 reconciliation（schema 已含 V11），但历史表停在 V10；
+        // 新镜像启动时 Flyway 会再次执行 V11，必须成功记账而不是因对象已存在而失败。
+        try (PostgreSQLContainer driftDatabase = new PostgreSQLContainer("postgres:17-alpine")) {
+            driftDatabase.start();
+            Flyway.configure()
+                    .dataSource(driftDatabase.getJdbcUrl(), driftDatabase.getUsername(), driftDatabase.getPassword())
+                    .locations("classpath:db/migration")
+                    .target(MigrationVersion.fromVersion("10"))
+                    .load()
+                    .migrate();
+
+            // 复刻生产状态：V11 的对象已手工建好，历史表仍停在 V10。
+            try (Connection connection = driftDatabase.createConnection("")) {
+                execute(connection, Files.readString(Path.of(
+                        "..", "database", "reconciliation", "2026-10-27_learner_claiming.sql")));
+                assertThat(readCount(connection,
+                        "SELECT count(*) FROM public.flyway_schema_history WHERE version = '11'")).isZero();
+            }
+
+            MigrateResult result = Flyway.configure()
+                    .dataSource(driftDatabase.getJdbcUrl(), driftDatabase.getUsername(), driftDatabase.getPassword())
+                    .locations("classpath:db/migration")
+                    .load()
+                    .migrate();
+
+            assertThat(result.migrationsExecuted).isEqualTo(1);
+            try (Connection connection = driftDatabase.createConnection("")) {
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.flyway_schema_history
+                        WHERE version = '11' AND success
+                        """)).isEqualTo(1);
+                assertThat(hasColumn(connection, "student", "claimed_by")).isTrue();
+                assertThat(hasColumn(connection, "student", "claimed_at")).isTrue();
+                assertThat(hasConstraint(connection, "student_claimed_by_fkey")).isTrue();
+                assertThat(hasConstraint(connection, "student_claim_state_check")).isTrue();
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM pg_trigger
+                        WHERE tgrelid = 'public.student'::regclass
+                          AND tgname = 'student_clear_claim_timestamp'
+                          AND NOT tgisinternal
+                        """)).isEqualTo(1);
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM pg_indexes
+                        WHERE schemaname = 'public' AND indexname = 'student_claimed_by_idx'
+                        """)).isEqualTo(1);
+            }
+        }
+    }
+
+    @Test
     void givenVerifiedProductionDriftWhenReconciledThenV2InvariantsAreInstalled() throws Exception {
         try (PostgreSQLContainer driftDatabase = new PostgreSQLContainer("postgres:17-alpine")) {
             driftDatabase.start();
