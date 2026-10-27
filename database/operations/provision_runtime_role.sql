@@ -1,10 +1,16 @@
 -- Provision the least-privilege login used by the Java backend.
 -- Run as the Supabase postgres role. This script intentionally does not set a password.
+--
+-- 本脚本必须在 public schema 可见的会话中执行。Supabase 某些入口（例如 Database → Roles 的
+-- SQL Editor 上下文）只把 `search_path` 解析到 pg_catalog，此时 `relation "public.student"
+-- does not exist` 说明脚本找不到 public 表，而不是表真的不存在。脚本自身先把 search_path
+-- 指向 public，避免依赖执行上下文。
 
 BEGIN;
 
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
+SET LOCAL search_path = public;
 
 DO $roles$
 BEGIN

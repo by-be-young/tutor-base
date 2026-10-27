@@ -2,6 +2,8 @@
 
 BEGIN TRANSACTION READ ONLY;
 
+SET LOCAL search_path = public;
+
 SELECT jsonb_build_object(
     'columns', (
         SELECT jsonb_agg(jsonb_build_object(

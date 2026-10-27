@@ -1,3 +1,8 @@
+-- 运行角色审计：一次性返回 JSON 报告，所有 anomaly_count 必须为 0。
+-- 与 provision_runtime_role.sql 一样显式使用 public schema，避免执行上下文把 search_path
+-- 解析到 pg_catalog 时误报“表不存在”。
+SET search_path = public;
+
 WITH expected_privilege(table_name, privilege_type) AS (
     VALUES
         ('student', 'SELECT'),
