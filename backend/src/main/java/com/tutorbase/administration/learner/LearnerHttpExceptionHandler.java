@@ -42,4 +42,25 @@ final class LearnerHttpExceptionHandler {
                 exception.getMessage(),
                 request);
     }
+
+    @ExceptionHandler(LearnerAlreadyClaimed.class)
+    ProblemDetail learnerAlreadyClaimed(LearnerAlreadyClaimed exception, HttpServletRequest request) {
+        return ApiProblem.create(
+                HttpStatus.CONFLICT,
+                "learner_already_claimed",
+                "学习者已被其他管理员认领",
+                exception.getMessage(),
+                request);
+    }
+
+    @ExceptionHandler(AdministratorLearnerProtected.class)
+    ProblemDetail administratorLearnerProtected(
+            AdministratorLearnerProtected exception, HttpServletRequest request) {
+        return ApiProblem.create(
+                HttpStatus.CONFLICT,
+                "administrator_learner_protected",
+                "管理员学习者受保护",
+                exception.getMessage(),
+                request);
+    }
 }

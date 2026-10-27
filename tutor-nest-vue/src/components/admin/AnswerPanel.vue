@@ -86,6 +86,16 @@
                         text="左侧点击文章后，这里会列出题号、标准答案与自动批阅开关。" />
 
                     <div v-else-if="selectedArticle.loading" class="answer-editor__loading">
+                        <div class="answer-editor__loading-head">
+                            <div class="answer-editor__title-wrap">
+                                <span class="eyebrow">ANSWER KEYS</span>
+                                <h3 class="answer-editor__title">{{ selectedArticle.title }}</h3>
+                            </div>
+                            <button type="button" class="btn btn--soft btn--sm" @click="openOriginal">
+                                <i aria-hidden="true" class="fas fa-pen-to-square"></i>
+                                进入文章设置
+                            </button>
+                        </div>
                         <div class="skeleton answer-editor__skeleton"></div>
                         <div class="skeleton answer-editor__skeleton"></div>
                     </div>
@@ -96,11 +106,11 @@
                             {{ selectedArticle.error }}
                         </p>
                         <div class="row row--wrap">
-                            <button type="button" class="btn btn--soft btn--sm" @click="reloadArticle">
+                            <button type="button" class="btn btn--ghost btn--sm" @click="reloadArticle">
                                 <i aria-hidden="true" class="fas fa-rotate"></i> 重新加载
                             </button>
-                            <button type="button" class="btn btn--ghost btn--sm" @click="openOriginal">
-                                <i aria-hidden="true" class="fas fa-arrow-up-right-from-square"></i> 打开原文设置
+                            <button type="button" class="btn btn--soft btn--sm" @click="openOriginal">
+                                <i aria-hidden="true" class="fas fa-pen-to-square"></i> 进入文章设置
                             </button>
                         </div>
                     </div>
@@ -116,17 +126,24 @@
                                     <span class="tag">{{ selectedArticle.questions.length }} 道题</span>
                                 </div>
                             </div>
-                            <span class="chip" :class="dirty ? 'chip--amber' : 'chip--lime'">
-                                <i aria-hidden="true" class="fas" :class="dirty ? 'fa-pen' : 'fa-circle-check'"></i>
-                                {{ dirty ? '待保存' : '已同步' }}
-                            </span>
+                            <div class="answer-editor__head-actions">
+                                <span class="chip" :class="dirty ? 'chip--amber' : 'chip--lime'">
+                                    <i aria-hidden="true" class="fas" :class="dirty ? 'fa-pen' : 'fa-circle-check'"></i>
+                                    {{ dirty ? '待保存' : '已同步' }}
+                                </span>
+                                <button type="button" class="btn btn--soft btn--sm" @click="openOriginal">
+                                    <i aria-hidden="true" class="fas fa-pen-to-square"></i>
+                                    进入文章设置
+                                </button>
+                            </div>
                         </header>
 
                         <EmptyState v-if="selectedArticle.questions.length === 0" icon="fas fa-circle-question"
                             title="这篇文章里没有识别到题目"
-                            text="可以使用「打开原文设置」进入整页答案设置模式。">
+                            text="可以点击「进入文章设置」进入整页答案设置模式。">
                             <button type="button" class="btn btn--soft btn--sm" @click="openOriginal">
-                                打开原文设置
+                                <i aria-hidden="true" class="fas fa-pen-to-square"></i>
+                                进入文章设置
                             </button>
                         </EmptyState>
 
@@ -167,10 +184,6 @@
                                 </span>
                             </div>
                             <div class="answer-editor__actions">
-                                <button type="button" class="btn btn--ghost btn--sm" @click="openOriginal">
-                                    <i aria-hidden="true" class="fas fa-arrow-up-right-from-square"></i>
-                                    打开原文
-                                </button>
                                 <button type="button" class="btn btn--primary"
                                     :disabled="saving || selectedArticle.questions.length === 0"
                                     @click="saveAnswerKeys">
@@ -653,6 +666,21 @@ onMounted(() => {
     flex-wrap: wrap;
 }
 
+.answer-editor__head-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.answer-editor__loading-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
 .answer-editor__title-wrap {
     display: flex;
     flex-direction: column;
@@ -823,6 +851,11 @@ onMounted(() => {
 
     .answer-stats {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .answer-editor__head-actions,
+    .answer-editor__loading-head {
+        width: 100%;
     }
 
     .answer-editor__actions {

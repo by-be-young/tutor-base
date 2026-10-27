@@ -122,9 +122,12 @@ class IdentityHttpContractTest {
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
                 .andExpect(jsonPath("$.roles[0]").value("ADMINISTRATOR"));
 
+        // 管理员账户（young）不进入学员目录，只返回学习者 Alice。
         mockMvc.perform(get("/api/v1/admin/learners").cookie(authenticatedCookie))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items.length()").value(2));
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].learnerId").value(5))
+                .andExpect(jsonPath("$.items[0].username").value("Alice"));
 
         BrowserSession authenticated = csrf(authenticatedCookie);
         mockMvc.perform(delete("/api/v1/session")

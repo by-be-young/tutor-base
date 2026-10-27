@@ -1,3 +1,5 @@
+SET search_path = public;
+
 DROP TABLE IF EXISTS pg_temp.pre_v5_rewards_checks;
 
 CREATE TEMPORARY TABLE pre_v5_rewards_checks (

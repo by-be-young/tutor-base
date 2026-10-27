@@ -3,6 +3,8 @@
 
 BEGIN TRANSACTION READ ONLY;
 
+SET LOCAL search_path = public;
+
 SELECT jsonb_build_object(
     'checks', jsonb_build_array(
         jsonb_build_object(

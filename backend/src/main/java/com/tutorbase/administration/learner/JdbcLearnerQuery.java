@@ -1,10 +1,6 @@
 package com.tutorbase.administration.learner;
 
-import java.sql.Array;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -16,18 +12,16 @@ import org.springframework.stereotype.Component;
 @Component
 final class JdbcLearnerQuery implements LearnerQuery {
 
-    private static final String FIND_AFTER_SQL = """
-            SELECT id, username, permissions
-            FROM public.student
-            WHERE id > :afterId
-            ORDER BY id ASC
+    private static final String FIND_AFTER_SQL = LearnerSql.SELECT + """
+            LEFT JOIN public.account AS self_account ON self_account.learner_id = s.id
+            WHERE s.id > :afterId
+              AND COALESCE(self_account.role, 'learner') <> 'administrator'
+            ORDER BY s.id ASC
             LIMIT :fetchLimit
             """;
 
-    private static final String FIND_BY_ID_SQL = """
-            SELECT id, username, permissions
-            FROM public.student
-            WHERE id = :learnerId
+    private static final String FIND_BY_ID_SQL = LearnerSql.SELECT + """
+            WHERE s.id = :learnerId
             """;
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -41,7 +35,7 @@ final class JdbcLearnerQuery implements LearnerQuery {
         List<Learner> rows = jdbc.query(
                 FIND_AFTER_SQL,
                 Map.of("afterId", afterId.orElse(0), "fetchLimit", limit + 1),
-                JdbcLearnerQuery::mapLearner);
+                LearnerSql::map);
 
         boolean hasNextPage = rows.size() > limit;
         List<Learner> items = hasNextPage ? new ArrayList<>(rows.subList(0, limit)) : rows;
@@ -53,34 +47,8 @@ final class JdbcLearnerQuery implements LearnerQuery {
 
     @Override
     public Optional<Learner> findById(long learnerId) {
-        return jdbc.query(FIND_BY_ID_SQL, Map.of("learnerId", learnerId), JdbcLearnerQuery::mapLearner)
+        return jdbc.query(FIND_BY_ID_SQL, Map.of("learnerId", learnerId), LearnerSql::map)
                 .stream()
                 .findFirst();
-    }
-
-    private static Learner mapLearner(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new Learner(
-                resultSet.getLong("id"),
-                resultSet.getString("username"),
-                readArticleIds(resultSet.getArray("permissions")));
-    }
-
-    private static List<Long> readArticleIds(Array permissions) throws SQLException {
-        if (permissions == null) {
-            return List.of();
-        }
-        try {
-            Object value = permissions.getArray();
-            if (!(value instanceof Object[] values)) {
-                throw new SQLException("Unsupported PostgreSQL array representation");
-            }
-            return Arrays.stream(values)
-                    .map(Number.class::cast)
-                    .map(Number::longValue)
-                    .sorted()
-                    .toList();
-        } finally {
-            permissions.free();
-        }
     }
 }

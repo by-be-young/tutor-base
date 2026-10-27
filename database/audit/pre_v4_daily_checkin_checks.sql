@@ -1,3 +1,5 @@
+SET search_path = public;
+
 DROP TABLE IF EXISTS pg_temp.pre_v4_daily_checkin_checks;
 
 CREATE TEMPORARY TABLE pre_v4_daily_checkin_checks (

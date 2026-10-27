@@ -1,7 +1,10 @@
 package com.tutorbase.administration.learner;
 
+import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 
+import com.tutorbase.identity.AccountPrincipal;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
@@ -9,7 +12,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,12 +41,12 @@ public class AdminLearnerController {
     }
 
     @PostMapping
-    ResponseEntity<LearnerResponse> createLearner(@Valid @RequestBody CreateLearnerRequest request) {
-        long learnerId = learnerAdministration.create(request.username());
-        LearnerResponse response = learnerQuery.findById(learnerId)
-                .map(LearnerResponse::from)
-                .orElseThrow(() -> new LearnerNotFound(learnerId));
-        return ResponseEntity.created(java.net.URI.create("/api/v1/admin/learners/" + learnerId)).body(response);
+    ResponseEntity<LearnerResponse> createLearner(
+            @AuthenticationPrincipal AccountPrincipal administrator,
+            @Valid @RequestBody CreateLearnerRequest request) {
+        long learnerId = learnerAdministration.create(request.username(), administrator.accountId());
+        LearnerResponse response = requireLearner(learnerId);
+        return ResponseEntity.created(URI.create("/api/v1/admin/learners/" + learnerId)).body(response);
     }
 
     @PutMapping("/{learnerId}/content-grants")
@@ -49,9 +54,31 @@ public class AdminLearnerController {
             @PathVariable @Positive long learnerId,
             @Valid @RequestBody ReplaceContentGrantsRequest request) {
         learnerAdministration.replaceContentGrants(learnerId, request.articleIds());
-        return learnerQuery.findById(learnerId)
-                .map(LearnerResponse::from)
-                .orElseThrow(() -> new LearnerNotFound(learnerId));
+        return requireLearner(learnerId);
+    }
+
+    @PutMapping("/{learnerId}/claim")
+    LearnerResponse claimLearner(
+            @AuthenticationPrincipal AccountPrincipal administrator,
+            @PathVariable @Positive long learnerId) {
+        learnerAdministration.claim(learnerId, administrator.accountId());
+        return requireLearner(learnerId);
+    }
+
+    @DeleteMapping("/{learnerId}/claim")
+    ResponseEntity<Void> releaseLearnerClaim(
+            @AuthenticationPrincipal AccountPrincipal administrator,
+            @PathVariable @Positive long learnerId) {
+        learnerAdministration.release(learnerId, administrator.accountId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{learnerId}")
+    ResponseEntity<Void> deleteLearner(
+            @AuthenticationPrincipal AccountPrincipal administrator,
+            @PathVariable @Positive long learnerId) {
+        learnerAdministration.deleteLearner(learnerId, administrator.accountId());
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping
@@ -63,6 +90,12 @@ public class AdminLearnerController {
         return new LearnerCollectionResponse(
                 page.items().stream().map(LearnerResponse::from).toList(),
                 page.nextAfterId().isPresent() ? LearnerCursor.encode(page.nextAfterId().getAsLong()) : null);
+    }
+
+    private LearnerResponse requireLearner(long learnerId) {
+        return learnerQuery.findById(learnerId)
+                .map(LearnerResponse::from)
+                .orElseThrow(() -> new LearnerNotFound(learnerId));
     }
 
     private static int parseLimit(String value) {
@@ -96,13 +129,24 @@ public class AdminLearnerController {
             List<@NotNull @Positive @Max(Integer.MAX_VALUE) Long> articleIds) {
     }
 
-    record LearnerResponse(long learnerId, String username, List<Long> contentGrantArticleIds) {
+    record LearnerResponse(
+            long learnerId,
+            String username,
+            List<Long> contentGrantArticleIds,
+            Long claimedByAccountId,
+            String claimedByUsername,
+            Instant claimedAt,
+            Instant lastActivityAt) {
 
         static LearnerResponse from(LearnerQuery.Learner learner) {
             return new LearnerResponse(
                     learner.learnerId(),
                     learner.username(),
-                    learner.contentGrantArticleIds());
+                    learner.contentGrantArticleIds(),
+                    learner.claimedByAccountId(),
+                    learner.claimedByUsername(),
+                    learner.claimedAt(),
+                    learner.lastActivityAt());
         }
     }
 }

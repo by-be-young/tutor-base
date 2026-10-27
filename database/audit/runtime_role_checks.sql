@@ -1,11 +1,18 @@
+-- 运行角色审计：一次性返回 JSON 报告，所有 anomaly_count 必须为 0。
+-- 与 provision_runtime_role.sql 一样显式使用 public schema，避免执行上下文把 search_path
+-- 解析到 pg_catalog 时误报“表不存在”。
+SET search_path = public;
+
 WITH expected_privilege(table_name, privilege_type) AS (
     VALUES
         ('student', 'SELECT'),
         ('student', 'INSERT'),
         ('student', 'UPDATE'),
+        ('student', 'DELETE'),
         ('account', 'SELECT'),
         ('account', 'INSERT'),
         ('account', 'UPDATE'),
+        ('account', 'DELETE'),
         ('account_activation', 'SELECT'),
         ('account_activation', 'INSERT'),
         ('account_activation', 'UPDATE'),
@@ -64,9 +71,11 @@ WITH expected_privilege(table_name, privilege_type) AS (
         ('student', 'tutor_base_runtime_student_select', 'r', 'true', NULL),
         ('student', 'tutor_base_runtime_student_insert', 'a', NULL, 'true'),
         ('student', 'tutor_base_runtime_student_update', 'w', 'true', 'true'),
+        ('student', 'tutor_base_runtime_student_delete', 'd', 'true', NULL),
         ('account', 'tutor_base_runtime_account_select', 'r', 'true', NULL),
         ('account', 'tutor_base_runtime_account_insert', 'a', NULL, 'true'),
         ('account', 'tutor_base_runtime_account_update', 'w', 'true', 'true'),
+        ('account', 'tutor_base_runtime_account_delete', 'd', 'true', NULL),
         ('account_activation', 'tutor_base_runtime_activation_select', 'r', 'true', NULL),
         ('account_activation', 'tutor_base_runtime_activation_insert', 'a', NULL, 'true'),
         ('account_activation', 'tutor_base_runtime_activation_update', 'w', 'true', 'true'),
@@ -119,8 +128,8 @@ WITH expected_privilege(table_name, privilege_type) AS (
     UNION ALL
     SELECT 'dangerous table privileges granted', count(*)
     FROM (VALUES
-        ('student', 'DELETE'), ('student', 'TRUNCATE'),
-        ('account', 'DELETE'), ('account', 'TRUNCATE'),
+        ('student', 'TRUNCATE'),
+        ('account', 'TRUNCATE'),
         ('account_activation', 'DELETE'), ('account_activation', 'TRUNCATE'),
         ('account_session', 'TRUNCATE'),
         ('daily_check_in', 'UPDATE'), ('daily_check_in', 'DELETE'), ('daily_check_in', 'TRUNCATE'),

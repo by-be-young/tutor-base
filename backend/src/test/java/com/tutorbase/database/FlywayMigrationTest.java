@@ -64,7 +64,7 @@ class FlywayMigrationTest {
                     .count();
         }
         assertThat(result.migrationsExecuted).isEqualTo((int) expectedMigrations);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("10");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("11");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
         try (Connection connection = POSTGRES.createConnection("")) {
@@ -75,6 +75,16 @@ class FlywayMigrationTest {
             assertThat(hasConstraint(connection, "wrong_questions_wrong_count_check")).isTrue();
             assertThat(hasConstraint(connection, "article_question_submissions_review_state_check")).isTrue();
             assertThat(isColumnNullable(connection, "student", "permissions")).isFalse();
+            assertThat(hasColumn(connection, "student", "claimed_by")).isTrue();
+            assertThat(hasColumn(connection, "student", "claimed_at")).isTrue();
+            assertThat(hasConstraint(connection, "student_claimed_by_fkey")).isTrue();
+            assertThat(hasConstraint(connection, "student_claim_state_check")).isTrue();
+            assertThat(readCount(connection, """
+                    SELECT count(*) FROM pg_trigger
+                    WHERE tgrelid = 'public.student'::regclass
+                      AND tgname = 'student_clear_claim_timestamp'
+                      AND NOT tgisinternal
+                    """)).isEqualTo(1);
             assertThat(readQuestionIdDataType(connection, "article_question_submissions")).isEqualTo("text");
             assertThat(hasConstraint(connection, "account_activation_state_check")).isTrue();
             assertThat(hasConstraint(connection, "account_activation_expiry_check")).isTrue();
@@ -121,6 +131,14 @@ class FlywayMigrationTest {
                     "..", "database", "reconciliation", "2026-10-20_gacha_card_pool.sql"));
             execute(connection, gachaReconciliation);
             execute(connection, gachaReconciliation);
+            String learnerClaimingReconciliation = Files.readString(Path.of(
+                    "..", "database", "reconciliation", "2026-10-27_learner_claiming.sql"));
+            execute(connection, learnerClaimingReconciliation);
+            execute(connection, learnerClaimingReconciliation);
+            assertThat(hasColumn(connection, "student", "claimed_by")).isTrue();
+            assertThat(hasColumn(connection, "student", "claimed_at")).isTrue();
+            assertThat(hasConstraint(connection, "student_claimed_by_fkey")).isTrue();
+            assertThat(hasConstraint(connection, "student_claim_state_check")).isTrue();
             assertThat(readCount(connection, "SELECT count(*) FROM public.card_sets")).isEqualTo(10);
             assertThat(readCount(connection, "SELECT count(*) FROM public.card_definitions")).isEqualTo(70);
             assertThat(hasColumn(connection, "user_points", "draw_count")).isTrue();
@@ -142,6 +160,7 @@ class FlywayMigrationTest {
             assertDatabaseRejectsInvalidStates(connection);
             assertWrongQuestionsFollowStudentLifecycle(connection);
             assertUpdatedAtTriggers(connection);
+            assertClaimSurvivesAccountDeletion(connection);
         }
     }
 
@@ -259,6 +278,22 @@ class FlywayMigrationTest {
         assertThat(readUpdatedAt(connection, "article_answer_keys", 301)).isAfter(oldTimestamp);
         assertThat(readUpdatedAt(connection, "article_question_submissions", 302)).isAfter(oldTimestamp);
         assertThat(readUpdatedAt(connection, "wrong_questions", 303)).isAfter(oldTimestamp);
+    }
+
+    private void assertClaimSurvivesAccountDeletion(Connection connection) throws SQLException {
+        execute(connection, """
+                INSERT INTO public.account (id, username, username_normalized, role)
+                    VALUES (900, 'claim-admin', 'claim-admin', 'administrator');
+                INSERT INTO public.student (id, username, claimed_by, claimed_at)
+                    VALUES (901, 'claimed-learner', 900, now());
+                DELETE FROM public.account WHERE id = 900;
+                """);
+
+        assertThat(readCount(connection, """
+                SELECT count(*) FROM public.student
+                WHERE id = 901 AND claimed_by IS NULL AND claimed_at IS NULL
+                """)).isEqualTo(1);
+        execute(connection, "DELETE FROM public.student WHERE id = 901");
     }
 
     private Set<String> readApplicationTables(Connection connection) throws SQLException {

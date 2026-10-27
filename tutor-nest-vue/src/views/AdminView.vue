@@ -9,20 +9,25 @@
             </div>
 
             <div class="admin-topbar__meta">
-                <span class="chip chip--cyan admin-current">
+                <StudentSwitcher class="admin-switcher" @select="handleSelectStudent" />
+                <span v-if="currentStudent" class="chip chip--cyan admin-current"
+                    :title="`${currentStudentName} · ${currentActivityLabel} · ${currentClaimLabel}`">
                     <i aria-hidden="true" class="fas fa-user-graduate"></i>
-                    当前学员 · {{ currentStudentName }}
+                    <span class="admin-current__text">当前学员 · {{ currentStudentName }} · {{ currentActivityLabel }} · {{ currentClaimLabel }}</span>
                 </span>
-                <label class="admin-switch">
-                    <span class="sr-only">切换学生</span>
-                    <select v-model="selectedStudentId" class="select admin-select" aria-label="切换学生"
-                        @change="handleStudentChange">
-                        <option value="">-- 切换学生 --</option>
-                        <option v-for="student in students" :key="student.id" :value="student.id">
-                            {{ student.username }}
-                        </option>
-                    </select>
-                </label>
+                <span v-else class="chip admin-current">
+                    <i aria-hidden="true" class="fas fa-user-graduate"></i>
+                    <span class="admin-current__text">当前学员 · 未选择</span>
+                </span>
+                <button v-if="currentStudent && currentClaimState === 'unclaimed'" type="button"
+                    class="btn btn--soft btn--sm admin-claim-btn" :disabled="claimBusy" @click="claimCurrentStudent">
+                    <i aria-hidden="true" class="fas" :class="claimBusy ? 'fa-circle-notch fa-spin' : 'fa-hand-pointer'"></i>
+                    {{ claimBusy ? '认领中…' : '认领' }}
+                </button>
+                <button v-else-if="currentStudent && currentClaimState === 'mine'" type="button"
+                    class="btn btn--ghost btn--sm admin-claim-btn" :disabled="claimBusy" @click="releaseCurrentStudent">
+                    <i aria-hidden="true" class="fas fa-arrow-up-from-bracket"></i> 释放
+                </button>
             </div>
 
             <div class="admin-topbar__actions">
@@ -50,6 +55,11 @@
                 <p class="page-sub">配置内容授权、管理学员账户、批阅作业、校准标准答案——所有管理动作在同一工作台完成。</p>
                 <div class="row row--wrap admin-overview__chips">
                     <span class="chip chip--violet"><i aria-hidden="true" class="fas fa-user-graduate"></i> {{ currentStudentName }}</span>
+                    <span v-if="currentStudent" class="chip"
+                        :class="currentClaimState === 'mine' ? 'chip--lime' : currentClaimState === 'unclaimed' ? 'chip--amber' : ''">
+                        <i aria-hidden="true" class="fas fa-hand-holding-heart"></i> {{ currentClaimLabel }}
+                    </span>
+                    <span v-if="currentStudent" class="chip"><i aria-hidden="true" class="far fa-clock"></i> 最近动态 · {{ currentActivityLabel }}</span>
                     <span class="chip chip--cyan"><i aria-hidden="true" class="fas fa-shield-halved"></i> 已授权 {{ authorizedCount }} 篇</span>
                     <span class="chip"><i aria-hidden="true" class="fas fa-layer-group"></i> 内容库 {{ blogData.length }} 篇</span>
                 </div>
@@ -61,17 +71,27 @@
                     <div class="stat-label">在册学员</div>
                     <div class="stat-sub">可切换身份统一管理</div>
                 </div>
+                <div class="stat-card stat-card--lime">
+                    <div class="stat-value">{{ mineCount }}</div>
+                    <div class="stat-label">我的学员</div>
+                    <div class="stat-sub">由我认领，优先处理</div>
+                </div>
+                <div class="stat-card stat-card--amber">
+                    <div class="stat-value">{{ unclaimedCount }}</div>
+                    <div class="stat-label">未认领</div>
+                    <div class="stat-sub">点击「认领」接手管理</div>
+                </div>
                 <div class="stat-card stat-card--cyan">
                     <div class="stat-value">{{ authorizedCount }}</div>
                     <div class="stat-label">当前授权文章</div>
                     <div class="stat-sub">含尚未保存的勾选</div>
                 </div>
-                <div class="stat-card stat-card--amber">
+                <div class="stat-card stat-card--coral">
                     <div class="stat-value">{{ blogData.length }}</div>
                     <div class="stat-label">内容库文章</div>
                     <div class="stat-sub">{{ allSubjects.length }} 个学科分组</div>
                 </div>
-                <div class="stat-card stat-card--coral">
+                <div class="stat-card">
                     <div class="stat-value">{{ allSubjects.length }}</div>
                     <div class="stat-label">学科数量</div>
                     <div class="stat-sub">授权按学科色归档</div>
@@ -95,6 +115,15 @@
                 <div class="admin-sidebar__footer">
                     <span class="eyebrow">CURRENT LEARNER</span>
                     <p class="admin-sidebar__student">{{ currentStudentName }}</p>
+                    <span v-if="currentStudent" class="admin-sidebar__line">
+                        <i aria-hidden="true" class="fas fa-hand-holding-heart"></i> {{ currentClaimLabel }}
+                    </span>
+                    <span v-if="currentStudent" class="admin-sidebar__line">
+                        <i aria-hidden="true" class="far fa-clock"></i> 最近动态 · {{ currentActivityLabel }}
+                    </span>
+                    <span v-if="currentStudent" class="admin-sidebar__line">
+                        <i aria-hidden="true" class="fas fa-shield-halved"></i> {{ currentPermissions.length }} 篇授权
+                    </span>
                     <span class="chip" :class="permissionDirty ? 'chip--amber' : 'chip--lime'">
                         <span class="status-dot"></span>
                         {{ saveStateText }}
@@ -129,16 +158,18 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useArticleStore } from '@/stores/blogStore'
 import { useAdminStore } from '@/stores/adminStore'
+import { claimState, formatRelativeActivity } from '@/utils/adminStudents'
 import { showToast } from '@/utils/toast'
 import PermissionPanel from '@/components/admin/PermissionPanel.vue'
 import ReviewPanel from '@/components/admin/ReviewPanel.vue'
 import AnswerPanel from '@/components/admin/AnswerPanel.vue'
 import StudentAccountsPanel from '@/components/admin/StudentAccountsPanel.vue'
+import StudentSwitcher from '@/components/admin/StudentSwitcher.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -146,20 +177,29 @@ const blogStore = useArticleStore()
 const adminStore = useAdminStore()
 
 const activeTab = ref('permission')
-const selectedStudentId = ref('')
-const permissionDirty = ref(false)
 const savingPermissions = ref(false)
+const claimBusy = ref(false)
 
 const students = computed(() => adminStore.students)
+const selectedStudentId = computed(() => adminStore.currentStudentId)
+const currentStudent = computed(() => adminStore.currentStudent)
+const currentPermissions = computed(() => adminStore.currentPermissions)
+const permissionDirty = computed(() => adminStore.permissionDirty)
 const blogData = computed(() => blogStore.blogData)
 
-const currentStudent = computed(() => {
-    if (!selectedStudentId.value) return null
-    return students.value.find(student => String(student.id) === String(selectedStudentId.value)) || null
+const accountId = computed(() => authStore.currentUser?.accountId ?? null)
+const currentStudentName = computed(() => currentStudent.value?.username || '未选择')
+const currentClaimState = computed(() => claimState(currentStudent.value, accountId.value))
+const currentActivityLabel = computed(() => formatRelativeActivity(currentStudent.value?.lastActivityAt))
+const currentClaimLabel = computed(() => {
+    if (!currentStudent.value) return '未选择'
+    if (currentClaimState.value === 'mine') return '我的学员'
+    if (currentClaimState.value === 'unclaimed') return '未认领'
+    return `由 ${currentStudent.value.claimedByUsername || '其他管理员'} 认领`
 })
 
-const currentStudentName = computed(() => currentStudent.value?.username || '未选择')
-const currentPermissions = computed(() => currentStudent.value?.permissions || [])
+const mineCount = computed(() => students.value.filter(student => claimState(student, accountId.value) === 'mine').length)
+const unclaimedCount = computed(() => students.value.filter(student => claimState(student, accountId.value) === 'unclaimed').length)
 
 // 顶栏概览、统计卡、侧栏计数共用同一授权数据源，避免数字不一致。
 const authorizedCount = computed(() => currentPermissions.value.length)
@@ -189,13 +229,12 @@ const saveStateText = computed(() => {
     return permissionDirty.value ? '待保存' : '未改动'
 })
 
-function handleStudentChange() {
-    adminStore.setCurrentStudent(selectedStudentId.value)
-    permissionDirty.value = false
+function handleSelectStudent(studentId) {
+    adminStore.selectStudent(studentId)
 }
 
 function onPermissionChange() {
-    permissionDirty.value = true
+    // 脏标记由 adminStore 统一维护，这里只用于保留 PermissionPanel 的事件契约。
 }
 
 async function savePermissions() {
@@ -203,14 +242,39 @@ async function savePermissions() {
     savingPermissions.value = true
     try {
         const success = await adminStore.savePermissions()
-        if (success) {
-            permissionDirty.value = false
-            showToast('权限已保存', 'success')
-        }
+        if (success) showToast('权限已保存', 'success')
     } catch (error) {
         showToast(error.message || '权限保存失败，请稍后重试', 'error')
     } finally {
         savingPermissions.value = false
+    }
+}
+
+async function claimCurrentStudent() {
+    if (claimBusy.value || !adminStore.currentStudentId) return
+    const username = currentStudentName.value
+    claimBusy.value = true
+    try {
+        await adminStore.claimStudent(adminStore.currentStudentId)
+        showToast(`已认领学员“${username}”`, 'success')
+    } catch (error) {
+        showToast(error.message || '认领学员失败，请稍后重试', 'error')
+    } finally {
+        claimBusy.value = false
+    }
+}
+
+async function releaseCurrentStudent() {
+    if (claimBusy.value || !adminStore.currentStudentId) return
+    const username = currentStudentName.value
+    claimBusy.value = true
+    try {
+        await adminStore.releaseStudent(adminStore.currentStudentId)
+        showToast(`已释放学员“${username}”的认领`, 'success')
+    } catch (error) {
+        showToast(error.message || '释放认领失败，请稍后重试', 'error')
+    } finally {
+        claimBusy.value = false
     }
 }
 
@@ -221,8 +285,6 @@ async function addStudent() {
 
     try {
         await adminStore.addStudent(username.trim())
-        selectedStudentId.value = adminStore.currentStudentId
-        permissionDirty.value = false
     } catch (error) {
         showToast(error.message || '新增学生失败，请稍后重试', 'error')
     }
@@ -236,7 +298,19 @@ async function handleLogout() {
     }
 }
 
+function handleBeforeUnload(event) {
+    if (!adminStore.hasAnyUnsavedChanges) return
+    event.preventDefault()
+    event.returnValue = ''
+}
+
+onBeforeRouteLeave(() => {
+    if (!adminStore.hasAnyUnsavedChanges) return true
+    return window.confirm('还有学员权限改动尚未保存，确定离开吗？未保存的改动会丢失。')
+})
+
 onMounted(async () => {
+    window.addEventListener('beforeunload', handleBeforeUnload)
     await blogStore.loadArticleData()
     try {
         await adminStore.loadStudents()
@@ -245,16 +319,12 @@ onMounted(async () => {
         return
     }
 
-    if (students.value.length > 0) {
-        selectedStudentId.value = students.value[0].id
-        adminStore.setCurrentStudent(selectedStudentId.value)
-    }
+    // 刷新/首次进入：优先「我认领且最近有动态」的学员
+    adminStore.selectInitialStudent(accountId.value)
 })
 
-watch(selectedStudentId, (newId) => {
-    if (newId) {
-        adminStore.setCurrentStudent(newId)
-    }
+onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', handleBeforeUnload)
 })
 </script>
 
@@ -314,28 +384,30 @@ watch(selectedStudentId, (newId) => {
     display: flex;
     align-items: center;
     gap: 10px;
-    flex: 1 1 320px;
+    flex: 1 1 380px;
     min-width: 0;
+    flex-wrap: wrap;
+}
+
+.admin-switcher {
+    flex: 1 1 240px;
+    min-width: 200px;
+    max-width: 340px;
 }
 
 .admin-current {
-    max-width: 220px;
+    max-width: 300px;
+    overflow: hidden;
+}
+
+.admin-current__text {
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.admin-switch {
-    flex: 1 1 170px;
-    min-width: 150px;
-    max-width: 240px;
-}
-
-.admin-select {
-    height: 40px;
-    border-radius: var(--r-full);
-    font-size: 0.84rem;
-    padding: 0 36px 0 15px;
-    background-color: var(--paper-1);
+.admin-claim-btn {
+    flex-shrink: 0;
 }
 
 .admin-topbar__actions {
@@ -509,6 +581,20 @@ watch(selectedStudentId, (newId) => {
     word-break: break-all;
 }
 
+.admin-sidebar__line {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text-3);
+    font-size: 0.72rem;
+    line-height: 1.35;
+}
+
+.admin-sidebar__line i {
+    color: var(--vermilion);
+    font-size: 0.7rem;
+}
+
 .admin-stage {
     min-width: 0;
 }
@@ -575,13 +661,13 @@ watch(selectedStudentId, (newId) => {
         flex-wrap: wrap;
     }
 
-    .admin-current {
-        max-width: 100%;
-    }
-
-    .admin-switch {
+    .admin-switcher {
         flex: 1 1 100%;
         max-width: none;
+    }
+
+    .admin-current {
+        max-width: 100%;
     }
 
     .admin-topbar__actions {
@@ -630,11 +716,6 @@ watch(selectedStudentId, (newId) => {
     letter-spacing: 0.2em;
     box-shadow: 2px 2px 0 var(--ink);
     transform: rotate(-2deg);
-}
-
-.admin-select {
-    background-color: var(--paper-1);
-    box-shadow: 2px 2px 0 var(--ink);
 }
 
 .admin-current,

@@ -85,3 +85,17 @@ baseline 完成后必须立即执行：
 在以上只读门禁通过后，使用 Flyway 官方 `skipExecutingMigrations` 并将 `target` 严格限定为 V4，使 Flyway 记录 V4 的
 真实 checksum 而不重复执行建表语句。接管后 V4 执行时间为 0 ms，历史版本为 4，签到数据仍为 7 条。V5 不在本次跳过
 范围内，继续由正常 CD migration job 执行。
+
+## V11 认领列（2026-10-27）
+
+生产库上先执行过 `database/reconciliation/2026-10-27_learner_claiming.sql`（加 `student.claimed_by` / `claimed_at`
+及配套外键、约束、触发器和索引），但**没有**写入历史表，因此当时历史版本仍是 10、schema 已含 V11。这属于
+“schema 已改、Flyway 未记账”的状态，处理方式与 V4 接管相同：下一次 CD migration job 执行
+`V11__add_learner_claiming.sql` 时必须使用 `skipExecutingMigrations=11`（`target=11`），让 Flyway 以真实 checksum
+记录 V11 而不再重复执行 DDL。
+
+- reconciliation 文件只在本地 Flyway 被禁用时使用；正常发布路径是上面的一次性 skip + 记账。
+- 不要在历史表中手工插入或修改记录。若误让 Flyway 重复执行了 V11，`CREATE INDEX student_claimed_by_idx` 会
+  因已存在而报错，留下 failed migration；此时先确认 schema 与 V11 等价（`student_claimed_by_fkey`、
+  `student_claim_state_check`、`student_clear_claim_timestamp` 触发器、`claimed_by`/`claimed_at` 两列都存在），
+  再执行 `flyway repair` 清除失败记录，然后正常 migrate。

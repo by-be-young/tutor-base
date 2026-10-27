@@ -1,3 +1,5 @@
+SET search_path = public;
+
 WITH application_table(table_name) AS (
     VALUES ('student'), ('account'), ('account_activation'), ('account_session'),
            ('article_answer_keys'), ('article_question_submissions'),

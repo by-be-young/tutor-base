@@ -1,5 +1,6 @@
 package com.tutorbase.administration.learner;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -9,6 +10,9 @@ import java.util.OptionalLong;
  *
  * <p>The returned page contains at most {@code limit} items. {@code nextAfterId} is present only
  * when another page exists and is the exclusive lower bound for the next call.
+ *
+ * <p>Rows whose account has the {@code administrator} role are not learners and are excluded from
+ * {@link #findAfter}. Learners without an account row are still returned.
  */
 public interface LearnerQuery {
 
@@ -16,7 +20,14 @@ public interface LearnerQuery {
 
     Optional<Learner> findById(long learnerId);
 
-    record Learner(long learnerId, String username, List<Long> contentGrantArticleIds) {
+    record Learner(
+            long learnerId,
+            String username,
+            List<Long> contentGrantArticleIds,
+            Long claimedByAccountId,
+            String claimedByUsername,
+            Instant claimedAt,
+            Instant lastActivityAt) {
 
         public Learner {
             contentGrantArticleIds = List.copyOf(contentGrantArticleIds);

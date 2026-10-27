@@ -43,13 +43,14 @@ sudo docker compose --profile release run --rm migration
 sudo docker compose up -d --no-deps backend
 ```
 
-migration 是一次性非 Web 容器：Flyway 成功后以 0 退出；失败则后端不会被替换。V5 完成后，在 Supabase SQL Editor
-重新运行：
+migration 是一次性非 Web 容器：Flyway 成功后以 0 退出；失败则后端不会被替换。V11 会增加学员认领字段与
+删除学员所需的表权限，因此 migration 完成后必须在 Supabase SQL Editor 重新运行：
 
 1. `database/operations/provision_runtime_role.sql`
 2. `database/audit/runtime_role_checks.sql`
 
-第二份报告的全部 `anomaly_count` 必须为 0。然后重启后端，让连接池使用新权限：
+第二份报告的全部 `anomaly_count` 必须为 0；本次脚本新增 `student`/`account` 的 `DELETE` 权限与 DELETE
+RLS policy，未更新时删除学员会失败。然后重启后端，让连接池使用新权限：
 
 ```shell
 sudo docker compose restart backend

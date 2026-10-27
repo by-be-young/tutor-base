@@ -37,6 +37,28 @@ $env:DATABASE_PASSWORD='<数据库密码>'
 `One-time administrator provisioning completed` 后，进程会自行退出。然后立即关闭当前终端或清除上述
 `TUTOR_BOOTSTRAP_*` 环境变量，使用正常的 `production` profile 启动服务。
 
+## 后续管理员
+
+首位管理员自举完成后，系统支持多名管理员并行使用；学员目录提供「认领」归属，避免多人重复处理同一批学员。
+
+新增管理员仍走运维路径，不开放公共注册接口：
+
+1. 由运维在受控数据库连接中插入待激活管理员账户（用户名必须已 trim，规范化列为小写）：
+
+```sql
+INSERT INTO public.account (username, username_normalized, role, status)
+VALUES ('<管理员用户名>', lower(btrim('<管理员用户名>')), 'administrator', 'pending_activation')
+RETURNING id;
+```
+
+2. 现有管理员调用 `POST /api/v1/admin/account-activations`（body：`{"accountId": <上一步返回的账户 ID>}`）签发一次性激活码；
+   明文激活码只在响应中出现一次，通过可信离线渠道交给新管理员。
+3. 新管理员调用 `POST /api/v1/account-activations/complete`（body：`username`、`activationCode`、`password`）完成激活，
+   之后按普通管理员登录。
+
+新管理员自动进入「指挥中心」，可以认领未认领学员、释放自己的认领；管理员账户不会出现在学员目录中，也不能被认领或删除。
+不要为管理员复用学习者账户，也不要在日志、聊天记录或 issue 中保存激活码与密码。
+
 ## 验证
 
 ```sql
