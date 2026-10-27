@@ -18,7 +18,7 @@ anon key 或数据库写权限。
 ### 开发阶段与部署门槛
 
 当前采用“模块化单体 + 分层 MVC”架构。Controller 负责 HTTP，按业务能力划分的 Service 负责授权、事务与业务规则，
-JdbcClient 直接访问 PostgreSQL；数据库结构由 Flyway V1 至 V5 管理。OpenAPI、Testcontainers HTTP contract、
+JdbcClient 直接访问 PostgreSQL；数据库结构由 Flyway V1 至 V11 管理。OpenAPI、Testcontainers HTTP contract、
 前端 gateway 测试和 Playwright E2E 均进入 CI。
 
 首次发布 V5 的门槛是：
@@ -85,7 +85,7 @@ Spring Boot 会从当前 `backend` 工作目录自动读取 `.env`。该文件�
 .\mvnw.cmd spring-boot:run
 ```
 
-首次启动会由 Flyway 自动执行 V1 至 V5；以后启动只校验历史，不会重复执行已经成功的 migration。出现
+首次启动会由 Flyway 自动执行 V1 至 V11；以后启动只校验历史，不会重复执行已经成功的 migration。出现
 `Started TutorBaseApplication` 后，后端地址为 `http://localhost:8080`。
 
 系统环境变量的优先级高于 `.env`，因此仍可以在 CI、Docker 或云服务器中直接注入变量。生产环境不要复制本地示例值；
@@ -172,7 +172,7 @@ docker stop tutor-base-postgres
 .\mvnw.cmd clean verify
 ```
 
-完整验证会启动临时 PostgreSQL 17 容器，执行 V1 至 V5，并再次调用 Flyway，确认第二次 migrate 执行数为 0。
+完整验证会启动临时 PostgreSQL 17 容器，执行 V1 至 V11，并再次调用 Flyway，确认第二次 migrate 执行数为 0。
 
 前端构建验证：
 
@@ -284,6 +284,8 @@ PostgreSQL 结构只通过 Flyway 管理：
   创建了不绑定 `student` 的独立管理员账户。正常运行时代码不会按用户名授予权限。
 - `V4__add_daily_checkin.sql`：建立每日签到和积分余额，并设置引用完整性与幂等约束。
 - `V5__complete_rewards_schema.sql`：补齐奖励领取与卡片收藏结构、外键、约束和索引。
+- `V6`–`V10`：成就/任务、抽卡收藏、累计积分、移除里程碑，以及数据驱动卡池。
+- `V11__add_learner_claiming.sql`：为 `student` 增加管理员认领字段、配对约束、部分索引和账户删除时的认领清理触发器。
 
 ### Supabase 出现 `relation "account" already exists`
 
@@ -372,10 +374,14 @@ docker run --rm -p 8080:8080 tutor-base-backend:dev
 本阶段已把前端对 `student` 表的直接访问收口到 Java 后端：
 
 - `GET /api/v1/me/content-grants`：登录学习者查询自己的文章授权，身份仅从服务端会话取得。
-- `GET /api/v1/admin/learners`：管理员分页查询学习者与授权。
-- `POST /api/v1/admin/learners`：管理员新增学习者，同时创建待设置密码账户。
+- `GET /api/v1/admin/learners`：管理员分页查询学习者、内容授权、认领归属与最近动态；排除管理员账户。
+- `POST /api/v1/admin/learners`：管理员新增学习者，同时创建待设置密码账户，并由创建者自动认领。
+- `PUT /api/v1/admin/learners/{learnerId}/claim`：认领学习者；已被其他管理员认领返回 `409 learner_already_claimed`。
+- `DELETE /api/v1/admin/learners/{learnerId}/claim`：释放自己的认领；未认领时幂等返回 `204`。
+- `DELETE /api/v1/admin/learners/{learnerId}`：删除学习者及其账户与学习数据；管理员账户关联学习者受保护。
 - `PUT /api/v1/admin/learners/{learnerId}/content-grants`：管理员完整替换文章授权。
 - `PUT /api/v1/admin/learners/{learnerId}/password`：管理员设置或重置学习者密码。
+- `GET /api/v1/admin/learners/{learnerId}/study-progress`：只返回该学习者已授权文章的作答与待批阅进度。
 
 部署该版本前，必须先重新运行 `../database/operations/provision_runtime_role.sql`，再执行
 `../database/audit/runtime_role_checks.sql`，确认所有 `anomaly_count` 都为 `0`，最后更新后端容器。

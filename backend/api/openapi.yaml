@@ -538,6 +538,7 @@ paths:
     get:
       operationId: getAdministratorLearnerStudyProgress
       summary: 获取指定学习者各文章的批阅进度
+      description: 只返回该学习者已获内容授权的文章进度。
       security: [{ sessionCookie: [] }]
       parameters:
         - name: learnerId
@@ -546,7 +547,7 @@ paths:
           schema: { type: integer, format: int64, minimum: 1 }
       responses:
         '200':
-          description: 文章进度列表。
+          description: 该学习者已授权文章的文章进度列表。
           content:
             application/json:
               schema:
@@ -658,7 +659,9 @@ paths:
     get:
       operationId: listLearners
       summary: List learners and their content grants
-      description: Results are ordered by learnerId ascending and use an opaque keyset cursor.
+      description: >-
+        Results are ordered by learnerId ascending and use an opaque keyset cursor.
+        结果排除已关联角色为 administrator 的账户的学习者行；未关联账户的历史学习者仍会返回。
       security:
         - sessionCookie: []
       parameters:
@@ -694,6 +697,7 @@ paths:
     post:
       operationId: createLearner
       summary: 新增学习者及其待设置密码账户
+      description: 新增学习者会同时写入待激活账户，并自动由创建它的管理员认领。
       security:
         - sessionCookie: []
       parameters:
@@ -718,6 +722,107 @@ paths:
         '403':
           $ref: '#/components/responses/Problem'
         '409':
+          $ref: '#/components/responses/Problem'
+  /admin/learners/{learnerId}:
+    delete:
+      operationId: deleteLearner
+      summary: 删除学习者及其账户
+      description: >-
+        仅可删除未被认领或被当前管理员认领的学习者；关联管理员账户的学习者受保护。
+        账户会话、激活码与学习数据在同一事务中级联删除。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: learnerId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '204':
+          description: 学习者及其账户数据已删除。
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /admin/learners/{learnerId}/claim:
+    put:
+      operationId: claimLearner
+      summary: 由当前管理员认领学习者
+      description: >-
+        未认领或已被当前管理员认领时幂等成功；已被其他管理员认领时返回
+        409 learner_already_claimed。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: learnerId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '200':
+          description: 认领后的学习者。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearnerSummary'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: releaseLearnerClaim
+      summary: 释放当前管理员对学习者的认领
+      description: >-
+        未认领时幂等成功；已被其他管理员认领时返回 409 learner_already_claimed。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: learnerId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '204':
+          description: 认领已释放。
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
           $ref: '#/components/responses/Problem'
   /admin/learners/{learnerId}/content-grants:
     put:
@@ -1020,6 +1125,22 @@ components:
             type: integer
             format: int64
             minimum: 1
+        claimedByAccountId:
+          type: [integer, 'null']
+          format: int64
+          minimum: 1
+          description: 认领该学员的管理员账户 ID；未认领为 null。
+        claimedByUsername:
+          type: [string, 'null']
+          description: 认领该学员的管理员用户名；未认领为 null。
+        claimedAt:
+          type: [string, 'null']
+          format: date-time
+          description: 认领时间（UTC）；未认领为 null。
+        lastActivityAt:
+          type: [string, 'null']
+          format: date-time
+          description: 最近学习活动时间（作答、错题、签到或登录）；无记录为 null。
     CreateLearnerRequest:
       type: object
       additionalProperties: false

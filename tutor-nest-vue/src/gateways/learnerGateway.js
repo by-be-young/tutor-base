@@ -35,5 +35,23 @@ export const learnerGateway = {
       method: 'PUT',
       body: { articleIds }
     })
+  },
+
+  claimLearner(learnerId) {
+    return backendClient.request(`/admin/learners/${encodeURIComponent(learnerId)}/claim`, {
+      method: 'PUT'
+    })
+  },
+
+  releaseLearnerClaim(learnerId) {
+    return backendClient.request(`/admin/learners/${encodeURIComponent(learnerId)}/claim`, {
+      method: 'DELETE'
+    })
+  },
+
+  deleteLearner(learnerId) {
+    return backendClient.request(`/admin/learners/${encodeURIComponent(learnerId)}`, {
+      method: 'DELETE'
+    })
   }
 }

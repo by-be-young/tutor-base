@@ -9,10 +9,16 @@
                 </h2>
                 <p class="text-sm text-muted">查看学员作答、对照参考答案，一键完成三态批阅。</p>
             </div>
-            <span class="chip chip--cyan">
-                <i aria-hidden="true" class="fas fa-user-graduate"></i>
-                当前学员 · {{ currentStudentName }}
-            </span>
+            <div class="review-head__chips">
+                <span class="chip chip--cyan">
+                    <i aria-hidden="true" class="fas fa-user-graduate"></i>
+                    当前学员 · {{ currentStudentName }}
+                </span>
+                <span v-if="selectedStudentId" class="chip chip--lime">
+                    <i aria-hidden="true" class="fas fa-shield-halved"></i>
+                    已授权 {{ grantedArticleCount }} 篇
+                </span>
+            </div>
         </header>
 
         <div class="panel-body review-body-wrap">
@@ -80,6 +86,10 @@
                     <EmptyState v-else-if="!selectedStudentId" icon="fas fa-user-graduate" title="尚未选择学员"
                         text="在顶部切换学员后，即可查看他的待批阅内容。" />
 
+                    <EmptyState v-else-if="grantedArticleCount === 0" icon="fas fa-shield-halved"
+                        title="该学员尚未开通内容授权"
+                        text="请到「权限管理」为该学员开通文章权限后，再回到批阅中心查看作答。" />
+
                     <EmptyState v-else-if="!currentSubject" icon="fas fa-folder-open" title="未选择学科"
                         text="选择一个学科开始批阅。" />
 
@@ -88,7 +98,7 @@
 
                     <div v-else class="review-tree">
                         <ClickableTreeNode v-for="node in treeData" :key="node.name + (node.isFile ? node.blogId : '')"
-                            :node="node" :badge-map="pendingCountMap" badge-label="题待批阅" :tone="currentTone"
+                            :node="node" :badge-map="scopedPendingCountMap" badge-label="题待批阅" :tone="currentTone"
                             :initially-expanded="true" @file-click="openArticle" />
                     </div>
                 </section>
@@ -232,33 +242,65 @@ function subjectTone(subject) {
     return 'pink'
 }
 
-const currentStudentName = computed(() => {
-    const student = props.students.find(item => String(item.id) === String(props.selectedStudentId))
-    return student?.username || '未选择'
+const currentStudent = computed(() => props.students
+    .find(item => String(item.id) === String(props.selectedStudentId)) || null)
+
+const currentStudentName = computed(() => currentStudent.value?.username || '未选择')
+
+// 当前学员已开放权限的文章 ID；无学员或未授权时为空集合。
+const grantedIds = computed(() => {
+    const permissions = currentStudent.value?.permissions
+    if (!Array.isArray(permissions)) return new Set()
+    return new Set(permissions.map(Number).filter(Number.isFinite))
 })
+
+const grantedArticles = computed(() => props.blogData.filter(blog => grantedIds.value.has(Number(blog.id))))
+
+const grantedArticleCount = computed(() => grantedArticles.value.length)
+
+const grantedSubjects = computed(() => {
+    const subjects = new Set()
+    grantedArticles.value.forEach(blog => { if (blog.series) subjects.add(blog.series) })
+    return Array.from(subjects)
+})
+
+function scopeByGrant(source) {
+    const scoped = new Map()
+    source.forEach((value, blogId) => {
+        const id = Number(blogId)
+        if (grantedIds.value.has(id)) scoped.set(id, value)
+    })
+    return scoped
+}
+
+// progress 已按授权范围返回；权限变更或缓存残留时仍只保留授权文章，避免统计与列表不一致。
+const scopedPendingCountMap = computed(() => scopeByGrant(pendingCountMap.value))
+const scopedSubmissionStatus = computed(() => scopeByGrant(studentSubmissionStatus.value))
 
 const currentTone = computed(() => subjectTone(currentSubject.value))
 
-const pendingArticleCount = computed(() => pendingCountMap.value.size)
-const pendingQuestionCount = computed(() => Array.from(pendingCountMap.value.values()).reduce((sum, count) => sum + count, 0))
-const reviewedArticleCount = computed(() => Array.from(studentSubmissionStatus.value.values()).filter(status => status === 'reviewed').length)
-const submittedArticleCount = computed(() => studentSubmissionStatus.value.size)
+const pendingArticleCount = computed(() => scopedPendingCountMap.value.size)
+const pendingQuestionCount = computed(() => Array.from(scopedPendingCountMap.value.values()).reduce((sum, count) => sum + count, 0))
+const reviewedArticleCount = computed(() => Array.from(scopedSubmissionStatus.value.values()).filter(status => status === 'reviewed').length)
+const submittedArticleCount = computed(() => scopedSubmissionStatus.value.size)
 
-const subjectArticles = computed(() => props.blogData.filter(blog => blog.series === currentSubject.value))
+const subjectArticles = computed(() => grantedArticles.value.filter(blog => blog.series === currentSubject.value))
 
-const subjectStats = computed(() => props.allSubjects.map(subject => {
-    const articles = props.blogData.filter(blog => blog.series === subject)
-    const pending = articles.filter(blog => studentSubmissionStatus.value.get(Number(blog.id)) === 'pending').length
-    return { subject, tone: subjectTone(subject), pending }
-}))
+const subjectStats = computed(() => props.allSubjects
+    .filter(subject => grantedArticles.value.some(blog => blog.series === subject))
+    .map(subject => {
+        const articles = grantedArticles.value.filter(blog => blog.series === subject)
+        const pending = articles.filter(blog => scopedSubmissionStatus.value.get(Number(blog.id)) === 'pending').length
+        return { subject, tone: subjectTone(subject), pending }
+    }))
 
 const matchesStatus = (blog) => {
     const blogId = Number(blog.id)
-    const status = studentSubmissionStatus.value.get(blogId)
+    const status = scopedSubmissionStatus.value.get(blogId)
     if (activeFilter.value === 'pending') return status === 'pending'
     if (activeFilter.value === 'reviewed') return status === 'reviewed'
     if (activeFilter.value === 'unsubmitted') {
-        return answerKeysCache.value.has(blogId) && !studentSubmissionStatus.value.has(blogId)
+        return answerKeysCache.value.has(blogId) && !scopedSubmissionStatus.value.has(blogId)
     }
     return true
 }
@@ -276,11 +318,11 @@ const filters = computed(() => {
     const articles = subjectArticles.value
     const countBy = (value) => articles.filter(blog => {
         const blogId = Number(blog.id)
-        const status = studentSubmissionStatus.value.get(blogId)
+        const status = scopedSubmissionStatus.value.get(blogId)
         if (value === 'pending') return status === 'pending'
         if (value === 'reviewed') return status === 'reviewed'
         if (value === 'unsubmitted') {
-            return answerKeysCache.value.has(blogId) && !studentSubmissionStatus.value.has(blogId)
+            return answerKeysCache.value.has(blogId) && !scopedSubmissionStatus.value.has(blogId)
         }
         return true
     }).length
@@ -345,7 +387,7 @@ function selectSubject(subject) {
 }
 
 function pendingOf(blogId) {
-    return Number(pendingCountMap.value.get(Number(blogId))) || 0
+    return Number(scopedPendingCountMap.value.get(Number(blogId))) || 0
 }
 
 function statusText(question) {
@@ -492,6 +534,20 @@ watch(() => props.allSubjects, (subjects) => {
     }
 }, { immediate: true })
 
+// 学员切换或授权变化后，保证当前学科仍在授权范围内。
+watch(grantedSubjects, (subjects) => {
+    if (!subjects.includes(currentSubject.value)) {
+        currentSubject.value = subjects[0] || ''
+    }
+}, { immediate: true })
+
+// 授权被收回时关闭已不在授权范围内的批阅详情。
+watch(grantedIds, (ids) => {
+    if (selectedArticle.value && !ids.has(Number(selectedArticle.value.id))) {
+        selectedArticle.value = null
+    }
+})
+
 onMounted(() => {
     loadSubmissionStatus()
     loadAnswerKeysCache()
@@ -511,6 +567,13 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     gap: 6px;
+}
+
+.review-head__chips {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .review-body-wrap {

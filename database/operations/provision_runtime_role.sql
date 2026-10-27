@@ -53,8 +53,8 @@ BEGIN
 END
 $schema_usage$;
 
-GRANT SELECT, INSERT, UPDATE ON TABLE public.student TO tutor_base_runtime;
-GRANT SELECT, INSERT, UPDATE ON TABLE public.account TO tutor_base_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.student TO tutor_base_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.account TO tutor_base_runtime;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.account_activation TO tutor_base_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.account_session TO tutor_base_runtime;
 GRANT SELECT, INSERT ON TABLE public.daily_check_in TO tutor_base_runtime;
@@ -111,6 +111,11 @@ BEGIN
         CREATE POLICY tutor_base_runtime_student_update ON public.student
             FOR UPDATE TO tutor_base_runtime USING (true) WITH CHECK (true);
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.student'::regclass
+                   AND polname = 'tutor_base_runtime_student_delete') THEN
+        CREATE POLICY tutor_base_runtime_student_delete ON public.student
+            FOR DELETE TO tutor_base_runtime USING (true);
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.account'::regclass
                    AND polname = 'tutor_base_runtime_account_select') THEN
         CREATE POLICY tutor_base_runtime_account_select ON public.account
@@ -125,6 +130,11 @@ BEGIN
                    AND polname = 'tutor_base_runtime_account_update') THEN
         CREATE POLICY tutor_base_runtime_account_update ON public.account
             FOR UPDATE TO tutor_base_runtime USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.account'::regclass
+                   AND polname = 'tutor_base_runtime_account_delete') THEN
+        CREATE POLICY tutor_base_runtime_account_delete ON public.account
+            FOR DELETE TO tutor_base_runtime USING (true);
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.account_activation'::regclass
                    AND polname = 'tutor_base_runtime_activation_select') THEN

@@ -78,6 +78,8 @@
 | 404 | `resource_not_found` | 在授权范围内资源不存在 |
 | 409 | `state_conflict` | 当前状态不允许该操作 |
 | 409 | `username_conflict` | 注册或创建账户时用户名已被占用（不公开具体用户名） |
+| 409 | `learner_already_claimed` | 学习者已被其他管理员认领；认领、释放或删除前需由原认领管理员释放 |
+| 409 | `administrator_learner_protected` | 目标学习者关联管理员账户，不能通过学员管理删除 |
 | 412 | `version_conflict` | `If-Match` 与当前资源版本不符 |
 | 429 | `rate_limited` | 请求频率超过限制 |
 | 500 | `internal_error` | 未分类服务端错误，不返回内部异常 |
@@ -133,7 +135,7 @@
 | GET | `/admin/articles/{articleId}/answer-keys` | administrator | 查询一篇文章的参考答案与自动批阅规则 |
 | PUT | `/admin/articles/{articleId}/answer-keys` | administrator | 创建或替换该文章提交的参考答案集合 |
 | GET | `/admin/articles/{articleId}/study-state?learnerId=` | administrator | 查询指定学习者的文章作答与答案 |
-| GET | `/admin/learners/{learnerId}/study-progress` | administrator | 查询指定学习者的作答进度 |
+| GET | `/admin/learners/{learnerId}/study-progress` | administrator | 查询指定学习者已授权文章的作答进度；未授权文章不参与待批阅统计 |
 | PUT | `/admin/articles/{articleId}/learners/{learnerId}/submissions/{questionKey}/review` | administrator | 保存人工批阅结果 |
 
 ### Wrong Book
@@ -192,9 +194,18 @@
 | Method | Path | Auth | 语义 |
 | --- | --- | --- | --- |
 | GET | `/admin/learners` | administrator | 按学习者 ID 游标查询学习者及内容授权；账户状态在身份迁移后增加 |
+| POST | `/admin/learners` | administrator | 新增学习者并创建待设置密码账户；由创建它的管理员自动认领 |
+| PUT | `/admin/learners/{learnerId}/claim` | administrator | 认领学习者；重复认领幂等，已被其他管理员认领返回 `409 learner_already_claimed` |
+| DELETE | `/admin/learners/{learnerId}/claim` | administrator | 释放自己的认领；未认领时幂等返回 `204` |
+| DELETE | `/admin/learners/{learnerId}` | administrator | 删除学习者及其账户、会话和学习数据；被他人认领或关联管理员账户时返回 `409` |
 | PUT | `/admin/learners/{learnerId}/password` | administrator | 直接设置或重置学习者密码，并撤销其旧会话和未使用激活码 |
 | POST | `/admin/learners/{learnerId}/impersonate` | administrator | 免密进入学习者账户：创建新会话并轮换 Cookie；仅限 `role=learner` 且已激活的账户，不撤销管理员既有会话 |
 | POST | `/admin/account-activations` | administrator | 兼容接口：为待激活账户生成一次性激活码；当前前端不使用 |
+
+- 认领是管理员之间的组织归属，不改变内容授权、批阅权限或学习者可见范围；管理员目录排除 `role=administrator` 的账户。
+- 学习者响应额外返回 `claimedByAccountId`、`claimedByUsername`、`claimedAt` 与 `lastActivityAt`；最近动态由服务端聚合作答提交、错题、签到和登录会话时间，客户端不得提交该值。
+- 删除学习者会级联删除账户会话、激活码、作答、错题、签到、积分、卡片和任务/成就记录；管理员账户关联的学习者不可通过该接口删除。
+- 管理员查询学习者作答进度只返回该学习者当前已授权文章；授权被收回的文章不再参与待批阅与进度统计。
 
 ## 7. System Status contract
 

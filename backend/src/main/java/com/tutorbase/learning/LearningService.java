@@ -74,6 +74,9 @@ class LearningService {
                        count(submission.id) AS submitted_questions,
                        count(*) FILTER (WHERE submission.review_status = 'pending') AS pending_reviews
                 FROM public.article_answer_keys AS answer
+                JOIN public.student AS learner
+                  ON learner.id = :learnerId
+                 AND answer.blog_id = ANY (learner.permissions::bigint[])
                 LEFT JOIN public.article_question_submissions AS submission
                   ON submission.blog_id = answer.blog_id
                  AND submission.question_id = answer.question_id

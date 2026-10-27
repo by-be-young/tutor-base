@@ -42,11 +42,23 @@ test('administrator and learner complete the protected learning journey', async 
 
   page.once('dialog', dialog => dialog.accept(learner))
   await page.getByRole('button', { name: /新增/ }).click()
-  await expect(page.getByRole('option', { name: learner })).toBeAttached()
+
+  // 新建学员会被自动认领并直接切换为当前学员：断言切换器与浮层里都能看到新学员。
+  const studentSwitcher = page.getByRole('button', { name: '切换学员' })
+  await expect(studentSwitcher).toContainText(learner)
+  await studentSwitcher.click()
+  await expect(page.getByRole('listbox', { name: '学员列表' }).getByText(learner)).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(studentSwitcher).toHaveAttribute('aria-expanded', 'false')
 
   const learnersResponse = await api(page, '/admin/learners?limit=100')
   expect(learnersResponse.status).toBe(200)
-  const learnerId = learnersResponse.body.items.find(item => item.username === learner).learnerId
+  const createdLearner = learnersResponse.body.items.find(item => item.username === learner)
+  expect(createdLearner).toBeTruthy()
+  // 新建学员自动归创建者认领。
+  expect(createdLearner.claimedByUsername).toBeTruthy()
+  expect(createdLearner.claimedByAccountId).not.toBeNull()
+  const learnerId = createdLearner.learnerId
   expect((await api(page, `/admin/learners/${learnerId}/content-grants`, {
     method: 'PUT', body: { articleIds: [23] }
   })).status).toBe(200)
@@ -61,7 +73,7 @@ test('administrator and learner complete the protected learning journey', async 
   await page.locator('#student-new-password').fill(learnerPassword)
   await page.locator('#student-confirm-password').fill(learnerPassword)
   await page.getByRole('button', { name: '确认设置' }).click()
-  await expect(page.getByRole('status')).toContainText(learner)
+  await expect(page.locator('.student-notice')).toContainText(learner)
 
   page.once('dialog', dialog => dialog.accept())
   await learnerRow.getByRole('button', { name: /进入账号/ }).click()
@@ -133,4 +145,29 @@ test('administrator and learner complete the protected learning journey', async 
   expect(automaticWrongBook.body).toHaveLength(1)
   expect(automaticWrongBook.body[0].correctAnswer).toBe('e2e-reference-answer')
   expect(automaticWrongBook.body[0].manual).toBe(false)
+
+  // 收尾：回到管理员会话，覆盖认领/释放/删除学员的管理界面最小路径。
+  expect((await api(page, '/session', { method: 'DELETE' })).status).toBe(204)
+  expect((await api(page, '/sessions', {
+    method: 'POST', body: { username: administrator, password: administratorPassword }
+  })).status).toBe(200)
+  await page.reload()
+  await page.getByRole('link', { name: '管理' }).click()
+  await expect(page).toHaveURL(/#\/admin/)
+  await expect(page.getByRole('button', { name: '切换学员' })).toBeVisible()
+
+  await page.getByRole('button', { name: /学生账户/ }).click()
+  const managedRow = page.getByRole('listitem').filter({ hasText: learner })
+  await expect(managedRow).toBeVisible()
+
+  await managedRow.getByRole('button', { name: '释放' }).click()
+  await expect(managedRow.getByRole('button', { name: '认领' })).toBeVisible()
+  await managedRow.getByRole('button', { name: '认领' }).click()
+  await expect(managedRow.getByRole('button', { name: '释放' })).toBeVisible()
+
+  await managedRow.getByRole('button', { name: '删除学员' }).click()
+  const deleteDialog = page.getByRole('dialog', { name: '删除学员' })
+  await expect(deleteDialog).toContainText(learner)
+  await deleteDialog.getByRole('button', { name: '确认删除' }).click()
+  await expect(page.getByRole('listitem').filter({ hasText: learner })).toHaveCount(0)
 })
