@@ -4,6 +4,11 @@
 -- 本地 Flyway 被禁用时（DATABASE_MIGRATIONS_ENABLED=false），在 Supabase SQL
 -- Editor 中整体执行本文件即可对齐现有数据库。全部语句可重复执行。
 --
+-- 重要：本文件不改写 public.flyway_schema_history。执行后实际 schema 已含 V11，
+-- 而历史表仍是 V10；下一次 Flyway 启动会认为 V11 未应用并再次执行
+-- V11__add_learner_claiming.sql。因此本文件的所有对象必须与 V11 migration 等价，
+-- 保证 Flyway 再次执行时不会失败（否则会留下 failed migration，需要 repair）。
+--
 -- 覆盖内容：
 --   V11 public.student.claimed_by / claimed_at：记录认领学员的管理员账户与时间
 --       student_claimed_by_fkey      claimed_by → account，账户删除时置空
