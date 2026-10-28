@@ -43,6 +43,7 @@
                             :class="{ 'is-active': activeFilter === filter.value }"
                             :aria-pressed="activeFilter === filter.value" @click="activeFilter = filter.value">
                             {{ filter.label }}
+                            <span class="seg__count">{{ filter.count }}</span>
                         </button>
                     </div>
                     <div class="input-wrap answer-search">
@@ -255,12 +256,16 @@ const subjectStats = computed(() => props.allSubjects
     })
     .filter(Boolean))
 
-// 只保留筛选标签，不显示数量统计
-const filters = computed(() => ([
-    { value: 'unset', label: '待设置' },
-    { value: 'set', label: '已设置' },
-    { value: 'all', label: '全部' }
-]))
+// 筛选标签右侧保留数量（待设置/已设置/全部），只针对当前学科
+const filters = computed(() => {
+    const articles = subjectArticles.value
+    const setCount = articles.filter(blog => answerKeyIds.value.includes(Number(blog.id))).length
+    return [
+        { value: 'unset', label: '待设置', count: articles.length - setCount },
+        { value: 'set', label: '已设置', count: setCount },
+        { value: 'all', label: '全部', count: articles.length }
+    ]
+})
 
 const filteredArticles = computed(() => {
     const search = keyword.value.trim().toLowerCase()

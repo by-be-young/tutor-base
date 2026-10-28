@@ -42,6 +42,7 @@
                             class="seg__btn" :class="{ 'is-active': activeFilter === filter.value }"
                             :aria-pressed="activeFilter === filter.value" @click="activeFilter = filter.value">
                             {{ filter.label }}
+                            <span class="seg__count">{{ filter.count }}</span>
                         </button>
                     </div>
                     <span class="text-xs text-dim">按目录归档，逐篇勾选</span>
@@ -138,12 +139,16 @@ const scopedSubjects = computed(() => {
 
 const subjectArticles = computed(() => props.blogData.filter(blog => blog.series === currentSubject.value))
 
-// 只保留筛选标签，不显示数量统计
-const filters = computed(() => ([
-    { value: 'unauthorized', label: '未授权' },
-    { value: 'authorized', label: '已授权' },
-    { value: 'all', label: '全部' }
-]))
+// 筛选标签右侧保留数量（未授权/已授权/全部），只针对当前学科
+const filters = computed(() => {
+    const articles = subjectArticles.value
+    const authorized = articles.filter(blog => currentPermissions.value.includes(Number(blog.id))).length
+    return [
+        { value: 'unauthorized', label: '未授权', count: articles.length - authorized },
+        { value: 'authorized', label: '已授权', count: authorized },
+        { value: 'all', label: '全部', count: articles.length }
+    ]
+})
 
 const filteredArticles = computed(() => {
     let articles = subjectArticles.value

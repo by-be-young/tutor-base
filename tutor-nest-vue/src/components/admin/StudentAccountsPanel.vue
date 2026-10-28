@@ -32,6 +32,7 @@
                             :class="{ 'is-active': statusFilter === filter.value }"
                             :aria-pressed="statusFilter === filter.value" @click="statusFilter = filter.value">
                             {{ filter.label }}
+                            <span class="seg__count">{{ filter.count }}</span>
                         </button>
                     </div>
                 </div>
@@ -254,12 +255,14 @@ const deleteError = ref('')
 const deleteSaving = ref(false)
 
 const sortedStudents = computed(() => sortStudentsByRecentActivity(props.students))
+const mineCount = computed(() => props.students.filter(student => claimState(student, accountId.value) === 'mine').length)
+const unclaimedCount = computed(() => props.students.filter(student => claimState(student, accountId.value) === 'unclaimed').length)
 
-// 只保留筛选标签，不显示数量统计
+// 筛选标签右侧保留数量（全部/我的学员/未认领）
 const filters = computed(() => ([
-    { value: 'all', label: '全部' },
-    { value: 'mine', label: '我的学员' },
-    { value: 'unclaimed', label: '未认领' }
+    { value: 'all', label: '全部', count: props.students.length },
+    { value: 'mine', label: '我的学员', count: mineCount.value },
+    { value: 'unclaimed', label: '未认领', count: unclaimedCount.value }
 ]))
 
 const visibleStudents = computed(() => sortedStudents.value.filter(student => {

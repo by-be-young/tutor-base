@@ -33,6 +33,7 @@
                         :class="{ 'is-active': activeFilter === filter.value }"
                         :aria-pressed="activeFilter === filter.value" @click="activeFilter = filter.value">
                         {{ filter.label }}
+                        <span class="seg__count">{{ filter.count }}</span>
                     </button>
                 </div>
                 <div class="input-wrap review-search">
@@ -280,13 +281,26 @@ const filteredArticles = computed(() => {
     })
 })
 
-// 只保留筛选标签，不显示数量统计
-const filters = computed(() => ([
-    { value: 'pending', label: '待批阅' },
-    { value: 'reviewed', label: '已批阅' },
-    { value: 'unsubmitted', label: '未提交' },
-    { value: 'all', label: '全部' }
-]))
+// 筛选标签右侧保留数量（待批阅/已批阅/未提交/全部），只针对当前学科
+const filters = computed(() => {
+    const articles = subjectArticles.value
+    const countBy = (value) => articles.filter(blog => {
+        const blogId = Number(blog.id)
+        const status = scopedSubmissionStatus.value.get(blogId)
+        if (value === 'pending') return status === 'pending'
+        if (value === 'reviewed') return status === 'reviewed'
+        if (value === 'unsubmitted') {
+            return answerKeysCache.value.has(blogId) && !scopedSubmissionStatus.value.has(blogId)
+        }
+        return true
+    }).length
+    return [
+        { value: 'pending', label: '待批阅', count: countBy('pending') },
+        { value: 'reviewed', label: '已批阅', count: countBy('reviewed') },
+        { value: 'unsubmitted', label: '未提交', count: countBy('unsubmitted') },
+        { value: 'all', label: '全部', count: articles.length }
+    ]
+})
 
 const treeData = computed(() => buildTree(filteredArticles.value))
 
