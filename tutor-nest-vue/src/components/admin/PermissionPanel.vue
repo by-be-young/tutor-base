@@ -324,6 +324,12 @@ watch(() => props.selectedStudentId, () => {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
     align-items: start;
+    /* 展开多个文件夹时限制高度，内部滚动，避免整页被撑高 */
+    max-height: 640px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+    scrollbar-width: thin;
 }
 
 .perm-footer {
@@ -357,6 +363,15 @@ watch(() => props.selectedStudentId, () => {
     .perm-tree {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 12px;
+    }
+}
+
+@media (max-width: 1200px) {
+    /* 窄屏下改为页面整体滚动，避免嵌套滚动难以操作 */
+    .perm-tree {
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
     }
 }
 

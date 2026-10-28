@@ -713,6 +713,12 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    /* 题号/题目卡片较多时限制高度并内部滚动 */
+    max-height: min(58vh, 560px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+    scrollbar-width: thin;
 }
 
 .review-card {
@@ -906,6 +912,13 @@ onMounted(() => {
     .review-list {
         max-height: none;
         overflow: visible;
+    }
+
+    /* 单列布局下跟随页面滚动，避免嵌套滚动 */
+    .review-questions {
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
     }
 }
 
