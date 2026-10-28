@@ -24,7 +24,10 @@ async function api(page, path, { method = 'GET', body } = {}) {
 }
 
 async function login(page, username, password) {
-  await page.goto('/#/')
+  // 首页从 cdnjs 加载 FontAwesome；CI 访问外网偶发慢/被限流会让 load 事件长时间不触发。
+  // E2E 只依赖文本与 role，不需要图标字体，因此拦截该请求，避免外部网络影响用例稳定性。
+  await page.route('https://cdnjs.cloudflare.com/**', route => route.abort())
+  await page.goto('/#/', { waitUntil: 'domcontentloaded' })
   await page.getByPlaceholder('用户名').fill(username)
   await page.getByPlaceholder('密码').fill(password)
   await page.locator('form').getByRole('button', { name: '登录', exact: true }).click()
@@ -37,7 +40,7 @@ test('administrator and learner complete the protected learning journey', async 
   const learnerPassword = 'E2e-learner-password-2026'
 
   await login(page, administrator, administratorPassword)
-  await page.goto('/#/admin')
+  await page.goto('/#/admin', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('管理员', { exact: true })).toBeVisible()
   // 默认落地在「学员科目」，它是权限管理之上的科目设定入口。
   await expect(page.getByRole('heading', { name: '学员科目' })).toBeVisible()
@@ -75,15 +78,18 @@ test('administrator and learner complete the protected learning journey', async 
   const learnerRow = page.getByRole('listitem').filter({ hasText: learner })
   await expect(learnerRow).toBeVisible()
   await learnerRow.getByRole('button', { name: /设置\/重置密码/ }).click()
+  const passwordDialog = page.getByRole('dialog', { name: '设置学生密码' })
+  await expect(passwordDialog).toBeVisible()
   await page.locator('#student-new-password').fill(learnerPassword)
   await page.locator('#student-confirm-password').fill(learnerPassword)
   await page.getByRole('button', { name: '确认设置' }).click()
+  await expect(passwordDialog).toBeHidden()
   await expect(page.locator('.student-notice')).toContainText(learner)
 
   page.once('dialog', dialog => dialog.accept())
   await learnerRow.getByRole('button', { name: /进入账号/ }).click()
   await expect(page).toHaveURL(/#\/$/)
-  await page.goto('/#/tasks')
+  await page.goto('/#/tasks', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: /任务中心/ })).toBeVisible()
   await expect(page.getByText('当前积分', { exact: true }).first()).toBeVisible()
 
@@ -156,7 +162,7 @@ test('administrator and learner complete the protected learning journey', async 
   expect((await api(page, '/sessions', {
     method: 'POST', body: { username: administrator, password: administratorPassword }
   })).status).toBe(200)
-  await page.reload()
+  await page.reload({ waitUntil: 'domcontentloaded' })
   await page.getByRole('link', { name: '管理' }).click()
   await expect(page).toHaveURL(/#\/admin/)
   await expect(page.getByRole('button', { name: '切换学员' })).toBeVisible()
