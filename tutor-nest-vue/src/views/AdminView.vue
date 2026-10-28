@@ -47,54 +47,23 @@
             </div>
         </header>
 
-        <!-- 概览 -->
+        <!-- 概览：只保留当前学员上下文，不放统计数字 -->
         <section class="admin-overview">
             <div class="admin-overview__intro">
                 <span class="eyebrow">管理概览</span>
                 <h1 class="page-title">一屏掌握每个学员的<span class="text-gradient">学习路径</span></h1>
                 <p class="page-sub">配置内容授权、管理学员账户、批阅作业、校准标准答案——所有管理动作在同一工作台完成。</p>
-                <div class="row row--wrap admin-overview__chips">
+                <div v-if="currentStudent" class="row row--wrap admin-overview__chips">
                     <span class="chip chip--violet"><i aria-hidden="true" class="fas fa-user-graduate"></i> {{ currentStudentName }}</span>
-                    <span v-if="currentStudent" class="chip"
+                    <span class="chip"
                         :class="currentClaimState === 'mine' ? 'chip--lime' : currentClaimState === 'unclaimed' ? 'chip--amber' : ''">
                         <i aria-hidden="true" class="fas fa-hand-holding-heart"></i> {{ currentClaimLabel }}
                     </span>
-                    <span v-if="currentStudent" class="chip"><i aria-hidden="true" class="far fa-clock"></i> 最近动态 · {{ currentActivityLabel }}</span>
-                    <span class="chip chip--cyan"><i aria-hidden="true" class="fas fa-shield-halved"></i> 已授权 {{ authorizedCount }} 篇</span>
-                    <span class="chip"><i aria-hidden="true" class="fas fa-layer-group"></i> 内容库 {{ blogData.length }} 篇</span>
+                    <span class="chip"><i aria-hidden="true" class="far fa-clock"></i> 最近动态 · {{ currentActivityLabel }}</span>
+                    <span class="chip chip--cyan"><i aria-hidden="true" class="fas fa-book-open"></i> 在学 {{ activeSubjectCount }} 门学科</span>
                 </div>
-            </div>
-
-            <div class="stat-grid admin-overview__stats">
-                <div class="stat-card">
-                    <div class="stat-value">{{ students.length }}</div>
-                    <div class="stat-label">在册学员</div>
-                    <div class="stat-sub">可切换身份统一管理</div>
-                </div>
-                <div class="stat-card stat-card--lime">
-                    <div class="stat-value">{{ mineCount }}</div>
-                    <div class="stat-label">我的学员</div>
-                    <div class="stat-sub">由我认领，优先处理</div>
-                </div>
-                <div class="stat-card stat-card--amber">
-                    <div class="stat-value">{{ unclaimedCount }}</div>
-                    <div class="stat-label">未认领</div>
-                    <div class="stat-sub">点击「认领」接手管理</div>
-                </div>
-                <div class="stat-card stat-card--cyan">
-                    <div class="stat-value">{{ authorizedCount }}</div>
-                    <div class="stat-label">当前授权文章</div>
-                    <div class="stat-sub">含尚未保存的勾选</div>
-                </div>
-                <div class="stat-card stat-card--coral">
-                    <div class="stat-value">{{ blogData.length }}</div>
-                    <div class="stat-label">内容库文章</div>
-                    <div class="stat-sub">{{ allSubjects.length }} 个学科分组</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">{{ allSubjects.length }}</div>
-                    <div class="stat-label">学科数量</div>
-                    <div class="stat-sub">授权按学科色归档</div>
+                <div v-else class="row row--wrap admin-overview__chips">
+                    <span class="chip"><i aria-hidden="true" class="fas fa-user-graduate"></i> 还没有学员，点右上角「新增」创建第一位</span>
                 </div>
             </div>
         </section>
@@ -120,9 +89,6 @@
                     </span>
                     <span v-if="currentStudent" class="admin-sidebar__line">
                         <i aria-hidden="true" class="far fa-clock"></i> 最近动态 · {{ currentActivityLabel }}
-                    </span>
-                    <span v-if="currentStudent" class="admin-sidebar__line">
-                        <i aria-hidden="true" class="fas fa-shield-halved"></i> {{ currentPermissions.length }} 篇授权
                     </span>
                     <span class="chip" :class="permissionDirty ? 'chip--amber' : 'chip--lime'">
                         <span class="status-dot"></span>
@@ -164,6 +130,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useArticleStore } from '@/stores/blogStore'
 import { useAdminStore } from '@/stores/adminStore'
 import { claimState, formatRelativeActivity } from '@/utils/adminStudents'
+import { activeSubjects, buildSubjectScope } from '@/utils/adminSubjects'
 import { showToast } from '@/utils/toast'
 import PermissionPanel from '@/components/admin/PermissionPanel.vue'
 import ReviewPanel from '@/components/admin/ReviewPanel.vue'
@@ -198,12 +165,6 @@ const currentClaimLabel = computed(() => {
     return `由 ${currentStudent.value.claimedByUsername || '其他管理员'} 认领`
 })
 
-const mineCount = computed(() => students.value.filter(student => claimState(student, accountId.value) === 'mine').length)
-const unclaimedCount = computed(() => students.value.filter(student => claimState(student, accountId.value) === 'unclaimed').length)
-
-// 顶栏概览、统计卡、侧栏计数共用同一授权数据源，避免数字不一致。
-const authorizedCount = computed(() => currentPermissions.value.length)
-
 const allSubjects = computed(() => {
     const subjects = new Set()
     blogData.value.forEach(blog => {
@@ -212,9 +173,17 @@ const allSubjects = computed(() => {
     return Array.from(subjects).sort()
 })
 
+// 当前学员实际在学的学科数（有任意已授权文章），用于概览上下文提示
+const activeSubjectCount = computed(() => activeSubjects(buildSubjectScope({
+    subjects: allSubjects.value,
+    articles: blogData.value,
+    permissions: currentPermissions.value
+})).length)
+
+// 侧栏只保留导航，不再用数字角标做统计
 const tabs = computed(() => [
-    { id: 'permission', label: '权限管理', icon: 'fas fa-shield-halved', count: authorizedCount.value },
-    { id: 'students', label: '学生账户', icon: 'fas fa-users-gear', count: students.value.length },
+    { id: 'permission', label: '权限管理', icon: 'fas fa-shield-halved', count: null },
+    { id: 'students', label: '学生账户', icon: 'fas fa-users-gear', count: null },
     { id: 'review', label: '批阅中心', icon: 'fas fa-pen-nib', count: null },
     { id: 'answer', label: '设置答案', icon: 'fas fa-key', count: null }
 ])
@@ -458,10 +427,6 @@ onBeforeUnmount(() => {
     margin-top: 4px;
 }
 
-.admin-overview__stats {
-    gap: 14px;
-}
-
 /* ------------------------------------------------------------------ */
 /* 主体                                                                */
 /* ------------------------------------------------------------------ */
@@ -679,17 +644,9 @@ onBeforeUnmount(() => {
     .admin-save-state {
         margin-right: auto;
     }
-
-    .admin-overview__stats {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
 }
 
 @media (max-width: 420px) {
-    .admin-overview__stats {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
     .admin-topbar__actions .btn {
         flex: 1 1 auto;
         padding: 0 14px;
@@ -805,12 +762,6 @@ onBeforeUnmount(() => {
 }
 
 /* 统计数字固定高度，避免数字变化造成布局抖动 */
-.admin-overview__stats .stat-value {
-    display: flex;
-    align-items: center;
-    min-height: 2.3rem;
-}
-
 /* 1024 档：顶栏折成「标题+操作」「学员切换」两行，避免挤压 */
 @media (max-width: 1180px) {
     .admin-topbar__meta {

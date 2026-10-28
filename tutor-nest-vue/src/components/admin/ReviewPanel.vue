@@ -22,29 +22,6 @@
         </header>
 
         <div class="panel-body review-body-wrap">
-            <div class="stat-grid review-stats">
-                <div class="stat-card stat-card--amber">
-                    <div class="stat-value">{{ pendingArticleCount }}</div>
-                    <div class="stat-label">待批阅文章</div>
-                    <div class="stat-sub">学员已提交待处理</div>
-                </div>
-                <div class="stat-card stat-card--coral">
-                    <div class="stat-value">{{ pendingQuestionCount }}</div>
-                    <div class="stat-label">待批阅题目</div>
-                    <div class="stat-sub">逐题批阅后自动递减</div>
-                </div>
-                <div class="stat-card stat-card--lime">
-                    <div class="stat-value">{{ reviewedArticleCount }}</div>
-                    <div class="stat-label">已批阅文章</div>
-                    <div class="stat-sub">批阅结果已归档</div>
-                </div>
-                <div class="stat-card stat-card--cyan">
-                    <div class="stat-value">{{ submittedArticleCount }}</div>
-                    <div class="stat-label">已提交文章</div>
-                    <div class="stat-sub">含待批阅与已批阅</div>
-                </div>
-            </div>
-
             <div class="review-subjects" role="group" aria-label="学科筛选">
                 <button v-for="item in subjectStats" :key="item.subject" type="button" class="review-subject"
                     :class="[`is-tone-${item.tone}`, { 'is-active': currentSubject === item.subject }]"
@@ -273,16 +250,11 @@ function scopeByGrant(source) {
     return scoped
 }
 
-// progress 已按授权范围返回；权限变更或缓存残留时仍只保留授权文章，避免统计与列表不一致。
+// progress 已按授权范围返回；权限变更或缓存残留时仍只保留授权文章，避免筛选项与列表不一致。
 const scopedPendingCountMap = computed(() => scopeByGrant(pendingCountMap.value))
 const scopedSubmissionStatus = computed(() => scopeByGrant(studentSubmissionStatus.value))
 
 const currentTone = computed(() => subjectTone(currentSubject.value))
-
-const pendingArticleCount = computed(() => scopedPendingCountMap.value.size)
-const pendingQuestionCount = computed(() => Array.from(scopedPendingCountMap.value.values()).reduce((sum, count) => sum + count, 0))
-const reviewedArticleCount = computed(() => Array.from(scopedSubmissionStatus.value.values()).filter(status => status === 'reviewed').length)
-const submittedArticleCount = computed(() => scopedSubmissionStatus.value.size)
 
 const subjectArticles = computed(() => grantedArticles.value.filter(blog => blog.series === currentSubject.value))
 
@@ -580,10 +552,6 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     gap: 16px;
-}
-
-.review-stats {
-    gap: 12px;
 }
 
 .review-subjects {
@@ -956,10 +924,6 @@ onMounted(() => {
         padding: 18px;
     }
 
-    .review-stats {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     .review-card__answers {
         grid-template-columns: minmax(0, 1fr);
     }
@@ -973,11 +937,6 @@ onMounted(() => {
     }
 }
 
-@media (max-width: 420px) {
-    .review-stats {
-        grid-template-columns: minmax(0, 1fr);
-    }
-}
 </style>
 
 <style scoped>
@@ -1139,12 +1098,5 @@ onMounted(() => {
 
 .review-search .input::-webkit-search-cancel-button {
     filter: none;
-}
-
-/* 统计数字固定高度，避免数字变化造成布局抖动 */
-.review-stats .stat-value {
-    display: flex;
-    align-items: center;
-    min-height: 2.3rem;
 }
 </style>

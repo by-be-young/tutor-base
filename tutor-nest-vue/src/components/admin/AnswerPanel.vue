@@ -16,24 +16,6 @@
         </header>
 
         <div class="panel-body answer-body">
-            <div class="stat-grid answer-stats">
-                <div class="stat-card stat-card--lime">
-                    <div class="stat-value">{{ setArticleCount }}</div>
-                    <div class="stat-label">已设置答案</div>
-                    <div class="stat-sub">已配置参考答案的文章</div>
-                </div>
-                <div class="stat-card stat-card--amber">
-                    <div class="stat-value">{{ unsetArticleCount }}</div>
-                    <div class="stat-label">待设置答案</div>
-                    <div class="stat-sub">尚未配置参考答案</div>
-                </div>
-                <div class="stat-card stat-card--violet">
-                    <div class="stat-value">{{ totalArticles }}</div>
-                    <div class="stat-label">内容库文章</div>
-                    <div class="stat-sub">{{ allSubjects.length }} 个学科分组</div>
-                </div>
-            </div>
-
             <div class="answer-subjects" role="group" aria-label="学科筛选">
                 <button v-for="item in subjectStats" :key="item.subject" type="button" class="answer-subject"
                     :class="[`is-tone-${item.tone}`, { 'is-active': currentSubject === item.subject }]"
@@ -238,8 +220,6 @@ const totalArticles = computed(() => props.blogData.length)
 
 const setArticleCount = computed(() => props.blogData
     .filter(blog => answerKeyIds.value.includes(Number(blog.id))).length)
-
-const unsetArticleCount = computed(() => Math.max(0, totalArticles.value - setArticleCount.value))
 
 const currentTone = computed(() => subjectTone(currentSubject.value))
 
@@ -526,10 +506,6 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     gap: 16px;
-}
-
-.answer-stats {
-    gap: 12px;
 }
 
 .answer-subjects {
@@ -849,10 +825,6 @@ onMounted(() => {
         padding: 18px;
     }
 
-    .answer-stats {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     .answer-editor__head-actions,
     .answer-editor__loading-head {
         width: 100%;
@@ -868,10 +840,6 @@ onMounted(() => {
 }
 
 @media (max-width: 420px) {
-    .answer-stats {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
     .answer-subject {
         flex: 1 1 100%;
         justify-content: center;
@@ -983,12 +951,5 @@ onMounted(() => {
 
 .answer-search .input::-webkit-search-cancel-button {
     filter: none;
-}
-
-/* 统计数字固定高度，避免数字变化造成布局抖动 */
-.answer-stats .stat-value {
-    display: flex;
-    align-items: center;
-    min-height: 2.3rem;
 }
 </style>

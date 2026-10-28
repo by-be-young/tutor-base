@@ -35,19 +35,34 @@
             </div>
 
             <template v-else>
+                <p class="perm-scope-hint">
+                    <i aria-hidden="true" class="fas fa-circle-info"></i>
+                    学员通常只上其中几门科目：先点学科卡右侧按钮整科开通，再在下方按目录微调具体文章。
+                </p>
+
                 <div class="perm-subjects">
-                    <button v-for="item in subjectStats" :key="item.subject" type="button" class="perm-subject"
-                        :class="[`is-tone-${item.tone}`, { 'is-active': currentSubject === item.subject }]"
-                        :aria-pressed="currentSubject === item.subject" @click="selectSubject(item.subject)">
-                        <span class="perm-subject__name">
-                            {{ item.subject }}
-                            <i aria-hidden="true" class="fas" :class="item.granted === item.total && item.total > 0 ? 'fa-circle-check' : 'fa-layer-group'"></i>
-                        </span>
-                        <span class="perm-subject__count">{{ item.granted }}<em>/{{ item.total }}</em></span>
-                        <span class="progress perm-subject__bar">
-                            <span class="progress__bar" :style="{ width: `${item.percent}%` }"></span>
-                        </span>
-                    </button>
+                    <div v-for="item in visibleSubjectCards" :key="item.subject" class="perm-subject"
+                        :class="[`is-tone-${item.tone}`, `is-stage-${item.stage}`, { 'is-active': currentSubject === item.subject }]">
+                        <button type="button" class="perm-subject__open" :aria-pressed="currentSubject === item.subject"
+                            :aria-label="`查看 ${item.subject} 的文章授权`" @click="selectSubject(item.subject)">
+                            <span class="perm-subject__name">
+                                {{ item.subject }}
+                                <span class="perm-subject__stage">{{ item.stageText }}</span>
+                            </span>
+                            <span class="perm-subject__count">{{ item.granted }}<em>/{{ item.total }}</em></span>
+                            <span class="progress perm-subject__bar">
+                                <span class="progress__bar" :style="{ width: `${item.percent}%` }"></span>
+                            </span>
+                        </button>
+                        <button type="button" class="perm-subject__toggle" :disabled="item.total === 0"
+                            :aria-label="`${item.stage === 'active' ? '取消' : '开通'} ${item.subject} 全部文章`"
+                            :title="item.stage === 'active' ? '取消整科授权' : `开通整科 ${item.total} 篇`"
+                            @click="toggleSubject(item.subject)">
+                            <i aria-hidden="true" class="fas"
+                                :class="item.stage === 'active' ? 'fa-xmark' : item.stage === 'partial' ? 'fa-plus' : 'fa-check'"></i>
+                            {{ item.stage === 'active' ? '取消整科' : item.stage === 'partial' ? '补全整科' : '整科开通' }}
+                        </button>
+                    </div>
                 </div>
 
                 <div class="perm-toolbar">
@@ -59,6 +74,12 @@
                             <span class="seg__count">{{ filter.count }}</span>
                         </button>
                     </div>
+                    <label class="perm-only-active" :class="{ 'is-disabled': !hasActiveSubjects }"
+                        :title="hasActiveSubjects ? '只显示学员已开通的学科' : '该学员还没有开通任何学科'">
+                        <input v-model="onlyActive" type="checkbox" class="perm-only-active__input"
+                            :disabled="!hasActiveSubjects" />
+                        只看在学科目
+                    </label>
                     <span class="text-xs text-dim">当前学科共 {{ subjectArticles.length }} 篇 · 按目录归档</span>
                 </div>
 
@@ -89,7 +110,7 @@
                     {{ dirty ? '有未保存改动' : '已同步' }}
                 </span>
                 <span class="text-sm text-muted">
-                    已授权 <strong class="perm-footer__num">{{ grantedCount }}</strong> / {{ totalArticles }} 篇
+                    已开通 <strong class="perm-footer__num">{{ activeSubjectCount }}</strong> / {{ scope.length }} 门学科
                 </span>
             </div>
             <button type="button" class="btn btn--primary" :disabled="!dirty || saving"
@@ -104,6 +125,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useAdminStore } from '@/stores/adminStore'
+import { activeSubjects, buildSubjectScope, stageLabel, subjectToggleIds } from '@/utils/adminSubjects'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import PermissionTreeNode from './PermissionTreeNode.vue'
 
@@ -122,6 +144,7 @@ const adminStore = useAdminStore()
 
 const currentSubject = ref('')
 const activeFilter = ref('all')
+const onlyActive = ref(false)
 
 const RING_RADIUS = 52
 const ringLength = 2 * Math.PI * RING_RADIUS
@@ -147,17 +170,34 @@ const ringOffset = computed(() => {
     return ringLength * (1 - ratio)
 })
 
-const subjectStats = computed(() => props.allSubjects.map(subject => {
-    const articles = props.blogData.filter(blog => blog.series === subject)
-    const granted = articles.filter(blog => currentPermissions.value.includes(Number(blog.id))).length
-    return {
-        subject,
-        tone: subjectTone(subject),
-        total: articles.length,
-        granted,
-        percent: articles.length ? Math.round((granted / articles.length) * 100) : 0
-    }
+const subjectStats = computed(() => {
+    const scope = buildSubjectScope({
+        subjects: props.allSubjects,
+        articles: props.blogData,
+        permissions: currentPermissions.value
+    })
+    const grantedBySubject = new Map(scope.map(item => [item.subject, item]))
+    return props.allSubjects.map(subject => {
+        const stat = grantedBySubject.get(subject)
+            || { subject, total: 0, granted: 0, stage: 'inactive' }
+        return {
+            ...stat,
+            tone: subjectTone(subject),
+            stageText: stageLabel(stat.stage),
+            percent: stat.total ? Math.round((stat.granted / stat.total) * 100) : 0
+        }
+    })
+})
+
+// 学员实际在学的科目（有任意已授权文章），用于「只看在学科目」过滤
+const scope = computed(() => buildSubjectScope({
+    subjects: props.allSubjects,
+    articles: props.blogData,
+    permissions: currentPermissions.value
 }))
+const subjectStatusMap = computed(() => new Map(scope.value.map(item => [item.subject, item.stage])))
+const activeSubjectCount = computed(() => activeSubjects(scope.value).length)
+const hasActiveSubjects = computed(() => activeSubjectCount.value > 0)
 
 const currentTone = computed(() => subjectTone(currentSubject.value))
 
@@ -172,6 +212,15 @@ const filters = computed(() => {
         { value: 'all', label: '全部', count: articles.length }
     ]
 })
+
+const visibleSubjects = computed(() => (onlyActive.value
+    ? props.allSubjects.filter(subject => subjectStatusMap.value.get(subject) !== 'inactive')
+    : props.allSubjects))
+
+// 学科卡片：开启「只看在学科目」后只显示学员在学的科目
+const visibleSubjectCards = computed(() => (onlyActive.value
+    ? subjectStats.value.filter(item => item.stage !== 'inactive')
+    : subjectStats.value))
 
 const filteredArticles = computed(() => {
     let articles = subjectArticles.value
@@ -236,6 +285,18 @@ function selectSubject(subject) {
     currentSubject.value = subject
 }
 
+/** 整科开通 / 补全 / 取消：只改本地勾选，仍需点「保存授权」写入后端。 */
+function toggleSubject(subject) {
+    const { ids, checked } = subjectToggleIds({
+        articles: props.blogData,
+        permissions: currentPermissions.value,
+        subject
+    })
+    if (ids.length === 0) return
+    handlePermissionToggleMany(ids, checked)
+    currentSubject.value = subject
+}
+
 function handlePermissionToggle(blogId, checked) {
     adminStore.updatePermissions(blogId, checked)
     emit('permission-change')
@@ -253,6 +314,27 @@ watch(() => [props.allSubjects, props.blogData], ([subjects, articles]) => {
     if (currentSubject.value && hasArticles(currentSubject.value)) return
     currentSubject.value = subjects.find(hasArticles) || subjects[0]
 }, { immediate: true })
+
+// 切换学员时回到「全部」，避免上一名学员的筛选状态影响新学员的判断
+watch(() => props.selectedStudentId, () => {
+    activeFilter.value = 'all'
+    onlyActive.value = false
+})
+
+// 「只看在学科目」过滤后，当前学科可能不在列表里，需要回退到第一个可见学科
+watch([visibleSubjects, () => props.selectedStudentId], ([subjects]) => {
+    if (!subjects.length) return
+    if (subjects.includes(currentSubject.value)) return
+    currentSubject.value = subjects.find(subject => props.blogData.some(blog => blog.series === subject)) || subjects[0]
+}, { immediate: true })
+
+// 当前学科被整科取消后，若开启了「只看在学科目」，保持在原学科但仍展示全部文章以便回退
+watch(scope, (items) => {
+    if (!onlyActive.value) return
+    if (activeSubjects(items).length === 0 && currentSubject.value) {
+        onlyActive.value = false
+    }
+})
 </script>
 
 <style scoped>
@@ -352,7 +434,7 @@ watch(() => [props.allSubjects, props.blogData], ([subjects, articles]) => {
 
 .perm-subjects {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 12px;
     margin-bottom: 18px;
 }
@@ -360,8 +442,8 @@ watch(() => [props.allSubjects, props.blogData], ([subjects, articles]) => {
 .perm-subject {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 12px 14px 14px;
+    gap: 6px;
+    padding: 10px 12px 12px;
     border-radius: var(--r-md);
     border: 1px solid var(--line);
     background: rgba(255, 255, 255, 0.03);
@@ -382,16 +464,35 @@ watch(() => [props.allSubjects, props.blogData], ([subjects, articles]) => {
     opacity: 0.55;
 }
 
+/* 未开通的学科弱化显示，方便一眼看出学员不属于这一科 */
+.perm-subject.is-stage-inactive {
+    opacity: 0.62;
+}
+
 .perm-subject:hover {
     transform: translateY(-2px);
     border-color: var(--tone-line, var(--line-strong));
     background: rgba(255, 255, 255, 0.05);
+    opacity: 1;
 }
 
 .perm-subject.is-active {
     border-color: var(--tone-line, rgba(139, 92, 246, 0.4));
     background: linear-gradient(140deg, var(--tone-soft, rgba(139, 92, 246, 0.14)), rgba(255, 255, 255, 0.02) 70%);
     box-shadow: 0 18px 40px -30px var(--tone-color, var(--violet));
+    opacity: 1;
+}
+
+.perm-subject__open {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    text-align: left;
+    color: inherit;
 }
 
 .perm-subject__name {
@@ -404,10 +505,88 @@ watch(() => [props.allSubjects, props.blogData], ([subjects, articles]) => {
     color: var(--text-1);
 }
 
-.perm-subject__name i {
-    font-size: 0.74rem;
-    color: var(--tone-color, var(--violet-2));
-    opacity: 0.85;
+.perm-subject__stage {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 8px;
+    border-radius: var(--r-full);
+    border: 1px solid var(--line-strong);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-3);
+    font-size: 0.62rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.perm-subject.is-stage-active .perm-subject__stage {
+    border-color: var(--tone-line, var(--line-strong));
+    background: var(--tone-soft, rgba(163, 230, 53, 0.16));
+    color: var(--tone-color, var(--text-1));
+}
+
+.perm-subject.is-stage-partial .perm-subject__stage {
+    color: var(--amber);
+    border-color: var(--amber);
+}
+
+.perm-subject__toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: var(--r-full);
+    border: 1px solid var(--line-strong);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-2);
+    font-size: 0.7rem;
+    font-weight: 700;
+    transition: background var(--dur), color var(--dur), border-color var(--dur);
+}
+
+.perm-subject__toggle:hover:not(:disabled) {
+    color: var(--text-1);
+    border-color: var(--tone-line, var(--line-strong));
+    background: var(--tone-soft, rgba(255, 255, 255, 0.08));
+}
+
+.perm-subject__toggle:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.perm-subject.is-stage-active .perm-subject__toggle {
+    color: var(--text-3);
+}
+
+.perm-scope-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    color: var(--text-3);
+    font-size: 0.78rem;
+}
+
+.perm-only-active {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-2);
+    font-size: 0.78rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.perm-only-active.is-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.perm-only-active__input {
+    accent-color: var(--vermilion);
 }
 
 .perm-subject__count {
@@ -555,6 +734,13 @@ watch(() => [props.allSubjects, props.blogData], ([subjects, articles]) => {
     box-shadow: 3px 3px 0 var(--ink);
 }
 
+.perm-subject__toggle,
+.perm-subject__stage {
+    border: 1.5px solid var(--ink);
+    background: var(--paper-2);
+    color: var(--ink);
+}
+
 .perm-subject::before {
     width: 5px;
     opacity: 1;
@@ -573,12 +759,24 @@ watch(() => [props.allSubjects, props.blogData], ([subjects, articles]) => {
     background: var(--tone-color);
     color: var(--tone-text);
     box-shadow: 4px 4px 0 var(--ink);
+    opacity: 1;
 }
 
 .perm-subject.is-active .perm-subject__name,
-.perm-subject.is-active .perm-subject__count,
-.perm-subject.is-active .perm-subject__name i {
+.perm-subject.is-active .perm-subject__count {
     color: var(--tone-text);
+}
+
+.perm-subject.is-active .perm-subject__stage {
+    border-color: var(--ink);
+    background: var(--paper-1);
+    color: var(--ink);
+}
+
+.perm-subject.is-active .perm-subject__toggle {
+    border-color: var(--ink);
+    background: var(--paper-1);
+    color: var(--ink);
 }
 
 .perm-subject.is-active .perm-subject__count em {
