@@ -18,7 +18,6 @@
                         {{ actionError }}
                     </p>
                 </div>
-                <span class="chip chip--violet"><i class="fas fa-user-graduate"></i> {{ students.length }} 位学员</span>
             </header>
 
             <div class="panel-body student-body">
@@ -33,7 +32,6 @@
                             :class="{ 'is-active': statusFilter === filter.value }"
                             :aria-pressed="statusFilter === filter.value" @click="statusFilter = filter.value">
                             {{ filter.label }}
-                            <span class="seg__count">{{ filter.count }}</span>
                         </button>
                     </div>
                 </div>
@@ -256,14 +254,13 @@ const deleteError = ref('')
 const deleteSaving = ref(false)
 
 const sortedStudents = computed(() => sortStudentsByRecentActivity(props.students))
-const mineStudents = computed(() => props.students.filter(student => claimState(student, accountId.value) === 'mine'))
-const unclaimedStudents = computed(() => props.students.filter(student => claimState(student, accountId.value) === 'unclaimed'))
 
-const filters = computed(() => [
-    { value: 'all', label: '全部', count: props.students.length },
-    { value: 'mine', label: '我的学员', count: mineStudents.value.length },
-    { value: 'unclaimed', label: '未认领', count: unclaimedStudents.value.length }
-])
+// 只保留筛选标签，不显示数量统计
+const filters = computed(() => ([
+    { value: 'all', label: '全部' },
+    { value: 'mine', label: '我的学员' },
+    { value: 'unclaimed', label: '未认领' }
+]))
 
 const visibleStudents = computed(() => sortedStudents.value.filter(student => {
     if (!studentMatchesQuery(student, searchQuery.value)) return false

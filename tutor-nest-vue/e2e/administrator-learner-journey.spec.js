@@ -39,6 +39,8 @@ test('administrator and learner complete the protected learning journey', async 
   await login(page, administrator, administratorPassword)
   await page.goto('/#/admin')
   await expect(page.getByText('管理员', { exact: true })).toBeVisible()
+  // 默认落地在「学员科目」，它是权限管理之上的科目设定入口。
+  await expect(page.getByRole('heading', { name: '学员科目' })).toBeVisible()
 
   page.once('dialog', dialog => dialog.accept(learner))
   await page.getByRole('button', { name: /新增/ }).click()

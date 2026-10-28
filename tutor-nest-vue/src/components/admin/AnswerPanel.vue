@@ -16,10 +16,6 @@
                     <i aria-hidden="true" class="fas fa-user-graduate"></i>
                     {{ currentStudentName }}
                 </span>
-                <span class="chip" :class="setArticleCount > 0 ? 'chip--lime' : 'chip--amber'">
-                    <i aria-hidden="true" class="fas" :class="setArticleCount > 0 ? 'fa-circle-check' : 'fa-hourglass-half'"></i>
-                    已设置 {{ setArticleCount }} / {{ totalArticles }} 篇
-                </span>
             </div>
         </header>
 
@@ -38,7 +34,6 @@
                         :aria-pressed="currentSubject === item.subject" @click="selectSubject(item.subject)">
                         <i aria-hidden="true" class="fas fa-book-open"></i>
                         {{ item.subject }}
-                        <span class="answer-subject__count">{{ item.setCount }}/{{ item.total }}</span>
                     </button>
                 </div>
 
@@ -48,7 +43,6 @@
                             :class="{ 'is-active': activeFilter === filter.value }"
                             :aria-pressed="activeFilter === filter.value" @click="activeFilter = filter.value">
                             {{ filter.label }}
-                            <span class="seg__count">{{ filter.count }}</span>
                         </button>
                     </div>
                     <div class="input-wrap answer-search">
@@ -250,11 +244,6 @@ const scopedArticles = computed(() => grantedArticles({
     hasLearner: Boolean(props.selectedStudentId)
 }))
 
-const totalArticles = computed(() => scopedArticles.value.length)
-
-const setArticleCount = computed(() => scopedArticles.value
-    .filter(blog => answerKeyIds.value.includes(Number(blog.id))).length)
-
 const subjectArticles = computed(() => scopedArticles.value.filter(blog => blog.series === currentSubject.value))
 
 const subjectStats = computed(() => props.allSubjects
@@ -266,15 +255,12 @@ const subjectStats = computed(() => props.allSubjects
     })
     .filter(Boolean))
 
-const filters = computed(() => {
-    const articles = subjectArticles.value
-    const setCount = articles.filter(blog => answerKeyIds.value.includes(Number(blog.id))).length
-    return [
-        { value: 'unset', label: '待设置', count: articles.length - setCount },
-        { value: 'set', label: '已设置', count: setCount },
-        { value: 'all', label: '全部', count: articles.length }
-    ]
-})
+// 只保留筛选标签，不显示数量统计
+const filters = computed(() => ([
+    { value: 'unset', label: '待设置' },
+    { value: 'set', label: '已设置' },
+    { value: 'all', label: '全部' }
+]))
 
 const filteredArticles = computed(() => {
     const search = keyword.value.trim().toLowerCase()
@@ -608,12 +594,6 @@ onMounted(() => {
     box-shadow: 0 14px 30px -24px var(--tone-color, var(--violet));
 }
 
-.answer-subject__count {
-    font-family: var(--font-mono);
-    font-size: 0.64rem;
-    color: var(--text-4);
-}
-
 .answer-toolbar {
     display: flex;
     align-items: center;
@@ -941,11 +921,6 @@ onMounted(() => {
 
 .answer-subject.is-active i {
     color: var(--tone-text);
-}
-
-.answer-subject__count {
-    color: inherit;
-    opacity: 0.85;
 }
 
 .answer-editor {

@@ -14,10 +14,6 @@
                     <i aria-hidden="true" class="fas fa-user-graduate"></i>
                     当前学员 · {{ currentStudentName }}
                 </span>
-                <span v-if="selectedStudentId" class="chip chip--lime">
-                    <i aria-hidden="true" class="fas fa-shield-halved"></i>
-                    已授权 {{ grantedArticleCount }} 篇
-                </span>
             </div>
         </header>
 
@@ -28,7 +24,6 @@
                     :aria-pressed="currentSubject === item.subject" @click="selectSubject(item.subject)">
                     <i aria-hidden="true" class="fas fa-book-open"></i>
                     {{ item.subject }}
-                    <span class="review-subject__count">{{ item.pending }} 待批</span>
                 </button>
             </div>
 
@@ -38,7 +33,6 @@
                         :class="{ 'is-active': activeFilter === filter.value }"
                         :aria-pressed="activeFilter === filter.value" @click="activeFilter = filter.value">
                         {{ filter.label }}
-                        <span class="seg__count">{{ filter.count }}</span>
                     </button>
                 </div>
                 <div class="input-wrap review-search">
@@ -286,25 +280,13 @@ const filteredArticles = computed(() => {
     })
 })
 
-const filters = computed(() => {
-    const articles = subjectArticles.value
-    const countBy = (value) => articles.filter(blog => {
-        const blogId = Number(blog.id)
-        const status = scopedSubmissionStatus.value.get(blogId)
-        if (value === 'pending') return status === 'pending'
-        if (value === 'reviewed') return status === 'reviewed'
-        if (value === 'unsubmitted') {
-            return answerKeysCache.value.has(blogId) && !scopedSubmissionStatus.value.has(blogId)
-        }
-        return true
-    }).length
-    return [
-        { value: 'pending', label: '待批阅', count: countBy('pending') },
-        { value: 'reviewed', label: '已批阅', count: countBy('reviewed') },
-        { value: 'unsubmitted', label: '未提交', count: countBy('unsubmitted') },
-        { value: 'all', label: '全部', count: articles.length }
-    ]
-})
+// 只保留筛选标签，不显示数量统计
+const filters = computed(() => ([
+    { value: 'pending', label: '待批阅' },
+    { value: 'reviewed', label: '已批阅' },
+    { value: 'unsubmitted', label: '未提交' },
+    { value: 'all', label: '全部' }
+]))
 
 const treeData = computed(() => buildTree(filteredArticles.value))
 
@@ -592,12 +574,6 @@ onMounted(() => {
     border-color: var(--tone-line, rgba(139, 92, 246, 0.4));
     background: linear-gradient(120deg, var(--tone-soft, rgba(139, 92, 246, 0.16)), rgba(255, 255, 255, 0.03));
     box-shadow: 0 14px 30px -24px var(--tone-color, var(--violet));
-}
-
-.review-subject__count {
-    font-family: var(--font-mono);
-    font-size: 0.64rem;
-    color: var(--text-4);
 }
 
 .review-toolbar {
@@ -973,11 +949,6 @@ onMounted(() => {
 
 .review-subject.is-active i {
     color: var(--tone-text);
-}
-
-.review-subject__count {
-    color: inherit;
-    opacity: 0.85;
 }
 
 .review-detail {

@@ -77,7 +77,6 @@
                         @click="activeTab = tab.id">
                         <span class="admin-nav__icon"><i aria-hidden="true" :class="tab.icon"></i></span>
                         <span class="admin-nav__label">{{ tab.label }}</span>
-                        <span v-if="tab.count !== null" class="admin-nav__count">{{ tab.count }}</span>
                     </button>
                 </nav>
 
@@ -99,6 +98,13 @@
             </aside>
 
             <main class="admin-stage">
+                <section v-show="activeTab === 'subjects'" class="admin-panel">
+                    <LearnerSubjectPanel :students="students" :selected-student-id="selectedStudentId"
+                        :blog-data="blogData" :all-subjects="allSubjects" :dirty="permissionDirty"
+                        :saving="savingPermissions" @permission-change="onPermissionChange"
+                        @save-permissions="savePermissions" />
+                </section>
+
                 <section v-show="activeTab === 'permission'" class="admin-panel">
                     <PermissionPanel :students="students" :selected-student-id="selectedStudentId"
                         :blog-data="blogData" :all-subjects="allSubjects" :dirty="permissionDirty"
@@ -134,6 +140,7 @@ import { claimState, formatRelativeActivity } from '@/utils/adminStudents'
 import { activeSubjects, buildSubjectScope } from '@/utils/adminSubjects'
 import { showToast } from '@/utils/toast'
 import PermissionPanel from '@/components/admin/PermissionPanel.vue'
+import LearnerSubjectPanel from '@/components/admin/LearnerSubjectPanel.vue'
 import ReviewPanel from '@/components/admin/ReviewPanel.vue'
 import AnswerPanel from '@/components/admin/AnswerPanel.vue'
 import StudentAccountsPanel from '@/components/admin/StudentAccountsPanel.vue'
@@ -144,7 +151,7 @@ const authStore = useAuthStore()
 const blogStore = useArticleStore()
 const adminStore = useAdminStore()
 
-const activeTab = ref('permission')
+const activeTab = ref('subjects')
 const savingPermissions = ref(false)
 const claimBusy = ref(false)
 
@@ -183,6 +190,7 @@ const activeSubjectCount = computed(() => activeSubjects(buildSubjectScope({
 
 // 侧栏只保留导航，不再用数字角标做统计
 const tabs = computed(() => [
+    { id: 'subjects', label: '学员科目', icon: 'fas fa-book-open', count: null },
     { id: 'permission', label: '权限管理', icon: 'fas fa-shield-halved', count: null },
     { id: 'students', label: '学生账户', icon: 'fas fa-users-gear', count: null },
     { id: 'review', label: '批阅中心', icon: 'fas fa-pen-nib', count: null },
@@ -504,26 +512,6 @@ onBeforeUnmount(() => {
     min-width: 0;
 }
 
-.admin-nav__count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 24px;
-    height: 22px;
-    padding: 0 7px;
-    border-radius: var(--r-full);
-    background: var(--paper-2);
-    color: var(--text-2);
-    font-size: 0.68rem;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-}
-
-.admin-nav__btn.is-active .admin-nav__count {
-    background: var(--paper-1);
-    color: var(--ink);
-}
-
 .admin-sidebar__footer {
     margin-top: auto;
     padding-top: 14px;
@@ -599,10 +587,6 @@ onBeforeUnmount(() => {
         white-space: nowrap;
         padding: 8px 14px;
         min-height: 42px;
-    }
-
-    .admin-nav__count {
-        display: none;
     }
 
     .admin-sidebar__footer {
@@ -723,17 +707,6 @@ onBeforeUnmount(() => {
     background: var(--butter);
     color: var(--ink);
     box-shadow: none;
-}
-
-.admin-nav__count {
-    border: 1px solid var(--ink);
-    background: var(--paper-2);
-    color: var(--ink);
-}
-
-.admin-nav__btn.is-active .admin-nav__count {
-    background: var(--lime);
-    color: var(--ink);
 }
 
 .admin-sidebar__footer {
