@@ -54,3 +54,10 @@ export function stageLabel(stage) {
   if (stage === 'partial') return '部分开通'
   return '未开通'
 }
+
+/** 只保留学员当前已授权的文章；未传学员 ID 时返回空数组（避免把全库文章当成在学内容）。 */
+export function grantedArticles({ articles = [], permissions = [], hasLearner = true } = {}) {
+  if (!hasLearner) return []
+  const grantedIds = new Set((permissions || []).map(Number).filter(Number.isFinite))
+  return (articles || []).filter(article => grantedIds.has(Number(article.id)))
+}

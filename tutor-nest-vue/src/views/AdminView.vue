@@ -116,7 +116,8 @@
                 </section>
 
                 <section v-show="activeTab === 'answer'" class="admin-panel">
-                    <AnswerPanel :blog-data="blogData" :all-subjects="allSubjects" />
+                    <AnswerPanel :blog-data="blogData" :all-subjects="allSubjects" :students="students"
+                        :selected-student-id="selectedStudentId" />
                 </section>
             </main>
         </div>

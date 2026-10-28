@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   activeSubjects,
   buildSubjectScope,
+  grantedArticles,
   stageLabel,
   subjectStage,
   subjectToggleIds
@@ -68,4 +69,14 @@ test('subjectToggleIds returns nothing for an unknown or empty subject', () => {
   assert.deepEqual(subjectToggleIds({ articles: ARTICLES, permissions: [1], subject: '物理' }),
     { ids: [], checked: false })
   assert.deepEqual(subjectToggleIds(), { ids: [], checked: false })
+})
+
+test('grantedArticles keeps only the learner\'s granted articles', () => {
+  assert.deepEqual(
+    grantedArticles({ articles: ARTICLES, permissions: ['1', 3] }).map(item => item.id),
+    [1, 3]
+  )
+  assert.deepEqual(grantedArticles({ articles: ARTICLES, permissions: [] }), [])
+  assert.deepEqual(grantedArticles({ articles: ARTICLES, hasLearner: false }), [])
+  assert.deepEqual(grantedArticles(), [])
 })
