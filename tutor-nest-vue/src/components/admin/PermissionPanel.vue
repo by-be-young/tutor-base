@@ -23,9 +23,13 @@
                 <div class="skeleton perm-skeleton"></div>
             </div>
 
+            <EmptyState v-else-if="scopedSubjects.length === 0" icon="fas fa-shield-halved"
+                title="该学员还没有在学科目"
+                text="先到「学员科目」为学员整科开通在学科目，再回到这里逐篇微调授权。" />
+
             <template v-else>
                 <div class="perm-subjects" role="group" aria-label="学科切换">
-                    <button v-for="subject in allSubjects" :key="subject" type="button" class="perm-subject"
+                    <button v-for="subject in scopedSubjects" :key="subject" type="button" class="perm-subject"
                         :class="[`is-tone-${subjectTone(subject)}`, { 'is-active': currentSubject === subject }]"
                         :aria-pressed="currentSubject === subject" @click="selectSubject(subject)">
                         {{ subject }}
@@ -81,6 +85,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useAdminStore } from '@/stores/adminStore'
+import { openedSubjects } from '@/utils/adminSubjects'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import PermissionTreeNode from './PermissionTreeNode.vue'
 
@@ -114,6 +119,22 @@ const currentPermissions = computed(() => {
 })
 
 const currentTone = computed(() => subjectTone(currentSubject.value))
+
+// 只显示学员已开通（至少授权过一篇文章）的学科，避免看到未开通科目。
+// 保留当前正在编辑的学科：管理员把某科最后一篇取消勾选时，目录树不会突然跳走。
+const scopedSubjects = computed(() => {
+    const opened = new Set(openedSubjects({
+        subjects: props.allSubjects,
+        articles: props.blogData,
+        permissions: currentPermissions.value
+    }))
+    return props.allSubjects.filter(subject => {
+        if (subject === currentSubject.value) {
+            return props.blogData.some(blog => blog.series === subject)
+        }
+        return opened.has(subject)
+    })
+})
 
 const subjectArticles = computed(() => props.blogData.filter(blog => blog.series === currentSubject.value))
 
@@ -197,12 +218,15 @@ function handlePermissionToggleMany(blogIds, checked) {
     emit('permission-change')
 }
 
-// 初始化默认科目：优先选中第一个确实有文章的学科，首屏直接渲染文章树
-watch(() => [props.allSubjects, props.blogData], ([subjects, articles]) => {
-    if (!subjects.length) return
-    const hasArticles = subject => articles.some(blog => blog.series === subject)
-    if (currentSubject.value && hasArticles(currentSubject.value)) return
-    currentSubject.value = subjects.find(hasArticles) || subjects[0]
+// 学科范围跟着学员授权变化：当前学科被整科取消后回退到第一个仍在学的学科
+watch(scopedSubjects, (subjects) => {
+    if (subjects.length === 0) {
+        currentSubject.value = ''
+        return
+    }
+    if (!subjects.includes(currentSubject.value)) {
+        currentSubject.value = subjects[0]
+    }
 }, { immediate: true })
 
 // 切换学员时回到「全部」，避免上一名学员的筛选状态影响新学员的判断

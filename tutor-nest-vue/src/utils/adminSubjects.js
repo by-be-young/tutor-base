@@ -34,6 +34,13 @@ export function activeSubjects(scope) {
   return (scope || []).filter(item => item.stage !== 'inactive').map(item => item.subject)
 }
 
+/** 学员已开通的学科（至少有一篇该科文章已授权），供权限管理等页面收敛可见范围。 */
+export function openedSubjects({ subjects = [], articles = [], permissions = [] } = {}) {
+  const grantedIds = new Set((permissions || []).map(Number).filter(Number.isFinite))
+  return (subjects || []).filter(subject => (articles || []).some(article =>
+    article.series === subject && grantedIds.has(Number(article.id))))
+}
+
 /**
  * 勾选/取消勾选整个学科时，需要新增或移除的文章 ID。
  * 已授权时返回要移除的 ID（取消整科），未完全授权时返回还是要补上的 ID（开通整科）。

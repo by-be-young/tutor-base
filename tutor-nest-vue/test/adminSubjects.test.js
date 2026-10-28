@@ -5,6 +5,7 @@ import {
   activeSubjects,
   buildSubjectScope,
   grantedArticles,
+  openedSubjects,
   stageLabel,
   subjectStage,
   subjectToggleIds
@@ -79,4 +80,16 @@ test('grantedArticles keeps only the learner\'s granted articles', () => {
   assert.deepEqual(grantedArticles({ articles: ARTICLES, permissions: [] }), [])
   assert.deepEqual(grantedArticles({ articles: ARTICLES, hasLearner: false }), [])
   assert.deepEqual(grantedArticles(), [])
+})
+
+test('openedSubjects keeps subjects with at least one granted article', () => {
+  assert.deepEqual(
+    openedSubjects({ subjects: ['化学', '英语', '初中英语'], articles: ARTICLES, permissions: [1, 3] }),
+    ['化学', '英语']
+  )
+  assert.deepEqual(
+    openedSubjects({ subjects: ['化学', '英语'], articles: ARTICLES, permissions: [] }),
+    []
+  )
+  assert.deepEqual(openedSubjects(), [])
 })

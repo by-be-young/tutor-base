@@ -151,7 +151,7 @@ const authStore = useAuthStore()
 const blogStore = useArticleStore()
 const adminStore = useAdminStore()
 
-const activeTab = ref('subjects')
+const activeTab = ref('students')
 const savingPermissions = ref(false)
 const claimBusy = ref(false)
 
@@ -188,11 +188,11 @@ const activeSubjectCount = computed(() => activeSubjects(buildSubjectScope({
     permissions: currentPermissions.value
 })).length)
 
-// 侧栏只保留导航，不再用数字角标做统计
+// 侧栏只保留导航，不再用数字角标做统计；学生账户置顶
 const tabs = computed(() => [
+    { id: 'students', label: '学生账户', icon: 'fas fa-users-gear', count: null },
     { id: 'subjects', label: '学员科目', icon: 'fas fa-book-open', count: null },
     { id: 'permission', label: '权限管理', icon: 'fas fa-shield-halved', count: null },
-    { id: 'students', label: '学生账户', icon: 'fas fa-users-gear', count: null },
     { id: 'review', label: '批阅中心', icon: 'fas fa-pen-nib', count: null },
     { id: 'answer', label: '设置答案', icon: 'fas fa-key', count: null }
 ])
