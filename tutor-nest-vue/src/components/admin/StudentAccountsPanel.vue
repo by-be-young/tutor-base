@@ -22,34 +22,6 @@
             </header>
 
             <div class="panel-body student-body">
-                <div class="stat-grid student-stats">
-                    <div class="stat-card stat-card--cyan">
-                        <div class="stat-value">{{ students.length }}</div>
-                        <div class="stat-label">学员总数</div>
-                        <div class="stat-sub">按最近动态排序</div>
-                    </div>
-                    <div class="stat-card stat-card--lime">
-                        <div class="stat-value">{{ mineStudents.length }}</div>
-                        <div class="stat-label">我的学员</div>
-                        <div class="stat-sub">由我认领</div>
-                    </div>
-                    <div class="stat-card stat-card--amber">
-                        <div class="stat-value">{{ unclaimedStudents.length }}</div>
-                        <div class="stat-label">未认领</div>
-                        <div class="stat-sub">等待管理员接手</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">{{ grantedStudents }}</div>
-                        <div class="stat-label">已开通授权</div>
-                        <div class="stat-sub">至少拥有 1 篇内容</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">{{ totalGrants }}</div>
-                        <div class="stat-label">授权文章合计</div>
-                        <div class="stat-sub">跨全部学员统计</div>
-                    </div>
-                </div>
-
                 <div class="student-toolbar">
                     <div class="input-wrap student-search">
                         <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
@@ -71,8 +43,11 @@
                 </EmptyState>
 
                 <EmptyState v-else-if="visibleStudents.length === 0" icon="fas fa-magnifying-glass"
-                    title="没有匹配的学员" text="换一个用户名关键词，或切换认领状态筛选试试。">
-                    <button type="button" class="btn btn--soft btn--sm" @click="resetFilters">清空筛选</button>
+                    :title="statusFilter === 'mine' && !searchQuery.trim() ? '还没有由你认领的学员' : '没有匹配的学员'"
+                    :text="statusFilter === 'mine' && !searchQuery.trim()
+                        ? '在「未认领」或「全部」里找到学员后点「认领」，他就会默认出现在这里。'
+                        : '换一个用户名关键词，或切换认领状态筛选试试。'">
+                    <button type="button" class="btn btn--soft btn--sm" @click="resetFilters">查看全部学员</button>
                 </EmptyState>
 
                 <ul v-else class="student-list" role="list" aria-label="学生账户列表">
@@ -261,7 +236,8 @@ const adminStore = useAdminStore()
 const accountId = computed(() => authStore.currentUser?.accountId ?? null)
 
 const searchQuery = ref('')
-const statusFilter = ref('all')
+// 默认只看「我的学员」：日常管理对象通常是自己认领的学员
+const statusFilter = ref('mine')
 const passwordDialogOpen = ref(false)
 const passwordTarget = ref(null)
 const newPassword = ref('')
@@ -295,9 +271,6 @@ const visibleStudents = computed(() => sortedStudents.value.filter(student => {
     if (statusFilter.value === 'unclaimed') return claimState(student, accountId.value) === 'unclaimed'
     return true
 }))
-
-const grantedStudents = computed(() => props.students.filter(student => student.permissions.length > 0).length)
-const totalGrants = computed(() => props.students.reduce((sum, student) => sum + student.permissions.length, 0))
 
 function initialOf(username) {
     return Array.from(String(username || '?'))[0]?.toUpperCase() || '?'
@@ -529,10 +502,6 @@ async function confirmDeleteStudent() {
     display: flex;
     flex-direction: column;
     gap: 20px;
-}
-
-.student-stats {
-    gap: 12px;
 }
 
 .student-toolbar {
@@ -816,10 +785,6 @@ async function confirmDeleteStudent() {
         flex: 1 1 auto;
     }
 
-    .student-stats {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
     .student-toolbar,
     .student-search {
         width: 100%;
@@ -996,12 +961,5 @@ async function confirmDeleteStudent() {
 
 .delete-modal .modal__body {
     background: var(--paper-1);
-}
-
-/* 统计数字固定高度，避免数字变化造成布局抖动 */
-.student-stats .stat-value {
-    display: flex;
-    align-items: center;
-    min-height: 2.3rem;
 }
 </style>

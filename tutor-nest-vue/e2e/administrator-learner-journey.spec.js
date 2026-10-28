@@ -68,7 +68,10 @@ test('administrator and learner complete the protected learning journey', async 
   })).status).toBe(200)
 
   await page.getByRole('button', { name: /学生账户/ }).click()
+  // 学生账户默认筛选「我的学员」；新建学员会被自动认领，因此应直接出现在列表里。
+  await expect(page.getByRole('button', { name: /我的学员/ })).toHaveAttribute('aria-pressed', 'true')
   const learnerRow = page.getByRole('listitem').filter({ hasText: learner })
+  await expect(learnerRow).toBeVisible()
   await learnerRow.getByRole('button', { name: /设置\/重置密码/ }).click()
   await page.locator('#student-new-password').fill(learnerPassword)
   await page.locator('#student-confirm-password').fill(learnerPassword)
@@ -157,6 +160,8 @@ test('administrator and learner complete the protected learning journey', async 
   await expect(page.getByRole('button', { name: '切换学员' })).toBeVisible()
 
   await page.getByRole('button', { name: /学生账户/ }).click()
+  // 「我的学员」筛选下看不到未认领的学员，先切到「全部」再操作认领/删除。
+  await page.getByRole('button', { name: /^全部/ }).click()
   const managedRow = page.getByRole('listitem').filter({ hasText: learner })
   await expect(managedRow).toBeVisible()
 

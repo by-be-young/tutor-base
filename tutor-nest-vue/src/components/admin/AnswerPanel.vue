@@ -7,195 +7,194 @@
                     <i aria-hidden="true" class="fas fa-key"></i>
                     设置答案
                 </h2>
-                <p class="text-sm text-muted">选择文章填写标准答案，可开启自动批阅；一次保存全部题目。</p>
+                <p class="text-sm text-muted">
+                    只显示当前学员在学的科目与已授权文章；填写标准答案后可开启自动批阅，一次保存全部题目。
+                </p>
             </div>
-            <span class="chip" :class="setArticleCount > 0 ? 'chip--lime' : 'chip--amber'">
-                <i aria-hidden="true" class="fas" :class="setArticleCount > 0 ? 'fa-circle-check' : 'fa-hourglass-half'"></i>
-                已设置 {{ setArticleCount }} / {{ totalArticles }} 篇
-            </span>
+            <div class="row row--wrap answer-head__chips">
+                <span class="chip chip--cyan">
+                    <i aria-hidden="true" class="fas fa-user-graduate"></i>
+                    {{ currentStudentName }}
+                </span>
+                <span class="chip" :class="setArticleCount > 0 ? 'chip--lime' : 'chip--amber'">
+                    <i aria-hidden="true" class="fas" :class="setArticleCount > 0 ? 'fa-circle-check' : 'fa-hourglass-half'"></i>
+                    已设置 {{ setArticleCount }} / {{ totalArticles }} 篇
+                </span>
+            </div>
         </header>
 
         <div class="panel-body answer-body">
-            <div class="stat-grid answer-stats">
-                <div class="stat-card stat-card--lime">
-                    <div class="stat-value">{{ setArticleCount }}</div>
-                    <div class="stat-label">已设置答案</div>
-                    <div class="stat-sub">已配置参考答案的文章</div>
-                </div>
-                <div class="stat-card stat-card--amber">
-                    <div class="stat-value">{{ unsetArticleCount }}</div>
-                    <div class="stat-label">待设置答案</div>
-                    <div class="stat-sub">尚未配置参考答案</div>
-                </div>
-                <div class="stat-card stat-card--violet">
-                    <div class="stat-value">{{ totalArticles }}</div>
-                    <div class="stat-label">内容库文章</div>
-                    <div class="stat-sub">{{ allSubjects.length }} 个学科分组</div>
-                </div>
-            </div>
+            <EmptyState v-if="!selectedStudentId" icon="fas fa-user-graduate" title="尚未选择学员"
+                text="在顶部切换学员后，这里只显示他在学的科目与已授权文章。" />
 
-            <div class="answer-subjects" role="group" aria-label="学科筛选">
-                <button v-for="item in subjectStats" :key="item.subject" type="button" class="answer-subject"
-                    :class="[`is-tone-${item.tone}`, { 'is-active': currentSubject === item.subject }]"
-                    :aria-pressed="currentSubject === item.subject" @click="selectSubject(item.subject)">
-                    <i aria-hidden="true" class="fas fa-book-open"></i>
-                    {{ item.subject }}
-                    <span class="answer-subject__count">{{ item.setCount }}/{{ item.total }}</span>
-                </button>
-            </div>
+            <EmptyState v-else-if="scopedArticles.length === 0" icon="fas fa-shield-halved"
+                title="该学员尚未开通任何内容授权"
+                text="先到「权限管理」为该学员整科开通在学科目，再回到这里设置标准答案。" />
 
-            <div class="answer-toolbar">
-                <div class="seg" role="group" aria-label="答案设置状态筛选">
-                    <button v-for="filter in filters" :key="filter.value" type="button" class="seg__btn"
-                        :class="{ 'is-active': activeFilter === filter.value }"
-                        :aria-pressed="activeFilter === filter.value" @click="activeFilter = filter.value">
-                        {{ filter.label }}
-                        <span class="seg__count">{{ filter.count }}</span>
+            <template v-else>
+                <div class="answer-subjects" role="group" aria-label="学科筛选">
+                    <button v-for="item in subjectStats" :key="item.subject" type="button" class="answer-subject"
+                        :class="[`is-tone-${item.tone}`, { 'is-active': currentSubject === item.subject }]"
+                        :aria-pressed="currentSubject === item.subject" @click="selectSubject(item.subject)">
+                        <i aria-hidden="true" class="fas fa-book-open"></i>
+                        {{ item.subject }}
+                        <span class="answer-subject__count">{{ item.setCount }}/{{ item.total }}</span>
                     </button>
                 </div>
-                <div class="input-wrap answer-search">
-                    <i aria-hidden="true" class="fas fa-magnifying-glass"></i>
-                    <input v-model="keyword" class="input" type="search" placeholder="搜索文章标题"
-                        aria-label="搜索文章标题" />
+
+                <div class="answer-toolbar">
+                    <div class="seg" role="group" aria-label="答案设置状态筛选">
+                        <button v-for="filter in filters" :key="filter.value" type="button" class="seg__btn"
+                            :class="{ 'is-active': activeFilter === filter.value }"
+                            :aria-pressed="activeFilter === filter.value" @click="activeFilter = filter.value">
+                            {{ filter.label }}
+                            <span class="seg__count">{{ filter.count }}</span>
+                        </button>
+                    </div>
+                    <div class="input-wrap answer-search">
+                        <i aria-hidden="true" class="fas fa-magnifying-glass"></i>
+                        <input v-model="keyword" class="input" type="search" placeholder="搜索文章标题"
+                            aria-label="搜索文章标题" />
+                    </div>
                 </div>
-            </div>
 
-            <div class="answer-layout">
-                <section class="answer-list" aria-label="答案设置文章列表">
-                    <div v-if="loadingKeys" class="answer-skeletons" aria-hidden="true">
-                        <div class="skeleton answer-skeleton"></div>
-                        <div class="skeleton answer-skeleton"></div>
-                        <div class="skeleton answer-skeleton"></div>
-                    </div>
-
-                    <EmptyState v-else-if="!currentSubject" icon="fas fa-folder-open" title="未选择学科"
-                        text="选择学科后浏览文章，点击文章填写标准答案。" />
-
-                    <EmptyState v-else-if="filteredArticles.length === 0" icon="fas fa-filter"
-                        title="没有符合条件的文章" text="切换筛选条件，或选择其他学科。" />
-
-                    <div v-else class="answer-tree">
-                        <ClickableTreeNode v-for="node in treeData" :key="node.name + (node.isFile ? node.blogId : '')"
-                            :node="node" :marked-ids="answerKeyIds" marked-label="已设置" :tone="currentTone"
-                            :initially-expanded="activeFilter === 'unset'" @file-click="openArticle" />
-                    </div>
-                </section>
-
-                <section class="answer-editor" aria-live="polite">
-                    <EmptyState v-if="!selectedArticle" icon="fas fa-pen-to-square" title="选择一篇文章开始设置答案"
-                        text="左侧点击文章后，这里会列出题号、标准答案与自动批阅开关。" />
-
-                    <div v-else-if="selectedArticle.loading" class="answer-editor__loading">
-                        <div class="answer-editor__loading-head">
-                            <div class="answer-editor__title-wrap">
-                                <span class="eyebrow">ANSWER KEYS</span>
-                                <h3 class="answer-editor__title">{{ selectedArticle.title }}</h3>
-                            </div>
-                            <button type="button" class="btn btn--soft btn--sm" @click="openOriginal">
-                                <i aria-hidden="true" class="fas fa-pen-to-square"></i>
-                                进入文章设置
-                            </button>
+                <div class="answer-layout">
+                    <section class="answer-list" aria-label="答案设置文章列表">
+                        <div v-if="loadingKeys" class="answer-skeletons" aria-hidden="true">
+                            <div class="skeleton answer-skeleton"></div>
+                            <div class="skeleton answer-skeleton"></div>
+                            <div class="skeleton answer-skeleton"></div>
                         </div>
-                        <div class="skeleton answer-editor__skeleton"></div>
-                        <div class="skeleton answer-editor__skeleton"></div>
-                    </div>
 
-                    <div v-else-if="selectedArticle.error" class="answer-editor__error">
-                        <p class="field-error">
-                            <i aria-hidden="true" class="fas fa-triangle-exclamation"></i>
-                            {{ selectedArticle.error }}
-                        </p>
-                        <div class="row row--wrap">
-                            <button type="button" class="btn btn--ghost btn--sm" @click="reloadArticle">
-                                <i aria-hidden="true" class="fas fa-rotate"></i> 重新加载
-                            </button>
-                            <button type="button" class="btn btn--soft btn--sm" @click="openOriginal">
-                                <i aria-hidden="true" class="fas fa-pen-to-square"></i> 进入文章设置
-                            </button>
+                        <EmptyState v-else-if="!currentSubject" icon="fas fa-folder-open" title="未选择学科"
+                            text="选择学科后浏览文章，点击文章填写标准答案。" />
+
+                        <EmptyState v-else-if="filteredArticles.length === 0" icon="fas fa-filter"
+                            title="没有符合条件的文章" text="切换筛选条件，或选择其他学科。" />
+
+                        <div v-else class="answer-tree">
+                            <ClickableTreeNode v-for="node in treeData" :key="node.name + (node.isFile ? node.blogId : '')"
+                                :node="node" :marked-ids="answerKeyIds" marked-label="已设置" :tone="currentTone"
+                                :initially-expanded="activeFilter === 'unset'" @file-click="openArticle" />
                         </div>
-                    </div>
+                    </section>
 
-                    <template v-else>
-                        <header class="answer-editor__head">
-                            <div class="answer-editor__title-wrap">
-                                <span class="eyebrow">ANSWER KEYS</span>
-                                <h3 class="answer-editor__title">{{ selectedArticle.title }}</h3>
-                                <div class="row row--wrap answer-editor__meta">
-                                    <span class="chip" :class="`chip--${currentTone}`">{{ selectedArticle.series }}</span>
-                                    <span v-if="selectedArticle.date" class="tag">{{ selectedArticle.date }}</span>
-                                    <span class="tag">{{ selectedArticle.questions.length }} 道题</span>
+                    <section class="answer-editor" aria-live="polite">
+                        <EmptyState v-if="!selectedArticle" icon="fas fa-pen-to-square" title="选择一篇文章开始设置答案"
+                            text="左侧点击文章后，这里会列出题号、标准答案与自动批阅开关。" />
+
+                        <div v-else-if="selectedArticle.loading" class="answer-editor__loading">
+                            <div class="answer-editor__loading-head">
+                                <div class="answer-editor__title-wrap">
+                                    <span class="eyebrow">ANSWER KEYS</span>
+                                    <h3 class="answer-editor__title">{{ selectedArticle.title }}</h3>
                                 </div>
-                            </div>
-                            <div class="answer-editor__head-actions">
-                                <span class="chip" :class="dirty ? 'chip--amber' : 'chip--lime'">
-                                    <i aria-hidden="true" class="fas" :class="dirty ? 'fa-pen' : 'fa-circle-check'"></i>
-                                    {{ dirty ? '待保存' : '已同步' }}
-                                </span>
                                 <button type="button" class="btn btn--soft btn--sm" @click="openOriginal">
                                     <i aria-hidden="true" class="fas fa-pen-to-square"></i>
                                     进入文章设置
                                 </button>
                             </div>
-                        </header>
-
-                        <EmptyState v-if="selectedArticle.questions.length === 0" icon="fas fa-circle-question"
-                            title="这篇文章里没有识别到题目"
-                            text="可以点击「进入文章设置」进入整页答案设置模式。">
-                            <button type="button" class="btn btn--soft btn--sm" @click="openOriginal">
-                                <i aria-hidden="true" class="fas fa-pen-to-square"></i>
-                                进入文章设置
-                            </button>
-                        </EmptyState>
-
-                        <div v-else class="answer-questions">
-                            <article v-for="question in selectedArticle.questions" :key="question.questionId"
-                                class="answer-card" :class="`is-tone-${currentTone}`">
-                                <header class="answer-card__head">
-                                    <span class="answer-card__index">第 {{ question.index }} 题</span>
-                                    <span class="tag mono">#{{ question.questionId }}</span>
-                                    <span v-if="question.wasSet" class="chip chip--lime">
-                                        <i aria-hidden="true" class="fas fa-circle-check"></i>
-                                        已设置
-                                    </span>
-                                    <label class="answer-switch"
-                                        :title="question.autoGrade ? '关闭自动批阅' : '开启自动批阅'">
-                                        <input v-model="question.autoGrade" type="checkbox" role="switch"
-                                            class="switch-input" :aria-label="`第 ${question.index} 题自动批阅`" />
-                                        <span class="switch-track" aria-hidden="true">
-                                            <span class="switch-thumb"></span>
-                                        </span>
-                                        <span class="answer-switch__text">自动批阅</span>
-                                    </label>
-                                </header>
-                                <textarea v-model="question.answerText" class="textarea answer-card__input" rows="3"
-                                    :placeholder="`填写第 ${question.index} 题的标准答案`"></textarea>
-                            </article>
+                            <div class="skeleton answer-editor__skeleton"></div>
+                            <div class="skeleton answer-editor__skeleton"></div>
                         </div>
 
-                        <footer class="answer-editor__footer">
-                            <div class="answer-editor__state">
-                                <span class="chip" :class="dirty ? 'chip--amber' : 'chip--lime'">
-                                    <i aria-hidden="true" class="fas" :class="dirty ? 'fa-pen' : 'fa-circle-check'"></i>
-                                    {{ dirty ? '有未保存改动' : '已同步' }}
-                                </span>
-                                <span class="text-sm text-muted">
-                                    共 {{ selectedArticle.questions.length }} 题 · 自动批阅
-                                    {{ autoGradeCount }} 题
-                                </span>
-                            </div>
-                            <div class="answer-editor__actions">
-                                <button type="button" class="btn btn--primary"
-                                    :disabled="saving || selectedArticle.questions.length === 0"
-                                    @click="saveAnswerKeys">
-                                    <i aria-hidden="true" class="fas"
-                                        :class="saving ? 'fa-circle-notch fa-spin' : 'fa-cloud-arrow-up'"></i>
-                                    {{ saving ? '保存中…' : '批量保存' }}
+                        <div v-else-if="selectedArticle.error" class="answer-editor__error">
+                            <p class="field-error">
+                                <i aria-hidden="true" class="fas fa-triangle-exclamation"></i>
+                                {{ selectedArticle.error }}
+                            </p>
+                            <div class="row row--wrap">
+                                <button type="button" class="btn btn--ghost btn--sm" @click="reloadArticle">
+                                    <i aria-hidden="true" class="fas fa-rotate"></i> 重新加载
+                                </button>
+                                <button type="button" class="btn btn--soft btn--sm" @click="openOriginal">
+                                    <i aria-hidden="true" class="fas fa-pen-to-square"></i> 进入文章设置
                                 </button>
                             </div>
-                        </footer>
-                    </template>
-                </section>
-            </div>
+                        </div>
+
+                        <template v-else>
+                            <header class="answer-editor__head">
+                                <div class="answer-editor__title-wrap">
+                                    <span class="eyebrow">ANSWER KEYS</span>
+                                    <h3 class="answer-editor__title">{{ selectedArticle.title }}</h3>
+                                    <div class="row row--wrap answer-editor__meta">
+                                        <span class="chip" :class="`chip--${currentTone}`">{{ selectedArticle.series }}</span>
+                                        <span v-if="selectedArticle.date" class="tag">{{ selectedArticle.date }}</span>
+                                        <span class="tag">{{ selectedArticle.questions.length }} 道题</span>
+                                    </div>
+                                </div>
+                                <div class="answer-editor__head-actions">
+                                    <span class="chip" :class="dirty ? 'chip--amber' : 'chip--lime'">
+                                        <i aria-hidden="true" class="fas" :class="dirty ? 'fa-pen' : 'fa-circle-check'"></i>
+                                        {{ dirty ? '待保存' : '已同步' }}
+                                    </span>
+                                    <button type="button" class="btn btn--soft btn--sm" @click="openOriginal">
+                                        <i aria-hidden="true" class="fas fa-pen-to-square"></i>
+                                        进入文章设置
+                                    </button>
+                                </div>
+                            </header>
+
+                            <EmptyState v-if="selectedArticle.questions.length === 0" icon="fas fa-circle-question"
+                                title="这篇文章里没有识别到题目"
+                                text="可以点击「进入文章设置」进入整页答案设置模式。">
+                                <button type="button" class="btn btn--soft btn--sm" @click="openOriginal">
+                                    <i aria-hidden="true" class="fas fa-pen-to-square"></i>
+                                    进入文章设置
+                                </button>
+                            </EmptyState>
+
+                            <div v-else class="answer-questions">
+                                <article v-for="question in selectedArticle.questions" :key="question.questionId"
+                                    class="answer-card" :class="`is-tone-${currentTone}`">
+                                    <header class="answer-card__head">
+                                        <span class="answer-card__index">第 {{ question.index }} 题</span>
+                                        <span class="tag mono">#{{ question.questionId }}</span>
+                                        <span v-if="question.wasSet" class="chip chip--lime">
+                                            <i aria-hidden="true" class="fas fa-circle-check"></i>
+                                            已设置
+                                        </span>
+                                        <label class="answer-switch"
+                                            :title="question.autoGrade ? '关闭自动批阅' : '开启自动批阅'">
+                                            <input v-model="question.autoGrade" type="checkbox" role="switch"
+                                                class="switch-input" :aria-label="`第 ${question.index} 题自动批阅`" />
+                                            <span class="switch-track" aria-hidden="true">
+                                                <span class="switch-thumb"></span>
+                                            </span>
+                                            <span class="answer-switch__text">自动批阅</span>
+                                        </label>
+                                    </header>
+                                    <textarea v-model="question.answerText" class="textarea answer-card__input" rows="3"
+                                        :placeholder="`填写第 ${question.index} 题的标准答案`"></textarea>
+                                </article>
+                            </div>
+
+                            <footer class="answer-editor__footer">
+                                <div class="answer-editor__state">
+                                    <span class="chip" :class="dirty ? 'chip--amber' : 'chip--lime'">
+                                        <i aria-hidden="true" class="fas" :class="dirty ? 'fa-pen' : 'fa-circle-check'"></i>
+                                        {{ dirty ? '有未保存改动' : '已同步' }}
+                                    </span>
+                                    <span class="text-sm text-muted">
+                                        共 {{ selectedArticle.questions.length }} 题 · 自动批阅
+                                        {{ autoGradeCount }} 题
+                                    </span>
+                                </div>
+                                <div class="answer-editor__actions">
+                                    <button type="button" class="btn btn--primary"
+                                        :disabled="saving || selectedArticle.questions.length === 0"
+                                        @click="saveAnswerKeys">
+                                        <i aria-hidden="true" class="fas"
+                                            :class="saving ? 'fa-circle-notch fa-spin' : 'fa-cloud-arrow-up'"></i>
+                                        {{ saving ? '保存中…' : '批量保存' }}
+                                    </button>
+                                </div>
+                            </footer>
+                        </template>
+                    </section>
+                </div>
+            </template>
         </div>
     </div>
 </template>
@@ -203,6 +202,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { grantedArticles } from '@/utils/adminSubjects'
 import { learningGateway } from '@/gateways/learningGateway'
 import { showToast } from '@/utils/toast'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -210,7 +210,9 @@ import ClickableTreeNode from './ClickableTreeNode.vue'
 
 const props = defineProps({
     blogData: { type: Array, default: () => [] },
-    allSubjects: { type: Array, default: () => [] }
+    allSubjects: { type: Array, default: () => [] },
+    students: { type: Array, default: () => [] },
+    selectedStudentId: { type: [String, Number], default: null }
 })
 
 const router = useRouter()
@@ -234,22 +236,35 @@ function subjectTone(subject) {
     return 'pink'
 }
 
-const totalArticles = computed(() => props.blogData.length)
-
-const setArticleCount = computed(() => props.blogData
-    .filter(blog => answerKeyIds.value.includes(Number(blog.id))).length)
-
-const unsetArticleCount = computed(() => Math.max(0, totalArticles.value - setArticleCount.value))
-
 const currentTone = computed(() => subjectTone(currentSubject.value))
 
-const subjectArticles = computed(() => props.blogData.filter(blog => blog.series === currentSubject.value))
+// 只允许在当前学员「在学」的科目与「已授权」文章里设置答案：
+// 未授权文章对该学员不可见，也不需要维护标准答案。
+const currentStudent = computed(() => props.students
+    .find(item => String(item.id) === String(props.selectedStudentId)) || null)
+const currentStudentName = computed(() => currentStudent.value?.username || '未选择学员')
 
-const subjectStats = computed(() => props.allSubjects.map(subject => {
-    const articles = props.blogData.filter(blog => blog.series === subject)
-    const setCount = articles.filter(blog => answerKeyIds.value.includes(Number(blog.id))).length
-    return { subject, tone: subjectTone(subject), total: articles.length, setCount }
+const scopedArticles = computed(() => grantedArticles({
+    articles: props.blogData,
+    permissions: currentStudent.value?.permissions || [],
+    hasLearner: Boolean(props.selectedStudentId)
 }))
+
+const totalArticles = computed(() => scopedArticles.value.length)
+
+const setArticleCount = computed(() => scopedArticles.value
+    .filter(blog => answerKeyIds.value.includes(Number(blog.id))).length)
+
+const subjectArticles = computed(() => scopedArticles.value.filter(blog => blog.series === currentSubject.value))
+
+const subjectStats = computed(() => props.allSubjects
+    .map(subject => {
+        const articles = scopedArticles.value.filter(blog => blog.series === subject)
+        if (articles.length === 0) return null
+        const setCount = articles.filter(blog => answerKeyIds.value.includes(Number(blog.id))).length
+        return { subject, tone: subjectTone(subject), total: articles.length, setCount }
+    })
+    .filter(Boolean))
 
 const filters = computed(() => {
     const articles = subjectArticles.value
@@ -496,11 +511,29 @@ async function saveAnswerKeys() {
     }
 }
 
-watch(() => props.allSubjects, (subjects) => {
-    if (subjects.length > 0 && !currentSubject.value) {
-        currentSubject.value = subjects[0]
+// 学科/学员变化后保证当前学科仍在授权范围内；切换学员时关闭旧文章，避免跨学员误改答案。
+watch([subjectStats, () => props.selectedStudentId], ([stats], previous) => {
+    const subjects = stats.map(item => item.subject)
+    if (!subjects.includes(currentSubject.value)) {
+        currentSubject.value = subjects[0] || ''
+    }
+    if (previous && previous[1] !== props.selectedStudentId) {
+        selectedArticle.value = null
+        snapshot.value = ''
+        keyword.value = ''
+        activeFilter.value = 'unset'
     }
 }, { immediate: true })
+
+// 已选文章不再属于当前学员授权范围时关闭编辑器
+watch(scopedArticles, (articles) => {
+    const article = selectedArticle.value
+    if (!article) return
+    if (!articles.some(blog => Number(blog.id) === Number(article.id))) {
+        selectedArticle.value = null
+        snapshot.value = ''
+    }
+})
 
 onMounted(() => {
     loadAnswerKeysCache()
@@ -516,6 +549,13 @@ onMounted(() => {
     align-items: flex-start;
 }
 
+.answer-head__chips {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .answer-head__copy {
     display: flex;
     flex-direction: column;
@@ -526,10 +566,6 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     gap: 16px;
-}
-
-.answer-stats {
-    gap: 12px;
 }
 
 .answer-subjects {
@@ -849,10 +885,6 @@ onMounted(() => {
         padding: 18px;
     }
 
-    .answer-stats {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     .answer-editor__head-actions,
     .answer-editor__loading-head {
         width: 100%;
@@ -868,10 +900,6 @@ onMounted(() => {
 }
 
 @media (max-width: 420px) {
-    .answer-stats {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
     .answer-subject {
         flex: 1 1 100%;
         justify-content: center;
@@ -983,12 +1011,5 @@ onMounted(() => {
 
 .answer-search .input::-webkit-search-cancel-button {
     filter: none;
-}
-
-/* 统计数字固定高度，避免数字变化造成布局抖动 */
-.answer-stats .stat-value {
-    display: flex;
-    align-items: center;
-    min-height: 2.3rem;
 }
 </style>
