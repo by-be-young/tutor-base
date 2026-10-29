@@ -30,17 +30,37 @@ export function catalogSignature(items = []) {
     .join('|')
 }
 
-/** 我的课件 ID 集合 = 我认领学科下的全部课件 ∪ 我单篇认领的课件。 */
-export function computeVisibleArticleIds(catalogItems = [], subjectClaims = [], articleClaims = []) {
+/** 课件是否被「学科覆盖但单篇释放」排除。 */
+export function isExcludedArticle(articleId, excludedArticleIds = []) {
+  const id = toPositiveId(articleId)
+  if (id === null) return false
+  return (excludedArticleIds || []).some(value => toPositiveId(value) === id)
+}
+
+/**
+ * 我的课件 ID 集合：
+ * 学科认领覆盖的课件（剔除单篇释放产生的排除项）∪ 我单篇认领的课件。
+ * 单篇认领优先于排除：再次单篇认领会恢复该课件。
+ */
+export function computeVisibleArticleIds(
+  catalogItems = [],
+  subjectClaims = [],
+  articleClaims = [],
+  excludedArticleIds = []
+) {
   const claimedSubjects = new Set((subjectClaims || []).map(subject => String(subject)))
   const claimedArticleIds = new Set(
     (articleClaims || []).map(toPositiveId).filter(id => id !== null)
+  )
+  const excludedIds = new Set(
+    (excludedArticleIds || []).map(toPositiveId).filter(id => id !== null)
   )
   const visible = new Set()
   for (const item of catalogItems || []) {
     const articleId = toPositiveId(item?.articleId)
     if (articleId === null) continue
-    if (claimedSubjects.has(String(item?.subject ?? '')) || claimedArticleIds.has(articleId)) {
+    const coveredBySubject = claimedSubjects.has(String(item?.subject ?? ''))
+    if (claimedArticleIds.has(articleId) || (coveredBySubject && !excludedIds.has(articleId))) {
       visible.add(articleId)
     }
   }

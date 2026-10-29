@@ -19,6 +19,12 @@ final class JdbcCoursewareScope implements CoursewareScope {
                           FROM public.admin_subject_claim AS scoped_subject_claim
                           WHERE scoped_subject_claim.admin_account_id = :administratorAccountId
                             AND scoped_subject_claim.subject = scoped_catalog.subject
+                            AND NOT EXISTS (
+                                SELECT 1
+                                FROM public.admin_courseware_exclusion AS scoped_exclusion
+                                WHERE scoped_exclusion.admin_account_id = :administratorAccountId
+                                  AND scoped_exclusion.article_id = scoped_catalog.article_id
+                            )
                       )
                       OR EXISTS (
                           SELECT 1

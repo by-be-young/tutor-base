@@ -6,8 +6,9 @@ import java.util.List;
 /**
  * 管理员课件目录与认领关系。
  *
- * <p>学科认领与单篇认领相互独立：认领学科会覆盖该学科当前及未来全部课件，释放学科后
- * 只有单篇认领仍然生效。写操作均为幂等，返回已存在认领的原始 {@code claimedAt}。
+ * <p>学科认领与单篇认领相互独立：认领学科会覆盖该学科当前及未来全部课件。即使学科已被认领，
+ * 仍可排除其中的单篇课件（释放该篇）；再次单篇认领或重新认领学科会恢复被排除的课件。
+ * 写操作均为幂等。
  */
 public interface CoursewareClaimAdministration {
 
@@ -32,11 +33,12 @@ public interface CoursewareClaimAdministration {
     record CatalogEntry(long articleId, String subject, String title) {
     }
 
-    record Claims(List<String> subjectClaims, List<Long> articleClaims) {
+    record Claims(List<String> subjectClaims, List<Long> articleClaims, List<Long> excludedArticleIds) {
 
         public Claims {
             subjectClaims = List.copyOf(subjectClaims);
             articleClaims = List.copyOf(articleClaims);
+            excludedArticleIds = List.copyOf(excludedArticleIds);
         }
     }
 
@@ -62,6 +64,7 @@ public interface CoursewareClaimAdministration {
             String title,
             boolean individuallyClaimed,
             boolean coveredBySubjectClaim,
+            boolean excluded,
             List<ClaimBy> claimedBy) {
 
         public CatalogItem {

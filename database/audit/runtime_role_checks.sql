@@ -58,7 +58,11 @@ WITH expected_privilege(table_name, privilege_type) AS (
         ('admin_courseware_claim', 'SELECT'),
         ('admin_courseware_claim', 'INSERT'),
         ('admin_courseware_claim', 'UPDATE'),
-        ('admin_courseware_claim', 'DELETE')
+        ('admin_courseware_claim', 'DELETE'),
+        ('admin_courseware_exclusion', 'SELECT'),
+        ('admin_courseware_exclusion', 'INSERT'),
+        ('admin_courseware_exclusion', 'UPDATE'),
+        ('admin_courseware_exclusion', 'DELETE')
 ), expected_sequence(sequence_name) AS (
     VALUES
         ('student_id_seq'),
@@ -74,13 +78,15 @@ WITH expected_privilege(table_name, privilege_type) AS (
         ('achievement_claims_id_seq'),
         ('task_assignments_id_seq'),
         ('admin_subject_claim_id_seq'),
-        ('admin_courseware_claim_id_seq')
+        ('admin_courseware_claim_id_seq'),
+        ('admin_courseware_exclusion_id_seq')
 ), expected_rls_table(table_name) AS (
     VALUES ('student'), ('account'), ('account_activation'), ('account_session'),
         ('daily_check_in'), ('user_points'), ('task_claims'), ('card_collection'),
         ('article_answer_keys'), ('article_question_submissions'), ('wrong_questions'),
         ('achievement_claims'), ('task_assignments'), ('card_sets'), ('card_definitions'),
-        ('courseware_catalog'), ('admin_subject_claim'), ('admin_courseware_claim')
+        ('courseware_catalog'), ('admin_subject_claim'), ('admin_courseware_claim'),
+        ('admin_courseware_exclusion')
 ), expected_policy(table_name, policy_name, command, using_expression, check_expression) AS (
     VALUES
         ('student', 'tutor_base_runtime_student_select', 'r', 'true', NULL),
@@ -115,7 +121,8 @@ WITH expected_privilege(table_name, privilege_type) AS (
         ('card_definitions', 'tutor_base_runtime_card_definitions_select', 'r', 'true', NULL),
         ('courseware_catalog', 'tutor_base_runtime_courseware_catalog_all', '*', 'true', 'true'),
         ('admin_subject_claim', 'tutor_base_runtime_admin_subject_claim_all', '*', 'true', 'true'),
-        ('admin_courseware_claim', 'tutor_base_runtime_admin_courseware_claim_all', '*', 'true', 'true')
+        ('admin_courseware_claim', 'tutor_base_runtime_admin_courseware_claim_all', '*', 'true', 'true'),
+        ('admin_courseware_exclusion', 'tutor_base_runtime_admin_courseware_exclusion_all', '*', 'true', 'true')
 ), checks AS (
     SELECT 'runtime roles missing or unsafe' AS check_name, count(*)::bigint AS anomaly_count
     FROM (VALUES ('tutor_base_runtime'), ('tutor_base_app')) AS expected(role_name)

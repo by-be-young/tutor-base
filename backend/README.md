@@ -288,6 +288,7 @@ PostgreSQL 结构只通过 Flyway 管理：
 - `V11__add_learner_claiming.sql`：为 `student` 增加管理员认领字段、配对约束、部分索引和账户删除时的认领清理触发器。
 - `V12__add_courseware_claiming.sql`：新增课件目录与管理员课件/学科认领表；学科与管理员多对多，认领学科自动覆盖该学科当前及未来全部课件。
 - `V14__grant_courseware_runtime_privileges.sql`：为已存在的运行时角色补齐 V12 表/序列权限与 RLS policy，避免升级后管理端接口因权限缺失返回 503。
+- `V15__add_courseware_exclusion.sql`：新增课件排除表；学科认领覆盖下可单独释放某篇课件，重新认领恢复，释放学科时清理该科排除。
 
 ### Supabase 出现 `relation "account" already exists`
 
@@ -385,10 +386,10 @@ docker run --rm -p 8080:8080 tutor-base-backend:dev
 - `PUT /api/v1/admin/learners/{learnerId}/password`：管理员设置或重置学习者密码。
 - `GET /api/v1/admin/learners/{learnerId}/study-progress`：只返回该学习者已授权、且属于当前管理员“我的课件”的作答与待批阅进度。
 - `POST /api/v1/admin/courseware-catalog/sync`：管理端同步静态课件目录（articleId → 学科/标题），幂等 upsert。
-- `GET /api/v1/admin/courseware-claims`：查询当前管理员显式认领的学科与单篇课件。
-- `PUT/DELETE /api/v1/admin/courseware-claims/subjects/{subject}`：认领/释放学科；认领自动覆盖该学科当前及未来课件。
-- `PUT/DELETE /api/v1/admin/courseware-claims/articles/{articleId}`：单篇认领/释放课件。
-- `GET /api/v1/admin/courseware-claims/catalog?scope=mine|unclaimed|all`：课件认领目录与归属。
+- `GET /api/v1/admin/courseware-claims`：查询当前管理员显式认领的学科、单篇课件与排除的课件 ID。
+- `PUT/DELETE /api/v1/admin/courseware-claims/subjects/{subject}`：认领/释放学科；认领自动覆盖该学科当前及未来课件，并在认领/释放时清理该科排除。
+- `PUT/DELETE /api/v1/admin/courseware-claims/articles/{articleId}`：单篇认领/释放；学科覆盖下释放会写入排除，重新认领恢复。
+- `GET /api/v1/admin/courseware-claims/catalog?scope=mine|unclaimed|all`：课件认领目录、归属与当前管理员的 `excluded` 标记。
 - `GET /api/v1/admin/analytics/overview`：管理台概览指标；待批阅/提交数只统计当前管理员的“我的课件”。
 - `GET /api/v1/admin/analytics/activity?days=30`：近 7～90 天每日提交/批阅趋势（Asia/Shanghai 自然日补零，只统计“我的课件”）。
 - `GET /api/v1/admin/learners/{learnerId}/profile`：学员详情（积分/等级/近 30 天签到/分学科进度/最近作答/30 天动态）；学习数据只含“我的课件”。

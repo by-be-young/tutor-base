@@ -93,6 +93,7 @@ class CoursewareClaimHttpContractTest {
         jdbc.update("DELETE FROM public.wrong_questions");
         jdbc.update("DELETE FROM public.article_question_submissions");
         jdbc.update("DELETE FROM public.article_answer_keys");
+        jdbc.update("DELETE FROM public.admin_courseware_exclusion");
         jdbc.update("DELETE FROM public.admin_courseware_claim");
         jdbc.update("DELETE FROM public.admin_subject_claim");
         jdbc.update("DELETE FROM public.courseware_catalog");
@@ -224,16 +225,17 @@ class CoursewareClaimHttpContractTest {
     void givenSubjectClaimWhenReleasedThenOnlyIndividuallyClaimedArticlesStayClaimed() throws Exception {
         Cookie adminCookie = login("admin", "Admin-password-2026");
         BrowserSession admin = csrf(adminCookie);
-        mockMvc.perform(put(subjectClaimPath(CHEMISTRY))
-                        .cookie(adminCookie)
-                        .header("X-CSRF-TOKEN", admin.csrfToken()))
-                .andExpect(status().isOk());
+        // 先在未认领学科时单独认领 101，形成真实的单篇认领行；再认领学科、释放学科。
         mockMvc.perform(put(articleClaimPath(CHEMISTRY_ARTICLE_ONE))
                         .cookie(adminCookie)
                         .header("X-CSRF-TOKEN", admin.csrfToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.articleId").value(CHEMISTRY_ARTICLE_ONE))
                 .andExpect(jsonPath("$.claimedAt").isString());
+        mockMvc.perform(put(subjectClaimPath(CHEMISTRY))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isOk());
 
         mockMvc.perform(delete(subjectClaimPath(CHEMISTRY))
                         .cookie(adminCookie)
@@ -519,6 +521,249 @@ class CoursewareClaimHttpContractTest {
         assertThat(jdbc.queryForObject(
                 "SELECT permissions::text FROM public.student WHERE id = 2", String.class))
                 .isEqualTo("{102,201}");
+    }
+
+    @Test
+    void givenSubjectClaimWhenReleasingSingleArticleThenItLeavesMineAndBusinessEndpoints()
+            throws Exception {
+        jdbc.update("INSERT INTO public.article_answer_keys (blog_id, question_id, answer_text) "
+                + "VALUES (101, 'q1', 'answer-101'), (102, 'q1', 'answer-102')");
+        jdbc.update("UPDATE public.student SET permissions = '{101,102,201}'::integer[] WHERE id = 2");
+        Cookie adminCookie = login("admin", "Admin-password-2026");
+        BrowserSession admin = csrf(adminCookie);
+        mockMvc.perform(put(subjectClaimPath(CHEMISTRY))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete(articleClaimPath(CHEMISTRY_ARTICLE_ONE))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(delete(articleClaimPath(CHEMISTRY_ARTICLE_ONE))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isNoContent());
+        assertThat(countExclusions(500L, CHEMISTRY_ARTICLE_ONE)).isEqualTo(1);
+
+        mockMvc.perform(get("/api/v1/admin/courseware-claims").cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.subjectClaims[0]").value(CHEMISTRY))
+                .andExpect(jsonPath("$.articleClaims").isEmpty())
+                .andExpect(jsonPath("$.excludedArticleIds.length()").value(1))
+                .andExpect(jsonPath("$.excludedArticleIds[0]").value(CHEMISTRY_ARTICLE_ONE));
+
+        MvcResult mine = mockMvc.perform(get("/api/v1/admin/courseware-claims/catalog")
+                        .param("scope", "mine")
+                        .cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertThat(articleIdsIn(readTree(mine))).containsExactly(CHEMISTRY_ARTICLE_TWO);
+
+        MvcResult unclaimed = mockMvc.perform(get("/api/v1/admin/courseware-claims/catalog")
+                        .param("scope", "unclaimed")
+                        .cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andReturn();
+        tools.jackson.databind.JsonNode unclaimedItem =
+                findItem(readTree(unclaimed), CHEMISTRY_ARTICLE_ONE);
+        assertThat(unclaimedItem.get("excluded").asBoolean()).isTrue();
+        assertThat(unclaimedItem.get("coveredBySubjectClaim").asBoolean()).isFalse();
+        assertThat(unclaimedItem.get("claimedBy").size()).isZero();
+
+        tools.jackson.databind.JsonNode allItem = findItem(
+                readTree(mockMvc.perform(get("/api/v1/admin/courseware-claims/catalog")
+                                .param("scope", "all")
+                                .cookie(adminCookie))
+                        .andExpect(status().isOk())
+                        .andReturn()),
+                CHEMISTRY_ARTICLE_ONE);
+        assertThat(allItem.get("excluded").asBoolean()).isTrue();
+        assertThat(allItem.get("claimedBy").size()).isZero();
+
+        mockMvc.perform(get("/api/v1/admin/articles/answer-key-article-ids").cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0]").value(CHEMISTRY_ARTICLE_TWO));
+        mockMvc.perform(get("/api/v1/admin/articles/101/answer-keys").cookie(adminCookie))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("courseware_not_claimed"));
+        mockMvc.perform(get("/api/v1/admin/articles/101/study-state")
+                        .param("learnerId", "2")
+                        .cookie(adminCookie))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("courseware_not_claimed"));
+        mockMvc.perform(get("/api/v1/admin/learners/2/study-progress").cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].articleId").value(CHEMISTRY_ARTICLE_TWO));
+        mockMvc.perform(put("/api/v1/admin/learners/2/content-grants")
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"articleIds\":[101]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("courseware_not_claimed"));
+    }
+
+    @Test
+    void givenExcludedArticleWhenClaimingItAgainThenItIsRestoredWithoutMaterializingClaim()
+            throws Exception {
+        jdbc.update("INSERT INTO public.article_answer_keys (blog_id, question_id, answer_text) "
+                + "VALUES (101, 'q1', 'answer-101')");
+        Cookie adminCookie = login("admin", "Admin-password-2026");
+        BrowserSession admin = csrf(adminCookie);
+        mockMvc.perform(put(subjectClaimPath(CHEMISTRY))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isOk());
+        mockMvc.perform(delete(articleClaimPath(CHEMISTRY_ARTICLE_ONE))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isNoContent());
+        assertThat(countExclusions(500L, CHEMISTRY_ARTICLE_ONE)).isEqualTo(1);
+
+        MvcResult firstClaim = mockMvc.perform(put(articleClaimPath(CHEMISTRY_ARTICLE_ONE))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articleId").value(CHEMISTRY_ARTICLE_ONE))
+                .andExpect(jsonPath("$.claimedAt").isString())
+                .andReturn();
+        String firstClaimedAt = readTree(firstClaim).get("claimedAt").asText();
+        mockMvc.perform(put(articleClaimPath(CHEMISTRY_ARTICLE_ONE))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.claimedAt").value(firstClaimedAt));
+
+        assertThat(countExclusions(500L, CHEMISTRY_ARTICLE_ONE)).isZero();
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM public.admin_courseware_claim
+                WHERE admin_account_id = 500 AND article_id = 101
+                """, Long.class)).isZero();
+        mockMvc.perform(get("/api/v1/admin/courseware-claims").cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.excludedArticleIds").isEmpty())
+                .andExpect(jsonPath("$.articleClaims").isEmpty());
+        MvcResult mine = mockMvc.perform(get("/api/v1/admin/courseware-claims/catalog")
+                        .param("scope", "mine")
+                        .cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertThat(articleIdsIn(readTree(mine)))
+                .containsExactly(CHEMISTRY_ARTICLE_ONE, CHEMISTRY_ARTICLE_TWO);
+        mockMvc.perform(get("/api/v1/admin/articles/101/answer-keys").cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].answerText").value("answer-101"));
+    }
+
+    @Test
+    void givenExclusionsWhenReclaimingOrReleasingSubjectThenExclusionsAreCleaned() throws Exception {
+        Cookie adminCookie = login("admin", "Admin-password-2026");
+        BrowserSession admin = csrf(adminCookie);
+        mockMvc.perform(put(subjectClaimPath(CHEMISTRY))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isOk());
+        mockMvc.perform(delete(articleClaimPath(CHEMISTRY_ARTICLE_ONE))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isNoContent());
+        assertThat(countExclusions(500L, CHEMISTRY_ARTICLE_ONE)).isEqualTo(1);
+
+        mockMvc.perform(put(subjectClaimPath(CHEMISTRY))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isOk());
+        assertThat(countExclusions(500L, CHEMISTRY_ARTICLE_ONE)).isZero();
+        mockMvc.perform(get("/api/v1/admin/courseware-claims").cookie(adminCookie))
+                .andExpect(jsonPath("$.excludedArticleIds").isEmpty());
+        MvcResult mineAfterReclaim = mockMvc.perform(get("/api/v1/admin/courseware-claims/catalog")
+                        .param("scope", "mine")
+                        .cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertThat(articleIdsIn(readTree(mineAfterReclaim)))
+                .containsExactly(CHEMISTRY_ARTICLE_ONE, CHEMISTRY_ARTICLE_TWO);
+
+        mockMvc.perform(delete(articleClaimPath(CHEMISTRY_ARTICLE_ONE))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isNoContent());
+        assertThat(countExclusions(500L, CHEMISTRY_ARTICLE_ONE)).isEqualTo(1);
+        mockMvc.perform(delete(subjectClaimPath(CHEMISTRY))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isNoContent());
+        assertThat(countExclusions(500L, CHEMISTRY_ARTICLE_ONE)).isZero();
+        mockMvc.perform(get("/api/v1/admin/courseware-claims").cookie(adminCookie))
+                .andExpect(jsonPath("$.subjectClaims").isEmpty())
+                .andExpect(jsonPath("$.excludedArticleIds").isEmpty());
+    }
+
+    @Test
+    void givenTwoAdministratorsWhenOneExcludesArticleThenTheOtherStillSeesIt() throws Exception {
+        jdbc.update("INSERT INTO public.article_answer_keys (blog_id, question_id, answer_text) "
+                + "VALUES (101, 'q1', 'answer-101')");
+        Cookie adminCookie = login("admin", "Admin-password-2026");
+        BrowserSession admin = csrf(adminCookie);
+        Cookie adminTwoCookie = login("admin2", "Admin2-password-2026");
+        BrowserSession adminTwo = csrf(adminTwoCookie);
+        for (var request : List.of(
+                put(subjectClaimPath(CHEMISTRY))
+                        .cookie(adminCookie).header("X-CSRF-TOKEN", admin.csrfToken()),
+                put(subjectClaimPath(CHEMISTRY))
+                        .cookie(adminTwoCookie).header("X-CSRF-TOKEN", adminTwo.csrfToken()))) {
+            mockMvc.perform(request).andExpect(status().isOk());
+        }
+        mockMvc.perform(delete(articleClaimPath(CHEMISTRY_ARTICLE_ONE))
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isNoContent());
+
+        MvcResult adminOneMine = mockMvc.perform(get("/api/v1/admin/courseware-claims/catalog")
+                        .param("scope", "mine")
+                        .cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertThat(articleIdsIn(readTree(adminOneMine))).containsExactly(CHEMISTRY_ARTICLE_TWO);
+        MvcResult adminTwoMine = mockMvc.perform(get("/api/v1/admin/courseware-claims/catalog")
+                        .param("scope", "mine")
+                        .cookie(adminTwoCookie))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertThat(articleIdsIn(readTree(adminTwoMine)))
+                .containsExactly(CHEMISTRY_ARTICLE_ONE, CHEMISTRY_ARTICLE_TWO);
+        mockMvc.perform(get("/api/v1/admin/articles/101/answer-keys").cookie(adminTwoCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].answerText").value("answer-101"));
+        mockMvc.perform(get("/api/v1/admin/articles/101/answer-keys").cookie(adminCookie))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("courseware_not_claimed"));
+
+        tools.jackson.databind.JsonNode allItem = findItem(
+                readTree(mockMvc.perform(get("/api/v1/admin/courseware-claims/catalog")
+                                .param("scope", "all")
+                                .cookie(adminCookie))
+                        .andExpect(status().isOk())
+                        .andReturn()),
+                CHEMISTRY_ARTICLE_ONE);
+        assertThat(allItem.get("excluded").asBoolean()).isTrue();
+        assertThat(allItem.get("claimedBy").size()).isEqualTo(1);
+        assertThat(allItem.get("claimedBy").get(0).get("accountId").asLong()).isEqualTo(501L);
+
+        mockMvc.perform(get("/api/v1/admin/courseware-claims").cookie(adminCookie))
+                .andExpect(jsonPath("$.excludedArticleIds[0]").value(CHEMISTRY_ARTICLE_ONE));
+        mockMvc.perform(get("/api/v1/admin/courseware-claims").cookie(adminTwoCookie))
+                .andExpect(jsonPath("$.excludedArticleIds").isEmpty());
+    }
+
+    private long countExclusions(long administratorAccountId, long articleId) {
+        return jdbc.queryForObject("""
+                SELECT count(*) FROM public.admin_courseware_exclusion
+                WHERE admin_account_id = ? AND article_id = ?
+                """, Long.class, administratorAccountId, articleId);
     }
 
     private org.springframework.test.web.servlet.ResultActions syncCatalog(

@@ -39,10 +39,10 @@
             </label>
         </div>
 
-        <div v-show="expanded" class="perm-folder__children">
+        <div v-show="expanded" class="perm-folder__children" :class="{ 'is-scrollable': depth === 0 }">
             <PermissionTreeNode v-for="child in node.children"
                 :key="child.name + (child.isFile ? child.blogId : '')" :node="child" :permissions="permissions"
-                :tone="tone" :initially-expanded="initiallyExpanded"
+                :tone="tone" :initially-expanded="initiallyExpanded" :depth="depth + 1"
                 @toggle="(blogId, checked) => emit('toggle', blogId, checked)"
                 @toggle-many="(ids, checked) => emit('toggle-many', ids, checked)" />
         </div>
@@ -56,7 +56,8 @@ const props = defineProps({
     node: { type: Object, required: true },
     permissions: { type: Array, default: () => [] },
     tone: { type: String, default: 'violet' },
-    initiallyExpanded: { type: Boolean, default: false }
+    initiallyExpanded: { type: Boolean, default: false },
+    depth: { type: Number, default: 0 }
 })
 
 const emit = defineEmits(['toggle', 'toggle-many'])
@@ -369,6 +370,15 @@ function onToggleAll(event) {
     margin: 2px 10px 12px 22px;
     padding-left: 14px;
     border-left: 1px dashed var(--line);
+}
+
+/* 只限制最外层文件夹的展开内容高度，避免嵌套文件夹出现多级滚动。 */
+.perm-folder__children.is-scrollable {
+    max-height: 320px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 6px;
+    scrollbar-width: thin;
 }
 
 @media (max-width: 600px) {

@@ -184,6 +184,12 @@ class AdminAnalyticsService {
                           SELECT 1
                           FROM public.admin_subject_claim AS subject_claim
                           WHERE subject_claim.subject = catalog.subject
+                            AND NOT EXISTS (
+                                SELECT 1
+                                FROM public.admin_courseware_exclusion AS exclusion
+                                WHERE exclusion.admin_account_id = subject_claim.admin_account_id
+                                  AND exclusion.article_id = catalog.article_id
+                            )
                       )
                   AND NOT EXISTS (
                           SELECT 1

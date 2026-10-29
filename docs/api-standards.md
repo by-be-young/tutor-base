@@ -216,15 +216,16 @@
 | Method | Path | Auth | 语义 |
 | --- | --- | --- | --- |
 | POST | `/admin/courseware-catalog/sync` | administrator | 由前端同步静态课件目录（articleId → 学科/标题），幂等 upsert |
-| GET | `/admin/courseware-claims` | administrator | 返回当前管理员显式认领的学科与单篇课件 |
-| PUT | `/admin/courseware-claims/subjects/{subject}` | administrator | 认领学科；自动覆盖该学科当前及未来新增课件，幂等 |
-| DELETE | `/admin/courseware-claims/subjects/{subject}` | administrator | 释放学科认领；仅靠学科覆盖的课件回到待认领，单篇认领保留 |
-| PUT | `/admin/courseware-claims/articles/{articleId}` | administrator | 单篇认领课件，幂等 |
-| DELETE | `/admin/courseware-claims/articles/{articleId}` | administrator | 释放单篇课件认领 |
-| GET | `/admin/courseware-claims/catalog?scope=mine\|unclaimed\|all` | administrator | 课件认领目录，含学科汇总与每篇课件的认领归属 |
+| GET | `/admin/courseware-claims` | administrator | 返回当前管理员显式认领的学科、单篇课件与排除的课件 ID |
+| PUT | `/admin/courseware-claims/subjects/{subject}` | administrator | 认领学科；自动覆盖该学科当前及未来新增课件，并清理该科排除，幂等 |
+| DELETE | `/admin/courseware-claims/subjects/{subject}` | administrator | 释放学科认领；仅靠学科覆盖的课件回到待认领，单篇认领保留，并清理该科排除 |
+| PUT | `/admin/courseware-claims/articles/{articleId}` | administrator | 单篇认领/恢复：清除排除；学科未覆盖时物化单篇认领，幂等 |
+| DELETE | `/admin/courseware-claims/articles/{articleId}` | administrator | 释放单篇：删除单篇认领；仍被学科覆盖时写入排除，幂等 |
+| GET | `/admin/courseware-claims/catalog?scope=mine\|unclaimed\|all` | administrator | 课件认领目录，含学科汇总、认领归属与当前管理员的 `excluded` 标记 |
 
-- “我的课件” = 我认领学科下的全部课件 ∪ 我单篇认领的课件；学科认领覆盖未来新增课件，因此不物化每篇归属行。
+- “我的课件” = (我认领学科下的全部课件 − 我排除的课件) ∪ 我单篇认领的课件；学科认领覆盖未来新增课件，因此不物化每篇归属行。
 - 学科与管理员是多对多：同一学科可被多名管理员认领；单篇课件也可被多名管理员认领。
+- 未认领/被自己排除的课件在业务页隐藏，但 `catalog?scope=unclaimed` 仍返回其内容元信息（含 `excluded=true`）；读取正文仍走公开静态内容。
 - 未认领课件在业务页隐藏，但 `catalog?scope=unclaimed` 仍返回其内容元信息；读取正文仍走公开静态内容。
 - 业务范围：参考答案读写、学员作答状态、人工批阅、学习者作答进度与内容授权替换都限定在“我的课件”内；范围外课件返回 `403 courseware_not_claimed`。
 - 内容授权替换只作用于“我的课件”范围，范围外的既有授权必须保留，避免多名管理员互相覆盖。

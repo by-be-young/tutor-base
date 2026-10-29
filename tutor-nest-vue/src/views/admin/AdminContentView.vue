@@ -19,9 +19,9 @@
                         <i aria-hidden="true" class="fas fa-file-lines"></i>
                         认领 {{ myArticleCount }} 篇课件
                     </span>
-                    <span v-if="coursewareStore.unclaimedCount > 0" class="chip chip--amber">
+                    <span v-if="unclaimedTotal > 0" class="chip chip--amber">
                         <i aria-hidden="true" class="fas fa-hand-holding-heart"></i>
-                        待认领 {{ coursewareStore.unclaimedCount }} 篇
+                        待认领 {{ unclaimedTotal }} 篇
                     </span>
                 </div>
                 <button type="button" class="btn btn--primary cw-refresh"
@@ -51,7 +51,7 @@
                         <i aria-hidden="true" class="fas fa-book-bookmark"></i>
                         我的课件
                     </h2>
-                    <p class="text-sm text-muted">按学科分组；学科认领的课件可整科释放，单篇认领的课件可单独释放。</p>
+                    <p class="text-sm text-muted">按学科分组；展开学科查看课件，每篇课件都可单独释放（释放后回到「待认领」，可再次认领）。</p>
                 </div>
                 <button v-if="unclaimedTotal > 0" type="button" class="btn btn--soft btn--sm"
                     @click="switchTab('unclaimed')">
@@ -86,17 +86,24 @@
                 </EmptyState>
 
                 <div v-else class="cw-groups">
-                    <article v-for="group in mySubjectGroups" :key="group.subject" class="cw-group"
-                        :class="`is-tone-${subjectTone(group.subject)}`">
+                    <article v-for="(group, index) in mySubjectGroups" :key="group.subject" class="cw-group"
+                        :class="[`is-tone-${subjectTone(group.subject)}`, { 'is-open': isMySubjectOpen(group.subject) }]">
                         <header class="cw-group__head">
-                            <div class="cw-group__title">
+                            <button type="button" class="cw-group__toggle"
+                                :aria-expanded="isMySubjectOpen(group.subject)"
+                                :aria-controls="`cw-mine-body-${index}`"
+                                @click="toggleMySubject(group.subject)">
+                                <span class="cw-group__chevron"
+                                    :class="{ 'is-collapsed': !isMySubjectOpen(group.subject) }">
+                                    <i aria-hidden="true" class="fas fa-chevron-down"></i>
+                                </span>
                                 <span class="cw-group__dot" aria-hidden="true"></span>
-                                <h3 class="cw-group__name">{{ group.subject }}</h3>
+                                <span class="cw-group__name" role="heading" aria-level="3">{{ group.subject }}</span>
                                 <span class="chip" :class="group.claimedAsSubject ? 'chip--lime' : 'chip--amber'">
                                     {{ group.claimedAsSubject ? '已认领学科' : '单篇认领' }}
                                 </span>
                                 <span class="text-xs text-dim">{{ group.items.length }} 篇</span>
-                            </div>
+                            </button>
                             <button v-if="group.claimedAsSubject" type="button" class="btn btn--ghost btn--sm"
                                 :disabled="Boolean(busyKey)"
                                 @click="releaseSubject(group.subject)">
@@ -107,30 +114,34 @@
                             </button>
                         </header>
 
-                        <ul class="cw-list">
-                            <li v-for="item in group.items" :key="item.articleId" class="cw-item">
-                                <div class="cw-item__main">
-                                    <span class="cw-item__title">{{ articleTitle(item) }}</span>
-                                    <span class="cw-item__id mono">#{{ item.articleId }}</span>
-                                    <span v-if="item.coveredBySubjectClaim" class="tag">学科覆盖</span>
-                                    <span v-else-if="item.individuallyClaimed" class="tag">单篇认领</span>
-                                </div>
-                                <div class="cw-item__actions">
-                                    <button v-if="item.individuallyClaimed" type="button" class="btn btn--ghost btn--sm"
-                                        :disabled="Boolean(busyKey)" @click="releaseArticle(item)">
-                                        <i aria-hidden="true"
-                                            class="fas"
-                                            :class="isBusy(`article:${item.articleId}`) ? 'fa-circle-notch fa-spin' : 'fa-xmark'"></i>
-                                        {{ isBusy(`article:${item.articleId}`) ? '释放中…' : '释放' }}
-                                    </button>
-                                    <a class="btn btn--soft btn--sm" :href="readHref(item.articleId)" target="_blank"
-                                        rel="noopener">
-                                        <i aria-hidden="true" class="fas fa-arrow-up-right-from-square"></i>
-                                        打开阅读
-                                    </a>
-                                </div>
-                            </li>
-                        </ul>
+                        <div v-show="isMySubjectOpen(group.subject)" :id="`cw-mine-body-${index}`"
+                            class="cw-subject__body">
+                            <ul class="cw-list">
+                                <li v-for="item in group.items" :key="item.articleId" class="cw-item">
+                                    <div class="cw-item__main">
+                                        <span class="cw-item__title">{{ articleTitle(item) }}</span>
+                                        <span class="cw-item__id mono">#{{ item.articleId }}</span>
+                                        <span v-if="item.coveredBySubjectClaim" class="tag">学科覆盖</span>
+                                        <span v-else-if="item.individuallyClaimed" class="tag">单篇认领</span>
+                                    </div>
+                                    <div class="cw-item__actions">
+                                        <button type="button" class="btn btn--ghost btn--sm"
+                                            title="释放后该课件回到待认领，可再次认领"
+                                            :disabled="Boolean(busyKey)" @click="releaseArticle(item)">
+                                            <i aria-hidden="true"
+                                                class="fas"
+                                                :class="isBusy(`article:${item.articleId}`) ? 'fa-circle-notch fa-spin' : 'fa-xmark'"></i>
+                                            {{ isBusy(`article:${item.articleId}`) ? '释放中…' : '释放' }}
+                                        </button>
+                                        <a class="btn btn--soft btn--sm" :href="readHref(item.articleId)"
+                                            target="_blank" rel="noopener">
+                                            <i aria-hidden="true" class="fas fa-arrow-up-right-from-square"></i>
+                                            打开阅读
+                                        </a>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
                     </article>
                 </div>
             </div>
@@ -198,11 +209,12 @@
                                 </button>
                             </div>
 
-                            <ul v-if="isUnclaimedOpen(group.subject)" class="cw-list cw-list--compact">
+                            <ul v-if="isUnclaimedOpen(group.subject)" class="cw-list cw-list--compact cw-claim-list">
                                 <li v-for="item in group.items" :key="item.articleId" class="cw-item">
                                     <div class="cw-item__main">
                                         <span class="cw-item__title">{{ articleTitle(item) }}</span>
                                         <span class="cw-item__id mono">#{{ item.articleId }}</span>
+                                        <span v-if="item.excluded" class="tag cw-tag--released">已释放</span>
                                     </div>
                                     <div class="cw-item__actions">
                                         <button type="button" class="btn btn--soft btn--sm"
@@ -210,7 +222,7 @@
                                             <i aria-hidden="true"
                                                 class="fas"
                                                 :class="isBusy(`article:${item.articleId}`) ? 'fa-circle-notch fa-spin' : 'fa-hand-pointer'"></i>
-                                            {{ isBusy(`article:${item.articleId}`) ? '认领中…' : '单篇认领' }}
+                                            {{ isBusy(`article:${item.articleId}`) ? '认领中…' : item.excluded ? '重新认领' : '单篇认领' }}
                                         </button>
                                         <a class="btn btn--ghost btn--sm" :href="readHref(item.articleId)"
                                             target="_blank" rel="noopener">
@@ -271,6 +283,8 @@ const coursewareStore = useCoursewareStore()
 const activeTab = ref('mine')
 const busyKey = ref('')
 const openUnclaimedSubjects = ref([])
+const openMySubjects = ref([])
+let mySubjectsInitialized = false
 
 const blogData = computed(() => blogStore.blogData)
 const allSubjects = computed(() => {
@@ -327,6 +341,16 @@ const unclaimedGroups = computed(() => {
         .sort((left, right) => left.subject.localeCompare(right.subject, 'zh-CN'))
 })
 
+// 学科折叠：默认展开第一个学科，保证首屏不空；目录刷新后保留用户展开状态。
+watch(mySubjectGroups, (groups) => {
+    const names = new Set(groups.map(group => group.subject))
+    openMySubjects.value = openMySubjects.value.filter(subject => names.has(subject))
+    if (!mySubjectsInitialized && groups.length > 0) {
+        openMySubjects.value = [groups[0].subject]
+        mySubjectsInitialized = true
+    }
+}, { immediate: true })
+
 const mySubjectCount = computed(() => mySubjectGroups.value.length)
 const myArticleCount = computed(() => mySubjectGroups.value.reduce((total, group) => total + group.items.length, 0))
 const unclaimedTotal = computed(() => coursewareStore.unclaimedItems.length)
@@ -366,6 +390,16 @@ function toggleUnclaimed(subject) {
     openUnclaimedSubjects.value = isUnclaimedOpen(subject)
         ? openUnclaimedSubjects.value.filter(item => item !== subject)
         : [...openUnclaimedSubjects.value, subject]
+}
+
+function isMySubjectOpen(subject) {
+    return openMySubjects.value.includes(subject)
+}
+
+function toggleMySubject(subject) {
+    openMySubjects.value = isMySubjectOpen(subject)
+        ? openMySubjects.value.filter(item => item !== subject)
+        : [...openMySubjects.value, subject]
 }
 
 function switchTab(tabId) {
@@ -415,7 +449,7 @@ function releaseArticle(item) {
     return runAction(
         `article:${item.articleId}`,
         () => coursewareStore.releaseArticle(item.articleId),
-        `已释放课件「${title}」的认领`
+        `已释放《${title}》`
     )
 }
 
@@ -567,19 +601,48 @@ onMounted(async () => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 8px;
     flex-wrap: wrap;
-    padding: 12px 16px;
-    border-bottom: 1.5px solid var(--ink);
+    padding-right: 12px;
+    border-bottom: 1.5px solid transparent;
     background: var(--paper-2);
+    transition: border-color var(--dur);
 }
 
-.cw-group__title {
+.cw-group.is-open .cw-group__head {
+    border-bottom-color: var(--ink);
+}
+
+/* 标题行整行可点击：折叠展开整个学科课件列表 */
+.cw-group__toggle {
     display: flex;
     align-items: center;
     gap: 9px;
-    flex-wrap: wrap;
+    flex: 1 1 240px;
     min-width: 0;
+    padding: 12px 16px;
+    color: var(--ink);
+    text-align: left;
+    transition: background var(--dur);
+}
+
+.cw-group__toggle:hover {
+    background: var(--paper-3);
+}
+
+.cw-group__chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    font-size: 0.62rem;
+    color: var(--text-3);
+    flex-shrink: 0;
+    transition: transform var(--dur) var(--ease-out);
+}
+
+.cw-group__chevron.is-collapsed {
+    transform: rotate(-90deg);
 }
 
 .cw-group__dot {
@@ -598,10 +661,19 @@ onMounted(async () => {
     color: var(--ink);
 }
 
-.cw-group__title .chip {
+.cw-group__toggle .chip {
     height: 24px;
     font-size: 0.68rem;
     box-shadow: 1px 1px 0 var(--ink);
+}
+
+/* 展开的学科课件列表限高内部滚动，页面不被撑高 */
+.cw-subject__body {
+    max-height: 320px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+    scrollbar-width: thin;
 }
 
 /* 课件列表 */
@@ -722,6 +794,21 @@ onMounted(async () => {
     gap: 10px;
 }
 
+/* 待认领展开的单篇列表同样限高内部滚动 */
+.cw-claim-list {
+    max-height: 320px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+    scrollbar-width: thin;
+}
+
+.cw-tag--released {
+    background: var(--butter);
+    border-color: var(--ink);
+    color: var(--ink);
+}
+
 .cw-claim-card__meta {
     display: flex;
     align-items: center;
@@ -819,6 +906,11 @@ onMounted(async () => {
 
     .cw-item {
         padding: 10px 12px;
+    }
+
+    .cw-subject__body,
+    .cw-claim-list {
+        max-height: 280px;
     }
 
     .cw-item__actions {

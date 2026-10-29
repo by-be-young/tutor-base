@@ -141,14 +141,19 @@
                                         <i aria-hidden="true" class="fas" :class="dirty ? 'fa-pen' : 'fa-circle-check'"></i>
                                         {{ dirty ? '待保存' : '已同步' }}
                                     </span>
-                                    <button type="button" class="btn btn--soft btn--sm" @click="openOriginal">
+                                    <button v-if="!selectedArticle.noQuestions" type="button"
+                                        class="btn btn--soft btn--sm" @click="openOriginal">
                                         <i aria-hidden="true" class="fas fa-pen-to-square"></i>
                                         进入文章设置
                                     </button>
                                 </div>
                             </header>
 
-                            <EmptyState v-if="selectedArticle.questions.length === 0" icon="fas fa-circle-question"
+                            <EmptyState v-if="selectedArticle.questions.length === 0 && selectedArticle.noQuestions"
+                                icon="fas fa-circle-info" title="该文章暂无题目"
+                                text="这个课件没有检测到题目，无需设置标准答案。" />
+
+                            <EmptyState v-else-if="selectedArticle.questions.length === 0" icon="fas fa-circle-question"
                                 title="这篇文章里没有识别到题目"
                                 text="可以点击「进入文章设置」进入整页答案设置模式。">
                                 <button type="button" class="btn btn--soft btn--sm" @click="openOriginal">
@@ -182,7 +187,7 @@
                                 </article>
                             </div>
 
-                            <footer class="answer-editor__footer">
+                            <footer v-if="!selectedArticle.noQuestions" class="answer-editor__footer">
                                 <div class="answer-editor__state">
                                     <span class="chip" :class="dirty ? 'chip--amber' : 'chip--lime'">
                                         <i aria-hidden="true" class="fas" :class="dirty ? 'fa-pen' : 'fa-circle-check'"></i>
@@ -289,12 +294,19 @@ const subjectStats = computed(() => props.allSubjects
     })
     .filter(Boolean))
 
-// 筛选标签右侧保留数量（待设置/已设置/全部），只针对当前学科
+// 静态目录里 questions 数组为空表示该文章没有题目：不应出现在「待设置」，也不提示去设置答案。
+function hasQuestions(blog) {
+    return Array.isArray(blog?.questions) && blog.questions.length > 0
+}
+
+// 筛选标签右侧保留数量（待设置/已设置/全部），只针对当前学科；待设置排除无题文章。
 const filters = computed(() => {
     const articles = subjectArticles.value
     const setCount = articles.filter(blog => answerKeyIds.value.includes(Number(blog.id))).length
+    const pendingCount = articles.filter(blog =>
+        hasQuestions(blog) && !answerKeyIds.value.includes(Number(blog.id))).length
     return [
-        { value: 'unset', label: '待设置', count: articles.length - setCount },
+        { value: 'unset', label: '待设置', count: pendingCount },
         { value: 'set', label: '已设置', count: setCount },
         { value: 'all', label: '全部', count: articles.length }
     ]
@@ -307,7 +319,8 @@ const filteredArticles = computed(() => {
     if (activeFilter.value === 'set') {
         articles = articles.filter(blog => answerKeyIds.value.includes(Number(blog.id)))
     } else if (activeFilter.value === 'unset') {
-        articles = articles.filter(blog => !answerKeyIds.value.includes(Number(blog.id)))
+        articles = articles.filter(blog =>
+            hasQuestions(blog) && !answerKeyIds.value.includes(Number(blog.id)))
     }
 
     if (search) {
@@ -414,7 +427,15 @@ async function openArticle(blogId) {
     const blog = props.blogData.find(item => Number(item.id) === Number(blogId))
     if (!blog) return
 
-    selectedArticle.value = { ...blog, questions: [], loading: true, error: '' }
+    // 静态目录没有题目的文章：编辑器只展示「暂无题目」，也不再请求答案键或提示去设置答案。
+    const noQuestions = !hasQuestions(blog)
+    if (noQuestions) {
+        selectedArticle.value = { ...blog, questions: [], noQuestions: true, loading: false, error: '' }
+        snapshot.value = ''
+        return
+    }
+
+    selectedArticle.value = { ...blog, questions: [], loading: true, error: '', noQuestions }
     snapshot.value = ''
     try {
         const [markdownResult, keysResult] = await Promise.allSettled([
@@ -437,6 +458,7 @@ async function openArticle(blogId) {
             selectedArticle.value = {
                 ...blog,
                 questions: [],
+                noQuestions,
                 loading: false,
                 error: markdownResult.status === 'rejected' ? '无法读取文章内容，请稍后重试。' : ''
             }
@@ -453,12 +475,13 @@ async function openArticle(blogId) {
                 wasSet: Boolean(key && (String(key.answerText || '').trim() !== '' || key.autoGrade))
             }
         })
-        selectedArticle.value = { ...blog, questions, loading: false, error: '' }
+        selectedArticle.value = { ...blog, questions, loading: false, error: '', noQuestions }
         snapshot.value = JSON.stringify(questions.map(rowsOf))
     } catch (error) {
         selectedArticle.value = {
             ...blog,
             questions: [],
+            noQuestions,
             loading: false,
             error: error.message || '加载文章题目失败，请稍后重试。'
         }

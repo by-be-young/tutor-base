@@ -48,7 +48,8 @@ public class AdminCoursewareClaimController {
     @GetMapping("/courseware-claims")
     CoursewareClaimsResponse claims(@AuthenticationPrincipal AccountPrincipal administrator) {
         CoursewareClaimAdministration.Claims claims = administration.claims(administrator.accountId());
-        return new CoursewareClaimsResponse(claims.subjectClaims(), claims.articleClaims());
+        return new CoursewareClaimsResponse(
+                claims.subjectClaims(), claims.articleClaims(), claims.excludedArticleIds());
     }
 
     @PutMapping("/courseware-claims/subjects/{subject}")
@@ -117,7 +118,8 @@ public class AdminCoursewareClaimController {
     record SyncCatalogResponse(int synced) {
     }
 
-    record CoursewareClaimsResponse(List<String> subjectClaims, List<Long> articleClaims) {
+    record CoursewareClaimsResponse(
+            List<String> subjectClaims, List<Long> articleClaims, List<Long> excludedArticleIds) {
     }
 
     record SubjectClaimResponse(String subject, java.time.Instant claimedAt) {
@@ -147,6 +149,7 @@ public class AdminCoursewareClaimController {
             String title,
             boolean individuallyClaimed,
             boolean coveredBySubjectClaim,
+            boolean excluded,
             List<ClaimByResponse> claimedBy) {
 
         static CatalogItemResponse from(CoursewareClaimAdministration.CatalogItem item) {
@@ -156,6 +159,7 @@ public class AdminCoursewareClaimController {
                     item.title(),
                     item.individuallyClaimed(),
                     item.coveredBySubjectClaim(),
+                    item.excluded(),
                     item.claimedBy().stream().map(ClaimByResponse::from).toList());
         }
     }

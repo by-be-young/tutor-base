@@ -8,7 +8,8 @@ import {
   computeUnclaimedCount,
   computeVisibleArticleIds,
   computeVisibleSubjects,
-  coursewareActionError
+  coursewareActionError,
+  isExcludedArticle
 } from '../src/utils/coursewareClaims.js'
 
 const CATALOG_SUBJECTS = [
@@ -96,6 +97,33 @@ test('computeCatalogBySubject groups items by subject in backend order', () => {
   assert.deepEqual(grouped.get('化学').map(item => item.articleId), [1, 2])
   assert.deepEqual(grouped.get('英语').map(item => item.articleId), [3])
   assert.equal(computeCatalogBySubject([]).size, 0)
+})
+
+test('computeVisibleArticleIds excludes subject-covered articles released individually', () => {
+  // 学科覆盖但被单篇释放 → 不可见
+  assert.deepEqual(
+    [...computeVisibleArticleIds(CATALOG_ITEMS, ['化学'], [], [1])],
+    [2]
+  )
+  // 释放后再单篇认领 → 重新可见
+  assert.deepEqual(
+    [...computeVisibleArticleIds(CATALOG_ITEMS, ['化学'], [1], [1])],
+    [1, 2]
+  )
+  // 未被学科覆盖且未单篇认领 → 不可见
+  assert.equal(computeVisibleArticleIds(CATALOG_ITEMS, [], [], [1]).size, 0)
+  // 单篇认领不受排除影响（不在学科范围内时也可见）
+  assert.deepEqual([...computeVisibleArticleIds(CATALOG_ITEMS, [], [3], [3])], [3])
+  // 字符串形式的 id 容错
+  assert.deepEqual([...computeVisibleArticleIds(CATALOG_ITEMS, ['化学'], [], ['1'])], [2])
+})
+
+test('isExcludedArticle matches positive ids and tolerates invalid input', () => {
+  assert.equal(isExcludedArticle(1, [1, 3]), true)
+  assert.equal(isExcludedArticle('3', [1, 3]), true)
+  assert.equal(isExcludedArticle(2, [1, 3]), false)
+  assert.equal(isExcludedArticle(1, null), false)
+  assert.equal(isExcludedArticle('abc', [1]), false)
 })
 
 test('coursewareActionError maps courseware_not_claimed and other statuses to Chinese messages', () => {

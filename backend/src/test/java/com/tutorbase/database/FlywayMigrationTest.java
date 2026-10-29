@@ -45,7 +45,8 @@ class FlywayMigrationTest {
             "card_definitions",
             "courseware_catalog",
             "admin_subject_claim",
-            "admin_courseware_claim");
+            "admin_courseware_claim",
+            "admin_courseware_exclusion");
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
@@ -67,7 +68,7 @@ class FlywayMigrationTest {
                     .count();
         }
         assertThat(result.migrationsExecuted).isEqualTo((int) expectedMigrations);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("14");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("15");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
         try (Connection connection = POSTGRES.createConnection("")) {
@@ -90,8 +91,10 @@ class FlywayMigrationTest {
                     """)).isEqualTo(1);
             assertThat(hasConstraint(connection, "admin_subject_claim_admin_subject_unique")).isTrue();
             assertThat(hasConstraint(connection, "admin_courseware_claim_admin_article_unique")).isTrue();
+            assertThat(hasConstraint(connection, "admin_courseware_exclusion_admin_article_unique")).isTrue();
             assertThat(hasConstraint(connection, "admin_subject_claim_admin_account_id_fkey")).isTrue();
             assertThat(hasConstraint(connection, "admin_courseware_claim_article_id_fkey")).isTrue();
+            assertThat(hasConstraint(connection, "admin_courseware_exclusion_article_id_fkey")).isTrue();
             assertThat(isColumnNullable(connection, "courseware_catalog", "subject")).isFalse();
             assertThat(isColumnNullable(connection, "courseware_catalog", "title")).isTrue();
             assertThat(readCount(connection, """
@@ -100,9 +103,10 @@ class FlywayMigrationTest {
                       AND indexname IN (
                           'courseware_catalog_subject_idx',
                           'admin_subject_claim_subject_idx',
-                          'admin_courseware_claim_article_idx'
+                          'admin_courseware_claim_article_idx',
+                          'admin_courseware_exclusion_article_idx'
                       )
-                    """)).isEqualTo(3);
+                    """)).isEqualTo(4);
             assertThat(readQuestionIdDataType(connection, "article_question_submissions")).isEqualTo("text");
             assertThat(hasConstraint(connection, "account_activation_state_check")).isTrue();
             assertThat(hasConstraint(connection, "account_activation_expiry_check")).isTrue();
@@ -157,12 +161,17 @@ class FlywayMigrationTest {
                     "..", "database", "reconciliation", "2026-10-29_courseware_claiming.sql"));
             execute(connection, coursewareClaimingReconciliation);
             execute(connection, coursewareClaimingReconciliation);
+            String coursewareExclusionReconciliation = Files.readString(Path.of(
+                    "..", "database", "reconciliation", "2026-10-30_courseware_exclusion.sql"));
+            execute(connection, coursewareExclusionReconciliation);
+            execute(connection, coursewareExclusionReconciliation);
             assertThat(hasColumn(connection, "student", "claimed_by")).isTrue();
             assertThat(hasColumn(connection, "student", "claimed_at")).isTrue();
             assertThat(hasConstraint(connection, "student_claimed_by_fkey")).isTrue();
             assertThat(hasConstraint(connection, "student_claim_state_check")).isTrue();
             assertThat(hasConstraint(connection, "admin_subject_claim_admin_subject_unique")).isTrue();
             assertThat(hasConstraint(connection, "admin_courseware_claim_admin_article_unique")).isTrue();
+            assertThat(hasConstraint(connection, "admin_courseware_exclusion_admin_article_unique")).isTrue();
             assertThat(readCount(connection, "SELECT count(*) FROM public.card_sets")).isEqualTo(10);
             assertThat(readCount(connection, "SELECT count(*) FROM public.card_definitions")).isEqualTo(70);
             assertThat(hasColumn(connection, "user_points", "draw_count")).isTrue();
@@ -177,22 +186,24 @@ class FlywayMigrationTest {
                           'daily_check_in', 'user_points', 'task_claims', 'card_collection',
                           'article_answer_keys', 'article_question_submissions', 'wrong_questions',
                           'achievement_claims', 'task_assignments', 'card_sets', 'card_definitions',
-                          'courseware_catalog', 'admin_subject_claim', 'admin_courseware_claim'
+                          'courseware_catalog', 'admin_subject_claim', 'admin_courseware_claim',
+                          'admin_courseware_exclusion'
                       ])
                       AND table_class.relrowsecurity
-                    """)).isEqualTo(18);
+                    """)).isEqualTo(19);
 
             assertDatabaseRejectsInvalidStates(connection);
             assertWrongQuestionsFollowStudentLifecycle(connection);
             assertUpdatedAtTriggers(connection);
             assertClaimSurvivesAccountDeletion(connection);
+            assertCoursewareExclusionIsUnique(connection);
         }
     }
 
     @Test
     void givenV11SchemaAppliedManuallyWhenFlywayReplaysV11ThenMigrationIsIdempotent() throws Exception {
-        // 生产事故回归：先手工执行 reconciliation（schema 已含 V11/V12），但历史表停在 V10；
-        // 新镜像启动时 Flyway 会再次执行 V11 和 V12，必须成功记账而不是因对象已存在而失败。
+        // 生产事故回归：先手工执行 reconciliation（schema 已含 V11/V12/V15），但历史表停在 V10；
+        // 新镜像启动时 Flyway 会再次执行 V11、V12、V14、V15，必须成功记账而不是因对象已存在而失败。
         try (PostgreSQLContainer driftDatabase = new PostgreSQLContainer("postgres:17-alpine")) {
             driftDatabase.start();
             Flyway.configure()
@@ -202,16 +213,20 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            // 复刻生产状态：V11/V12 的对象已手工建好，历史表仍停在 V10。
+            // 复刻生产状态：V11/V12/V15 的对象已手工建好，历史表仍停在 V10。
             try (Connection connection = driftDatabase.createConnection("")) {
                 execute(connection, Files.readString(Path.of(
                         "..", "database", "reconciliation", "2026-10-27_learner_claiming.sql")));
                 execute(connection, Files.readString(Path.of(
                         "..", "database", "reconciliation", "2026-10-29_courseware_claiming.sql")));
+                execute(connection, Files.readString(Path.of(
+                        "..", "database", "reconciliation", "2026-10-30_courseware_exclusion.sql")));
                 assertThat(readCount(connection,
                         "SELECT count(*) FROM public.flyway_schema_history WHERE version = '11'")).isZero();
                 assertThat(readCount(connection,
                         "SELECT count(*) FROM public.flyway_schema_history WHERE version = '12'")).isZero();
+                assertThat(readCount(connection,
+                        "SELECT count(*) FROM public.flyway_schema_history WHERE version = '15'")).isZero();
             }
 
             MigrateResult result = Flyway.configure()
@@ -220,7 +235,7 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(3);
+            assertThat(result.migrationsExecuted).isEqualTo(4);
             try (Connection connection = driftDatabase.createConnection("")) {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.flyway_schema_history
@@ -234,12 +249,22 @@ class FlywayMigrationTest {
                         SELECT count(*) FROM public.flyway_schema_history
                         WHERE version = '14' AND success
                         """)).isEqualTo(1);
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.flyway_schema_history
+                        WHERE version = '15' AND success
+                        """)).isEqualTo(1);
                 assertThat(hasColumn(connection, "student", "claimed_by")).isTrue();
                 assertThat(hasColumn(connection, "student", "claimed_at")).isTrue();
                 assertThat(hasConstraint(connection, "student_claimed_by_fkey")).isTrue();
                 assertThat(hasConstraint(connection, "student_claim_state_check")).isTrue();
                 assertThat(hasConstraint(connection, "admin_subject_claim_admin_subject_unique")).isTrue();
                 assertThat(hasConstraint(connection, "admin_courseware_claim_admin_article_unique")).isTrue();
+                assertThat(hasConstraint(connection, "admin_courseware_exclusion_admin_article_unique")).isTrue();
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM pg_indexes
+                        WHERE schemaname = 'public'
+                          AND indexname = 'admin_courseware_exclusion_article_idx'
+                        """)).isEqualTo(1);
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM pg_trigger
                         WHERE tgrelid = 'public.student'::regclass
@@ -384,6 +409,32 @@ class FlywayMigrationTest {
                 WHERE id = 901 AND claimed_by IS NULL AND claimed_at IS NULL
                 """)).isEqualTo(1);
         execute(connection, "DELETE FROM public.student WHERE id = 901");
+    }
+
+    private void assertCoursewareExclusionIsUnique(Connection connection) throws SQLException {
+        execute(connection, """
+                INSERT INTO public.account (id, username, username_normalized, role)
+                    VALUES (950, 'exclusion-admin', 'exclusion-admin', 'administrator');
+                INSERT INTO public.courseware_catalog (article_id, subject)
+                    VALUES (9501, '排除约束测试');
+                INSERT INTO public.admin_courseware_exclusion (admin_account_id, article_id)
+                    VALUES (950, 9501);
+                """);
+
+        assertSqlState(connection, "23505", """
+                INSERT INTO public.admin_courseware_exclusion (admin_account_id, article_id)
+                VALUES (950, 9501)
+                """);
+        assertThat(readCount(connection, """
+                SELECT count(*) FROM public.admin_courseware_exclusion
+                WHERE admin_account_id = 950 AND article_id = 9501
+                """)).isEqualTo(1);
+
+        execute(connection, """
+                DELETE FROM public.admin_courseware_exclusion WHERE admin_account_id = 950;
+                DELETE FROM public.courseware_catalog WHERE article_id = 9501;
+                DELETE FROM public.account WHERE id = 950;
+                """);
     }
 
     private Set<String> readApplicationTables(Connection connection) throws SQLException {

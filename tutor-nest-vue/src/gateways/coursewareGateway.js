@@ -9,6 +9,10 @@ function normalizeClaims(response) {
       : [],
     articleClaims: Array.isArray(response?.articleClaims)
       ? response.articleClaims.map(Number).filter(Number.isFinite)
+      : [],
+    // 学科认领范围内被单篇释放的排除项；旧后端缺失时按空数组处理。
+    excludedArticleIds: Array.isArray(response?.excludedArticleIds)
+      ? response.excludedArticleIds.map(Number).filter(Number.isFinite)
       : []
   }
 }

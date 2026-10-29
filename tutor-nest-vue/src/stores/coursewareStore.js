@@ -10,7 +10,8 @@ import {
   computeUnclaimedCount,
   computeVisibleArticleIds,
   computeVisibleSubjects,
-  coursewareActionError
+  coursewareActionError,
+  isExcludedArticle
 } from '@/utils/coursewareClaims'
 
 export const useCoursewareStore = defineStore('courseware', () => {
@@ -19,6 +20,8 @@ export const useCoursewareStore = defineStore('courseware', () => {
   const subjects = ref([])
   const subjectClaims = ref([])
   const articleClaims = ref([])
+  // 学科认领范围内被单篇释放的课件：仍归学科所有，但不再算作「我的课件」。
+  const excludedArticleIds = ref([])
   const unclaimedItems = ref([])
   const loading = ref(false)
   const syncing = ref(false)
@@ -33,7 +36,8 @@ export const useCoursewareStore = defineStore('courseware', () => {
   const visibleArticleIds = computed(() => computeVisibleArticleIds(
     catalogItems.value,
     subjectClaims.value,
-    articleClaims.value
+    articleClaims.value,
+    excludedArticleIds.value
   ))
 
   const visibleSubjects = computed(() => computeVisibleSubjects(
@@ -49,6 +53,11 @@ export const useCoursewareStore = defineStore('courseware', () => {
   function isVisible(articleId) {
     const id = Number(articleId)
     return Number.isFinite(id) && visibleArticleIds.value.has(id)
+  }
+
+  /** 该课件是否处于「学科覆盖但已单篇释放」状态。 */
+  function isExcluded(articleId) {
+    return isExcludedArticle(articleId, excludedArticleIds.value)
   }
 
   async function syncCatalogIfNeeded(articles = []) {
@@ -78,6 +87,7 @@ export const useCoursewareStore = defineStore('courseware', () => {
     ])
     subjectClaims.value = claims.subjectClaims
     articleClaims.value = claims.articleClaims
+    excludedArticleIds.value = claims.excludedArticleIds
     subjects.value = catalog.subjects
     catalogItems.value = catalog.items
     unclaimedItems.value = unclaimed.items
@@ -123,20 +133,11 @@ export const useCoursewareStore = defineStore('courseware', () => {
     return loadWorkspace(lastArticles.value)
   }
 
-  async function reloadCatalog() {
-    const [catalog, unclaimed] = await Promise.all([
-      coursewareGateway.getCatalog('all'),
-      coursewareGateway.getCatalog('unclaimed')
-    ])
-    subjects.value = catalog.subjects
-    catalogItems.value = catalog.items
-    unclaimedItems.value = unclaimed.items
-  }
-
-  // 认领/释放已经成功后，目录刷新失败不应让用户以为操作失败：只记录 error。
-  async function safeReloadCatalog() {
+  // 认领/释放会同时改变 claims（含 excludedArticleIds）与 catalog 的归属/排除标记，
+  // 成功后整体刷新最可靠；刷新失败不应让用户以为操作失败，只记录 error。
+  async function safeRefreshWorkspace() {
     try {
-      await reloadCatalog()
+      await loadWorkspace(lastArticles.value)
     } catch (err) {
       error.value = err?.message || '刷新课件目录失败，请稍后重试'
     }
@@ -150,7 +151,7 @@ export const useCoursewareStore = defineStore('courseware', () => {
       if (!subjectClaims.value.includes(name)) {
         subjectClaims.value = [...subjectClaims.value, name]
       }
-      await safeReloadCatalog()
+      await safeRefreshWorkspace()
       return result
     } catch (err) {
       throw coursewareActionError(err, '认领学科')
@@ -163,7 +164,7 @@ export const useCoursewareStore = defineStore('courseware', () => {
     try {
       await coursewareGateway.releaseSubject(name)
       subjectClaims.value = subjectClaims.value.filter(item => item !== name)
-      await safeReloadCatalog()
+      await safeRefreshWorkspace()
       return true
     } catch (err) {
       throw coursewareActionError(err, '释放学科')
@@ -178,7 +179,9 @@ export const useCoursewareStore = defineStore('courseware', () => {
       if (!articleClaims.value.includes(id)) {
         articleClaims.value = [...articleClaims.value, id]
       }
-      await safeReloadCatalog()
+      // 单篇认领会清除该课件的排除标记。
+      excludedArticleIds.value = excludedArticleIds.value.filter(item => Number(item) !== id)
+      await safeRefreshWorkspace()
       return result
     } catch (err) {
       throw coursewareActionError(err, '认领课件')
@@ -191,7 +194,7 @@ export const useCoursewareStore = defineStore('courseware', () => {
     try {
       await coursewareGateway.releaseArticle(id)
       articleClaims.value = articleClaims.value.filter(item => Number(item) !== id)
-      await safeReloadCatalog()
+      await safeRefreshWorkspace()
       return true
     } catch (err) {
       throw coursewareActionError(err, '释放课件')
@@ -203,6 +206,7 @@ export const useCoursewareStore = defineStore('courseware', () => {
     subjects,
     subjectClaims,
     articleClaims,
+    excludedArticleIds,
     unclaimedItems,
     loading,
     syncing,
@@ -219,6 +223,7 @@ export const useCoursewareStore = defineStore('courseware', () => {
     releaseSubject,
     claimArticle,
     releaseArticle,
-    isVisible
+    isVisible,
+    isExcluded
   }
 })

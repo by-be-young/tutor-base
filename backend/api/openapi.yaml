@@ -932,13 +932,15 @@ paths:
   /admin/courseware-claims:
     get:
       operationId: getCoursewareClaims
-      summary: 获取当前管理员显式认领的学科与单篇课件
-      description: 只返回显式认领记录，不包含由学科认领派生覆盖的课件。
+      summary: 获取当前管理员显式认领的学科、单篇课件与排除课件
+      description: >-
+        只返回显式记录，不包含由学科认领派生覆盖的课件。excludedArticleIds 是当前管理员
+        在已认领学科下单独释放、尚未重新认领的课件。
       security:
         - sessionCookie: []
       responses:
         '200':
-          description: 当前管理员的显式认领。
+          description: 当前管理员的显式认领与排除。
           content:
             application/json:
               schema:
@@ -952,7 +954,8 @@ paths:
       operationId: claimCoursewareSubject
       summary: 认领一个学科及其全部课件
       description: >-
-        认领学科后自动覆盖该学科当前及未来同步的全部课件。重复认领幂等，返回首次认领时间。
+        认领学科后自动覆盖该学科当前及未来同步的全部课件，并清除该学科下此前的单篇排除，
+        恢复全部课件。重复认领幂等，返回首次认领时间。
         学科必须存在于课件目录，否则返回 404 resource_not_found。
       security:
         - sessionCookie: []
@@ -979,7 +982,7 @@ paths:
     delete:
       operationId: releaseCoursewareSubject
       summary: 释放当前管理员的学科认领
-      description: 幂等删除；单篇课件认领不受影响，仅由学科覆盖的课件回到待认领。
+      description: 幂等删除；单篇课件认领不受影响，该学科的排除记录一并清理，仅由学科覆盖的课件回到待认领。
       security:
         - sessionCookie: []
       parameters:
@@ -1000,7 +1003,9 @@ paths:
     put:
       operationId: claimCoursewareArticle
       summary: 单独认领一篇课件
-      description: 幂等；课件必须存在于课件目录，否则返回 404 resource_not_found。
+      description: >-
+        幂等；若该篇此前在已认领学科下被单独释放，本次认领会清除排除并恢复可见；
+        学科已覆盖时无需物化单篇认领。课件必须存在于课件目录，否则返回 404 resource_not_found。
       security:
         - sessionCookie: []
       parameters:
@@ -1025,8 +1030,11 @@ paths:
           $ref: '#/components/responses/Problem'
     delete:
       operationId: releaseCoursewareArticle
-      summary: 释放当前管理员的单篇课件认领
-      description: 幂等删除；学科认领不受影响。
+      summary: 释放当前管理员的单篇课件认领或学科覆盖下的单篇课件
+      description: >-
+        幂等 204。删除该管理员的单篇认领；若该篇仍由其已认领学科覆盖，则写入排除记录，
+        该课件从“我的课件”与业务页消失并回到待认领，之后可再次单独认领恢复。
+        学科认领本身不受影响。
       security:
         - sessionCookie: []
       parameters:
@@ -1049,8 +1057,9 @@ paths:
       summary: 按认领范围查询课件目录
       description: >-
         subjects 始终返回目录中的全部学科及认领摘要；items 按 scope 过滤：
-        mine 为当前管理员可见课件（学科认领覆盖 ∪ 单篇认领），unclaimed 为没有任何管理员认领的课件，
-        all 为全部课件并带 claimedBy 归属。排序为学科、articleId。
+        mine 为当前管理员可见课件（学科认领覆盖且未排除，或单篇认领），
+        unclaimed 为没有任何管理员有效认领的课件（含当前管理员在学科覆盖下释放的单篇，带 excluded=true），
+        all 为全部课件并带 claimedBy 归属与 excluded 标记。排序为学科、articleId。
       security:
         - sessionCookie: []
       parameters:
@@ -1473,7 +1482,7 @@ components:
     CoursewareClaims:
       type: object
       additionalProperties: false
-      required: [subjectClaims, articleClaims]
+      required: [subjectClaims, articleClaims, excludedArticleIds]
       properties:
         subjectClaims:
           type: array
@@ -1481,6 +1490,13 @@ components:
             type: string
         articleClaims:
           type: array
+          items:
+            type: integer
+            format: int64
+            minimum: 1
+        excludedArticleIds:
+          type: array
+          description: 当前管理员在已认领学科下单独释放（排除）的课件，按 articleId 升序。
           items:
             type: integer
             format: int64
@@ -1539,7 +1555,7 @@ components:
     CoursewareCatalogItem:
       type: object
       additionalProperties: false
-      required: [articleId, subject, title, individuallyClaimed, coveredBySubjectClaim, claimedBy]
+      required: [articleId, subject, title, individuallyClaimed, coveredBySubjectClaim, excluded, claimedBy]
       properties:
         articleId:
           type: integer
@@ -1554,10 +1570,13 @@ components:
           description: 当前管理员是否单独认领了该课件。
         coveredBySubjectClaim:
           type: boolean
-          description: 当前管理员是否通过学科认领覆盖了该课件。
+          description: 当前管理员是否通过学科认领覆盖了该课件（被排除时为 false）。
+        excluded:
+          type: boolean
+          description: 当前管理员是否在学科覆盖下单独释放（排除）了该课件。
         claimedBy:
           type: array
-          description: 所有认领该课件的管理员（学科认领或单篇认领）。
+          description: 所有对该课件有效的认领者（排除该管理员自己的排除项）。
           items:
             $ref: '#/components/schemas/ClaimBy'
     CoursewareClaimCatalog:

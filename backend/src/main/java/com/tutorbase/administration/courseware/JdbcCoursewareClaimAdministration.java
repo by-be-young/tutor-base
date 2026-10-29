@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +17,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration {
+
+    private static final String DELETE_EXCLUSIONS_FOR_SUBJECT = """
+            DELETE FROM public.admin_courseware_exclusion AS exclusion
+            USING public.courseware_catalog AS catalog
+            WHERE exclusion.admin_account_id = :administratorAccountId
+              AND exclusion.article_id = catalog.article_id
+              AND catalog.subject = :subject
+            """;
 
     private final JdbcClient jdbc;
 
@@ -64,7 +73,16 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
                 .param("administratorAccountId", administratorAccountId)
                 .query(Long.class)
                 .list();
-        return new Claims(subjectClaims, articleClaims);
+        List<Long> excludedArticleIds = jdbc.sql("""
+                SELECT article_id
+                FROM public.admin_courseware_exclusion
+                WHERE admin_account_id = :administratorAccountId
+                ORDER BY article_id
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .query(Long.class)
+                .list();
+        return new Claims(subjectClaims, articleClaims, excludedArticleIds);
     }
 
     @Override
@@ -82,6 +100,11 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
                 .param("administratorAccountId", administratorAccountId)
                 .param("subject", normalizedSubject)
                 .update();
+        // 重新认领整个学科等于恢复该学科全部课件，清除历史单篇排除。
+        jdbc.sql(DELETE_EXCLUSIONS_FOR_SUBJECT)
+                .param("administratorAccountId", administratorAccountId)
+                .param("subject", normalizedSubject)
+                .update();
         Instant claimedAt = jdbc.sql("""
                 SELECT claimed_at
                 FROM public.admin_subject_claim
@@ -90,7 +113,7 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
                 """)
                 .param("administratorAccountId", administratorAccountId)
                 .param("subject", normalizedSubject)
-                .query(JdbcCoursewareClaimAdministration::readInstant)
+                .query(JdbcCoursewareClaimAdministration::readClaimedAt)
                 .single();
         return new SubjectClaim(normalizedSubject, claimedAt);
     }
@@ -98,13 +121,19 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
     @Override
     @Transactional
     public void releaseSubject(long administratorAccountId, String subject) {
+        String normalizedSubject = subject.strip();
         jdbc.sql("""
                 DELETE FROM public.admin_subject_claim
                 WHERE admin_account_id = :administratorAccountId
                   AND subject = :subject
                 """)
                 .param("administratorAccountId", administratorAccountId)
-                .param("subject", subject.strip())
+                .param("subject", normalizedSubject)
+                .update();
+        // 释放学科后该学科的排除记录不再有意义，一并清理。
+        jdbc.sql(DELETE_EXCLUSIONS_FOR_SUBJECT)
+                .param("administratorAccountId", administratorAccountId)
+                .param("subject", normalizedSubject)
                 .update();
     }
 
@@ -114,23 +143,38 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
         if (!articleExists(articleId)) {
             throw new CoursewareNotFound("未找到课件（ID：" + articleId + "）。");
         }
+        // 再次单独认领会清除排除；学科已覆盖时无需物化单篇认领。
+        deleteExclusion(administratorAccountId, articleId);
         jdbc.sql("""
                 INSERT INTO public.admin_courseware_claim (admin_account_id, article_id)
-                VALUES (:administratorAccountId, :articleId)
+                SELECT :administratorAccountId, :articleId
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM public.courseware_catalog AS catalog
+                    JOIN public.admin_subject_claim AS subject_claim
+                      ON subject_claim.subject = catalog.subject
+                     AND subject_claim.admin_account_id = :administratorAccountId
+                    WHERE catalog.article_id = :articleId
+                )
                 ON CONFLICT (admin_account_id, article_id) DO NOTHING
                 """)
                 .param("administratorAccountId", administratorAccountId)
                 .param("articleId", articleId)
                 .update();
         Instant claimedAt = jdbc.sql("""
-                SELECT claimed_at
-                FROM public.admin_courseware_claim
-                WHERE admin_account_id = :administratorAccountId
-                  AND article_id = :articleId
+                SELECT COALESCE(courseware_claim.claimed_at, subject_claim.claimed_at) AS claimed_at
+                FROM public.courseware_catalog AS catalog
+                LEFT JOIN public.admin_courseware_claim AS courseware_claim
+                  ON courseware_claim.article_id = catalog.article_id
+                 AND courseware_claim.admin_account_id = :administratorAccountId
+                LEFT JOIN public.admin_subject_claim AS subject_claim
+                  ON subject_claim.subject = catalog.subject
+                 AND subject_claim.admin_account_id = :administratorAccountId
+                WHERE catalog.article_id = :articleId
                 """)
                 .param("administratorAccountId", administratorAccountId)
                 .param("articleId", articleId)
-                .query(JdbcCoursewareClaimAdministration::readInstant)
+                .query(JdbcCoursewareClaimAdministration::readClaimedAt)
                 .single();
         return new ArticleClaim(articleId, claimedAt);
     }
@@ -138,10 +182,27 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
     @Override
     @Transactional
     public void releaseArticle(long administratorAccountId, long articleId) {
+        // 先移除单篇认领；若该篇仍被学科覆盖，则写入排除行使其从“我的课件”消失。
         jdbc.sql("""
                 DELETE FROM public.admin_courseware_claim
                 WHERE admin_account_id = :administratorAccountId
                   AND article_id = :articleId
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .param("articleId", articleId)
+                .update();
+        jdbc.sql("""
+                INSERT INTO public.admin_courseware_exclusion (admin_account_id, article_id)
+                SELECT :administratorAccountId, :articleId
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM public.courseware_catalog AS catalog
+                    JOIN public.admin_subject_claim AS subject_claim
+                      ON subject_claim.subject = catalog.subject
+                     AND subject_claim.admin_account_id = :administratorAccountId
+                    WHERE catalog.article_id = :articleId
+                )
+                ON CONFLICT (admin_account_id, article_id) DO NOTHING
                 """)
                 .param("administratorAccountId", administratorAccountId)
                 .param("articleId", articleId)
@@ -180,10 +241,20 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
                         resultSet.getLong("admin_account_id"),
                         resultSet.getString("username")))
                 .list();
+        List<Exclusion> exclusions = jdbc.sql("""
+                SELECT admin_account_id, article_id
+                FROM public.admin_courseware_exclusion
+                ORDER BY article_id, admin_account_id
+                """)
+                .query((resultSet, rowNumber) -> new Exclusion(
+                        resultSet.getLong("admin_account_id"),
+                        resultSet.getLong("article_id")))
+                .list();
 
         Claims myClaims = claims(administratorAccountId);
         Set<String> mySubjects = Set.copyOf(myClaims.subjectClaims());
         Set<Long> myArticles = Set.copyOf(myClaims.articleClaims());
+        Set<Long> myExclusions = Set.copyOf(myClaims.excludedArticleIds());
 
         Map<String, List<ClaimBy>> subjectClaimersBySubject = new LinkedHashMap<>();
         for (SubjectClaimer claimer : subjectClaimers) {
@@ -196,6 +267,12 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
             articleClaimersByArticle
                     .computeIfAbsent(claimer.articleId(), articleId -> new ArrayList<>())
                     .add(new ClaimBy(claimer.accountId(), claimer.username()));
+        }
+        Map<Long, Set<Long>> excludedAccountIdsByArticle = new LinkedHashMap<>();
+        for (Exclusion exclusion : exclusions) {
+            excludedAccountIdsByArticle
+                    .computeIfAbsent(exclusion.articleId(), articleId -> new HashSet<>())
+                    .add(exclusion.accountId());
         }
 
         Map<String, Long> articleCountsBySubject = new LinkedHashMap<>();
@@ -215,12 +292,16 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
 
         List<CatalogItem> items = new ArrayList<>();
         for (CatalogRow row : rows) {
+            Set<Long> excludedAccountIds =
+                    excludedAccountIdsByArticle.getOrDefault(row.articleId(), Set.of());
             TreeMap<Long, ClaimBy> claimers = new TreeMap<>();
-            subjectClaimersBySubject.getOrDefault(row.subject(), List.of())
+            subjectClaimersBySubject.getOrDefault(row.subject(), List.of()).stream()
+                    .filter(claimer -> !excludedAccountIds.contains(claimer.accountId()))
                     .forEach(claimer -> claimers.putIfAbsent(claimer.accountId(), claimer));
             articleClaimersByArticle.getOrDefault(row.articleId(), List.of())
                     .forEach(claimer -> claimers.putIfAbsent(claimer.accountId(), claimer));
-            boolean coveredBySubjectClaim = mySubjects.contains(row.subject());
+            boolean excluded = myExclusions.contains(row.articleId());
+            boolean coveredBySubjectClaim = mySubjects.contains(row.subject()) && !excluded;
             boolean individuallyClaimed = myArticles.contains(row.articleId());
             boolean visible = coveredBySubjectClaim || individuallyClaimed;
             boolean included = switch (scope) {
@@ -235,6 +316,7 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
                         row.title(),
                         individuallyClaimed,
                         coveredBySubjectClaim,
+                        excluded,
                         List.copyOf(claimers.values())));
             }
         }
@@ -263,6 +345,17 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
                 .single();
     }
 
+    private void deleteExclusion(long administratorAccountId, long articleId) {
+        jdbc.sql("""
+                DELETE FROM public.admin_courseware_exclusion
+                WHERE admin_account_id = :administratorAccountId
+                  AND article_id = :articleId
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .param("articleId", articleId)
+                .update();
+    }
+
     private static CatalogRow mapCatalogRow(ResultSet resultSet, int rowNumber) throws SQLException {
         return new CatalogRow(
                 resultSet.getLong("article_id"),
@@ -270,7 +363,7 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
                 resultSet.getString("title"));
     }
 
-    private static Instant readInstant(ResultSet resultSet, int rowNumber) throws SQLException {
+    private static Instant readClaimedAt(ResultSet resultSet, int rowNumber) throws SQLException {
         return resultSet.getTimestamp("claimed_at").toInstant();
     }
 
@@ -281,5 +374,8 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
     }
 
     private record ArticleClaimer(long articleId, long accountId, String username) {
+    }
+
+    private record Exclusion(long accountId, long articleId) {
     }
 }
