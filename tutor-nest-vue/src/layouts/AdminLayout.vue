@@ -1,77 +1,84 @@
 <!-- src/layouts/AdminLayout.vue -->
 <template>
   <div class="admin-shell">
-    <!-- 桌面：左侧固定导航 -->
-    <aside class="admin-rail" aria-label="管理后台侧栏">
-      <router-link to="/admin" class="admin-brand" aria-label="NEST 管理台工作台">
-        <BrandMark :size="30" />
-        <span class="admin-brand__text">
-          <strong>NEST</strong>
-          <span>管理台</span>
-        </span>
-      </router-link>
-
-      <nav class="admin-nav" aria-label="管理后台导航">
-        <router-link v-for="item in navItems" :key="item.to" :to="item.to" class="admin-nav__link"
-          :class="{ 'is-active': isActive(item) }">
-          <span class="admin-nav__icon"><i :class="item.icon" aria-hidden="true"></i></span>
-          <span class="admin-nav__label">{{ item.label }}</span>
+    <!-- 顶部导航：与学员端 AppHeader 保持同一套视觉语言 -->
+    <header class="admin-header" :class="{ 'is-scrolled': scrolled }">
+      <div class="admin-header__inner">
+        <router-link to="/admin" class="admin-brand" aria-label="NEST 管理台工作台">
+          <BrandMark :size="30" />
+          <span class="admin-brand__text">
+            <strong>NEST</strong>
+            <span>管理台</span>
+          </span>
         </router-link>
-      </nav>
 
-      <div class="admin-rail__foot">
-        <span class="admin-rail__stamp" aria-hidden="true">RISO · ADMIN</span>
-      </div>
-    </aside>
+        <nav class="admin-nav" aria-label="管理后台导航">
+          <router-link v-for="item in navItems" :key="item.to" :to="item.to" class="admin-nav__link"
+            :class="{ 'is-active': isActive(item) }">
+            <i :class="item.icon" aria-hidden="true"></i>
+            <span>{{ item.label }}</span>
+          </router-link>
+        </nav>
 
-    <div class="admin-shell__body">
-      <!-- 顶部管理栏 -->
-      <header class="admin-bar">
-        <div class="admin-bar__left">
-          <span class="admin-bar__nest">NEST · 学巢</span>
-          <span class="admin-bar__divider" aria-hidden="true"></span>
-          <h1 class="admin-bar__title">{{ pageTitle }}</h1>
-        </div>
-
-        <div ref="userMenuRef" class="admin-bar__user">
-          <button type="button" class="admin-bar__trigger" :aria-expanded="userMenuOpen" aria-haspopup="menu"
-            @click.stop="userMenuOpen = !userMenuOpen">
-            <span class="avatar admin-bar__avatar" aria-hidden="true">{{ userInitial }}</span>
-            <span class="admin-bar__usertext">
-              <strong>{{ authStore.username }}</strong>
-              <small>管理员</small>
-            </span>
-            <i class="fas fa-chevron-down admin-bar__caret" aria-hidden="true"></i>
+        <div class="admin-header__actions">
+          <button type="button" class="admin-search" aria-label="搜索与跳转" @click="uiStore.openPalette()">
+            <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+            <span class="admin-search__label">搜索</span>
+            <kbd class="kbd admin-search__kbd">⌘K</kbd>
           </button>
 
-          <transition name="dropdown">
-            <div v-if="userMenuOpen" class="admin-menu" role="menu">
-              <router-link to="/settings/password" class="admin-menu__item" role="menuitem"
-                @click="userMenuOpen = false">
-                <i class="fas fa-key" aria-hidden="true"></i>
-                <span>修改密码</span>
-              </router-link>
-              <button type="button" class="admin-menu__item admin-menu__item--danger" role="menuitem"
-                @click="handleLogout">
-                <i class="fas fa-arrow-right-from-bracket" aria-hidden="true"></i>
-                <span>退出登录</span>
-              </button>
-            </div>
-          </transition>
-        </div>
-      </header>
+          <div ref="userMenuRef" class="admin-user">
+            <button type="button" class="admin-user__trigger" :aria-expanded="userMenuOpen" aria-haspopup="menu"
+              @click.stop="userMenuOpen = !userMenuOpen">
+              <span class="avatar admin-user__avatar">{{ userInitial }}</span>
+              <span class="admin-user__meta">
+                <span class="admin-user__name">{{ authStore.username }}</span>
+                <span class="admin-user__role">管理员</span>
+              </span>
+              <i class="fas fa-chevron-down admin-user__caret" aria-hidden="true"></i>
+            </button>
 
-      <!-- 页面内容 -->
-      <div class="admin-content">
-        <router-view v-slot="{ Component }">
-          <transition name="page" mode="out-in">
-            <component :is="Component" :key="route.path" />
-          </transition>
-        </router-view>
+            <transition name="dropdown">
+              <div v-if="userMenuOpen" class="admin-menu" role="menu">
+                <div class="admin-menu__head">
+                  <span class="avatar avatar--lg">{{ userInitial }}</span>
+                  <div>
+                    <p class="admin-menu__name">{{ authStore.username }}</p>
+                    <p class="admin-menu__sub">管理员 · NEST 管理台</p>
+                  </div>
+                </div>
+                <router-link to="/settings/password" class="admin-menu__item" role="menuitem"
+                  @click="userMenuOpen = false">
+                  <i class="fas fa-key" aria-hidden="true"></i>
+                  <span>修改密码</span>
+                </router-link>
+                <button type="button" class="admin-menu__item admin-menu__item--danger" role="menuitem"
+                  @click="handleLogout">
+                  <i class="fas fa-arrow-right-from-bracket" aria-hidden="true"></i>
+                  <span>退出登录</span>
+                </button>
+              </div>
+            </transition>
+          </div>
+        </div>
       </div>
+    </header>
+
+    <!-- 页面标题：沿用学员端 page-head 的位置与字号 -->
+    <div class="admin-pagehead">
+      <h1 class="admin-pagehead__title">{{ pageTitle }}</h1>
+      <p class="admin-pagehead__sub">学员管理与我的课件</p>
     </div>
 
-    <!-- 移动端：底部固定 5 项导航 -->
+    <div class="admin-content">
+      <router-view v-slot="{ Component }">
+        <transition name="page" mode="out-in">
+          <component :is="Component" :key="route.path" />
+        </transition>
+      </router-view>
+    </div>
+
+    <!-- 移动端：底部固定 5 项导航，与学员端 MobileDock 同款 -->
     <nav class="admin-dock" aria-label="管理端移动导航">
       <router-link v-for="item in navItems" :key="item.to" :to="item.to" class="admin-dock__item"
         :class="{ 'is-active': isActive(item) }">
@@ -89,6 +96,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useAdminStore } from '@/stores/adminStore'
 import { useArticleStore } from '@/stores/blogStore'
 import { useCoursewareStore } from '@/stores/coursewareStore'
+import { useUiStore } from '@/stores/uiStore'
 import { ensureArticleData } from '@/composables/useAdminWorkspace'
 import { showToast } from '@/utils/toast'
 import BrandMark from '@/components/common/BrandMark.vue'
@@ -99,7 +107,9 @@ const authStore = useAuthStore()
 const adminStore = useAdminStore()
 const blogStore = useArticleStore()
 const coursewareStore = useCoursewareStore()
+const uiStore = useUiStore()
 
+const scrolled = ref(false)
 const userMenuOpen = ref(false)
 const userMenuRef = ref(null)
 
@@ -117,6 +127,10 @@ const userInitial = computed(() => (authStore.username || 'A').slice(0, 1).toUpp
 function isActive(item) {
   if (item.exact) return route.path === item.to
   return route.path === item.to || route.path.startsWith(`${item.to}/`)
+}
+
+function onScroll() {
+  scrolled.value = window.scrollY > 4
 }
 
 async function handleLogout() {
@@ -153,6 +167,8 @@ onMounted(async () => {
   window.addEventListener('beforeunload', handleBeforeUnload)
   document.addEventListener('click', onDocumentClick)
   document.addEventListener('keydown', onKeydown)
+  window.addEventListener('scroll', onScroll, { passive: true })
+  onScroll()
 
   // 课件目录依赖文章目录；失败不阻塞管理页渲染，只提示。
   try {
@@ -167,44 +183,43 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', handleBeforeUnload)
   document.removeEventListener('click', onDocumentClick)
   document.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('scroll', onScroll)
 })
 </script>
 
 <style scoped>
-.admin-shell {
-  display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
-  gap: 0;
-  width: 100%;
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 22px 28px 64px;
-  min-height: calc(100vh - var(--header-h));
+/* ---------------------------------------------------------------- */
+/* 顶部导航：沿用学员端 AppHeader 的尺寸、配色与激活态                 */
+/* ---------------------------------------------------------------- */
+.admin-header {
+  position: sticky;
+  top: 0;
+  z-index: 120;
+  background: rgba(243, 236, 221, 0.94);
+  border-bottom: 1.5px solid var(--ink);
+  transition: box-shadow 0.2s var(--ease-out);
 }
 
-/* ------------------------------------------------------------------ */
-/* 左侧固定导航                                                        */
-/* ------------------------------------------------------------------ */
-.admin-rail {
-  position: sticky;
-  top: calc(var(--header-h) + 22px);
-  align-self: start;
+.admin-header.is-scrolled {
+  box-shadow: 0 4px 0 rgba(28, 26, 20, 0.08);
+}
+
+.admin-header__inner {
   display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 18px 16px;
-  border: 1.5px solid var(--ink);
-  border-radius: var(--r-lg);
-  background: var(--paper-1);
-  box-shadow: var(--shadow-card);
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1320px;
+  margin: 0 auto;
+  height: 66px;
+  padding: 0 24px;
 }
 
 .admin-brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding-bottom: 14px;
-  border-bottom: 1.5px dashed var(--line-strong);
+  flex-shrink: 0;
 }
 
 .admin-brand__text {
@@ -216,7 +231,7 @@ onBeforeUnmount(() => {
 
 .admin-brand__text strong {
   font-family: var(--font-display);
-  font-size: 0.96rem;
+  font-size: 1.02rem;
   font-weight: 800;
   letter-spacing: 0.14em;
   color: var(--ink);
@@ -224,233 +239,168 @@ onBeforeUnmount(() => {
 
 .admin-brand__text span {
   font-family: var(--font-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.1em;
+  font-size: 0.7rem;
   color: var(--text-3);
+  letter-spacing: 0.1em;
 }
 
 .admin-nav {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 6px;
 }
 
 .admin-nav__link {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 11px;
-  padding: 9px 11px;
-  border-radius: var(--r-sm);
+  gap: 7px;
+  height: 36px;
+  padding: 0 13px;
+  border-radius: 8px;
   border: 1.5px solid transparent;
   color: var(--text-2);
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   font-weight: 700;
-  transition: background var(--dur), border-color var(--dur), color var(--dur), box-shadow var(--dur);
+  white-space: nowrap;
+  transition: background var(--dur-fast), color var(--dur-fast), box-shadow var(--dur-fast);
 }
 
 .admin-nav__link:hover {
-  background: var(--paper-2);
-  border-color: var(--ink);
   color: var(--ink);
+  background: var(--paper-2);
 }
 
 .admin-nav__link.is-active {
-  background: var(--ink);
+  color: var(--ink);
+  background: var(--lime);
   border-color: var(--ink);
-  color: var(--paper-1);
-  box-shadow: 3px 3px 0 rgba(28, 26, 20, 0.28);
+  box-shadow: 2px 2px 0 var(--ink);
 }
 
-.admin-nav__icon {
-  display: inline-flex;
+.admin-nav__link i {
+  font-size: 0.82rem;
+}
+
+.admin-header__actions {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  border: 1.5px solid var(--ink);
-  background: var(--paper-2);
-  color: var(--ink);
-  font-size: 0.84rem;
+  gap: 8px;
   flex-shrink: 0;
 }
 
-.admin-nav__link.is-active .admin-nav__icon {
-  background: var(--butter);
-  color: var(--ink);
-}
-
-.admin-nav__label {
-  flex: 1;
-  min-width: 0;
-}
-
-.admin-rail__foot {
-  margin-top: auto;
-  padding-top: 14px;
-  border-top: 1.5px solid var(--ink);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.admin-rail__exit {
+.admin-search {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--text-2);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.admin-rail__exit:hover {
-  color: var(--ink);
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
-}
-
-.admin-rail__stamp {
-  align-self: flex-start;
-  padding: 2px 7px;
-  border: 1.5px dashed var(--ink);
-  color: var(--vermilion);
-  font-family: var(--font-mono);
-  font-size: 0.54rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  transform: rotate(-2deg);
-}
-
-/* ------------------------------------------------------------------ */
-/* 右侧：顶部管理栏 + 内容                                             */
-/* ------------------------------------------------------------------ */
-.admin-shell__body {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  padding-left: 22px;
-}
-
-.admin-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 18px;
+  height: 36px;
+  padding: 0 8px 0 12px;
+  border-radius: 8px;
   border: 1.5px solid var(--ink);
-  border-radius: var(--r-lg);
   background: var(--paper-1);
-  box-shadow: var(--shadow-card);
+  color: var(--text-2);
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: background var(--dur-fast), box-shadow var(--dur-fast);
 }
 
-.admin-bar__left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
+.admin-search:hover {
+  background: var(--paper-2);
+  box-shadow: 2px 2px 0 var(--ink);
 }
 
-.admin-bar__nest {
-  font-family: var(--font-display);
-  font-size: 0.84rem;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  color: var(--ink);
-  white-space: nowrap;
+.admin-search__kbd {
+  pointer-events: none;
 }
 
-.admin-bar__divider {
-  width: 1.5px;
-  height: 20px;
-  background: var(--ink);
-  opacity: 0.5;
-  flex-shrink: 0;
-}
-
-.admin-bar__title {
-  font-size: 1.12rem;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.admin-bar__user {
+/* 用户菜单 */
+.admin-user {
   position: relative;
-  flex-shrink: 0;
 }
 
-.admin-bar__trigger {
+.admin-user__trigger {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   height: 42px;
-  padding: 0 8px 0 4px;
-  border-radius: 10px;
+  padding: 0 10px;
+  border-radius: var(--r-full);
   border: 1.5px solid transparent;
   transition: background var(--dur-fast), border-color var(--dur-fast);
 }
 
-.admin-bar__trigger:hover,
-.admin-bar__trigger[aria-expanded='true'] {
+.admin-user__trigger:hover,
+.admin-user__trigger[aria-expanded="true"] {
   background: var(--paper-2);
   border-color: var(--ink);
 }
 
-.admin-bar__avatar {
-  width: 32px;
-  height: 32px;
+.admin-user__avatar {
+  width: 30px;
+  height: 30px;
   font-size: 0.8rem;
 }
 
-.admin-bar__usertext {
+.admin-user__meta {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   line-height: 1.15;
-  max-width: 130px;
 }
 
-.admin-bar__usertext strong {
+.admin-user__name {
   font-size: 0.82rem;
+  font-weight: 800;
   color: var(--ink);
-  max-width: 130px;
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.admin-bar__usertext small {
+.admin-user__role {
   font-family: var(--font-mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.1em;
-  color: var(--vermilion);
-  font-weight: 600;
-}
-
-.admin-bar__caret {
   font-size: 0.62rem;
   color: var(--text-3);
-  transition: transform var(--dur-fast);
+  letter-spacing: 0.08em;
 }
 
-.admin-bar__trigger[aria-expanded='true'] .admin-bar__caret {
-  transform: rotate(180deg);
+.admin-user__caret {
+  font-size: 0.66rem;
+  color: var(--text-3);
 }
 
 .admin-menu {
   position: absolute;
-  top: calc(100% + 10px);
   right: 0;
-  z-index: 150;
-  width: 216px;
+  top: calc(100% + 10px);
+  width: 236px;
   padding: 8px;
-  border-radius: 14px;
-  border: 2px solid var(--ink);
-  background: var(--paper-1);
-  box-shadow: var(--shadow-float);
+  border-radius: var(--r-lg);
+  border: 1.5px solid var(--ink);
+  background: var(--paper-0);
+  box-shadow: 4px 4px 0 var(--ink);
+  z-index: 160;
+}
+
+.admin-menu__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 12px;
+  border-bottom: 1.5px dashed var(--line-strong);
+  margin-bottom: 6px;
+}
+
+.admin-menu__name {
+  font-size: 0.86rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.admin-menu__sub {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-3);
 }
 
 .admin-menu__item {
@@ -458,116 +408,107 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 10px 12px;
+  padding: 9px 10px;
   border-radius: 8px;
   color: var(--text-2);
-  font-size: 0.86rem;
-  font-weight: 700;
+  font-size: 0.82rem;
+  font-weight: 600;
   text-align: left;
   transition: background var(--dur-fast), color var(--dur-fast);
 }
 
-.admin-menu__item i:first-child {
-  width: 18px;
-  text-align: center;
-  color: var(--text-3);
-}
-
 .admin-menu__item:hover {
-  background: var(--lime);
+  background: var(--paper-2);
   color: var(--ink);
 }
 
 .admin-menu__item--danger {
-  margin-top: 4px;
-  border-top: 1.5px dashed var(--line-strong);
-  border-radius: 0 0 8px 8px;
-  color: #b32d14;
+  color: var(--vermilion);
 }
 
 .admin-menu__item--danger:hover {
-  background: rgba(237, 75, 42, 0.14);
-  color: #b32d14;
+  background: rgba(214, 63, 43, 0.12);
+  color: var(--vermilion);
+}
+
+/* ---------------------------------------------------------------- */
+/* 页面标题 + 内容                                                    */
+/* ---------------------------------------------------------------- */
+.admin-pagehead {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 28px 24px 6px;
+}
+
+.admin-pagehead__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 2.4vw, 1.9rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.admin-pagehead__sub {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
 }
 
 .admin-content {
-  min-width: 0;
-  flex: 1;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 8px 24px 72px;
+  min-height: calc(100vh - var(--header-h) - 220px);
 }
 
-/* ------------------------------------------------------------------ */
-/* 移动端底部导航                                                      */
-/* ------------------------------------------------------------------ */
+/* ---------------------------------------------------------------- */
+/* 移动端底部导航                                                     */
+/* ---------------------------------------------------------------- */
 .admin-dock {
   display: none;
 }
 
-/* ------------------------------------------------------------------ */
-/* 下拉过渡                                                            */
-/* ------------------------------------------------------------------ */
-.dropdown-enter-active,
-.dropdown-leave-active {
-  transition: opacity 0.16s var(--ease-out), transform 0.16s var(--ease-out);
-}
-
-.dropdown-enter-from,
-.dropdown-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
-}
-
-/* ------------------------------------------------------------------ */
-/* 响应式                                                              */
-/* ------------------------------------------------------------------ */
-@media (max-width: 1024px) {
-  .admin-shell {
-    padding: 18px 20px 56px;
+@media (max-width: 1100px) {
+  .admin-nav {
+    gap: 2px;
   }
 
-  .admin-shell__body {
-    padding-left: 16px;
+  .admin-nav__link {
+    padding: 0 9px;
+    font-size: 0.8rem;
+  }
+
+  .admin-search__label {
+    display: none;
+  }
+
+  .admin-search__kbd {
+    display: none;
   }
 }
 
-@media (max-width: 768px) {
-  .admin-shell {
-    display: block;
-    padding: 12px 14px calc(var(--dock-h) + 34px + env(safe-area-inset-bottom));
-  }
-
-  .admin-rail {
+@media (max-width: 900px) {
+  .admin-nav {
     display: none;
   }
 
-  .admin-shell__body {
-    padding-left: 0;
-    gap: 14px;
+  .admin-header__inner {
+    height: 60px;
+    padding: 0 16px;
   }
 
-  .admin-bar {
-    padding: 10px 12px;
-  }
-
-  .admin-bar__nest,
-  .admin-bar__divider {
+  .admin-user__meta {
     display: none;
   }
 
-  .admin-bar__title {
-    font-size: 1rem;
+  .admin-pagehead {
+    padding: 20px 16px 2px;
   }
 
-  .admin-bar__usertext small {
-    display: none;
-  }
-
-  .admin-bar__trigger {
-    height: 38px;
-    padding: 0 4px;
-  }
-
-  .admin-bar__caret {
-    display: none;
+  .admin-content {
+    padding: 8px 16px calc(96px + env(safe-area-inset-bottom));
   }
 
   .admin-dock {
@@ -577,29 +518,30 @@ onBeforeUnmount(() => {
     bottom: calc(10px + env(safe-area-inset-bottom));
     z-index: 130;
     display: flex;
-    align-items: center;
-    justify-content: space-around;
-    height: 64px;
-    padding: 0 6px;
-    border-radius: 16px;
-    border: 2px solid var(--ink);
-    background: var(--paper-1);
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 2px;
+    padding: 6px;
+    border-radius: var(--r-full);
+    border: 1.5px solid var(--ink);
+    background: rgba(255, 253, 246, 0.96);
     box-shadow: 4px 4px 0 var(--ink);
+    backdrop-filter: blur(8px);
   }
 
   .admin-dock__item {
+    flex: 1 1 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 3px;
-    flex: 1;
-    height: 48px;
-    border-radius: 10px;
+    min-width: 0;
+    padding: 6px 2px 4px;
+    border-radius: var(--r-full);
     color: var(--text-3);
-    font-size: 0.6rem;
+    font-size: 0.62rem;
     font-weight: 700;
-    transition: color var(--dur-fast), background var(--dur-fast);
   }
 
   .admin-dock__item i {
@@ -609,6 +551,7 @@ onBeforeUnmount(() => {
   .admin-dock__item.is-active {
     color: var(--ink);
     background: var(--lime);
+    border: 1px solid var(--ink);
   }
 }
 </style>
