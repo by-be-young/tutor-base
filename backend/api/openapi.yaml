@@ -474,7 +474,7 @@ paths:
                 type: array
                 items: { type: integer, format: int64 }
         '401': { $ref: '#/components/responses/Problem' }
-        '403': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/CoursewareNotClaimed' }
   /admin/articles/{articleId}/answer-keys:
     get:
       operationId: getArticleAnswerKeys
@@ -490,7 +490,7 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/AnswerKey' }
         '401': { $ref: '#/components/responses/Problem' }
-        '403': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/CoursewareNotClaimed' }
     put:
       operationId: replaceArticleAnswerKeys
       summary: 批量创建或替换文章参考答案配置
@@ -513,7 +513,7 @@ paths:
                 items: { $ref: '#/components/schemas/AnswerKey' }
         '400': { $ref: '#/components/responses/Problem' }
         '401': { $ref: '#/components/responses/Problem' }
-        '403': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/CoursewareNotClaimed' }
   /admin/articles/{articleId}/study-state:
     get:
       operationId: getAdministratorArticleStudyState
@@ -532,7 +532,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ArticleStudyState' }
         '401': { $ref: '#/components/responses/Problem' }
-        '403': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/CoursewareNotClaimed' }
         '404': { $ref: '#/components/responses/Problem' }
   /admin/learners/{learnerId}/study-progress:
     get:
@@ -554,7 +554,7 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/ArticleProgress' }
         '401': { $ref: '#/components/responses/Problem' }
-        '403': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/CoursewareNotClaimed' }
         '404': { $ref: '#/components/responses/Problem' }
   /admin/articles/{articleId}/learners/{learnerId}/submissions/{questionId}/review:
     put:
@@ -582,7 +582,7 @@ paths:
               schema: { $ref: '#/components/schemas/Submission' }
         '400': { $ref: '#/components/responses/Problem' }
         '401': { $ref: '#/components/responses/Problem' }
-        '403': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/CoursewareNotClaimed' }
         '404': { $ref: '#/components/responses/Problem' }
   /wrong-book:
     get:
@@ -857,7 +857,7 @@ paths:
         '401':
           $ref: '#/components/responses/Problem'
         '403':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/CoursewareNotClaimed'
         '404':
           $ref: '#/components/responses/Problem'
   /admin/learners/{learnerId}/password:
@@ -896,6 +896,183 @@ paths:
         '409':
           $ref: '#/components/responses/Problem'
         '503':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware-catalog/sync:
+    post:
+      operationId: syncCoursewareCatalog
+      summary: 同步前端静态课件目录
+      description: >-
+        按 articleId upsert 课件目录的学科与标题，并刷新 updatedAt；不会删除请求中未出现的条目。
+        管理端每次进入时调用，重复调用结果一致。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareCatalogSyncRequest'
+      responses:
+        '200':
+          description: 已同步的目录条目数。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareCatalogSyncResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware-claims:
+    get:
+      operationId: getCoursewareClaims
+      summary: 获取当前管理员显式认领的学科与单篇课件
+      description: 只返回显式认领记录，不包含由学科认领派生覆盖的课件。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 当前管理员的显式认领。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareClaims'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware-claims/subjects/{subject}:
+    put:
+      operationId: claimCoursewareSubject
+      summary: 认领一个学科及其全部课件
+      description: >-
+        认领学科后自动覆盖该学科当前及未来同步的全部课件。重复认领幂等，返回首次认领时间。
+        学科必须存在于课件目录，否则返回 404 resource_not_found。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/SubjectName'
+      responses:
+        '200':
+          description: 学科认领结果。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareSubjectClaim'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: releaseCoursewareSubject
+      summary: 释放当前管理员的学科认领
+      description: 幂等删除；单篇课件认领不受影响，仅由学科覆盖的课件回到待认领。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/SubjectName'
+      responses:
+        '204':
+          description: 已释放（或本就不存在）。
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware-claims/articles/{articleId}:
+    put:
+      operationId: claimCoursewareArticle
+      summary: 单独认领一篇课件
+      description: 幂等；课件必须存在于课件目录，否则返回 404 resource_not_found。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/ArticleId'
+      responses:
+        '200':
+          description: 课件认领结果。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareArticleClaim'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: releaseCoursewareArticle
+      summary: 释放当前管理员的单篇课件认领
+      description: 幂等删除；学科认领不受影响。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/ArticleId'
+      responses:
+        '204':
+          description: 已释放（或本就不存在）。
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware-claims/catalog:
+    get:
+      operationId: getCoursewareClaimCatalog
+      summary: 按认领范围查询课件目录
+      description: >-
+        subjects 始终返回目录中的全部学科及认领摘要；items 按 scope 过滤：
+        mine 为当前管理员可见课件（学科认领覆盖 ∪ 单篇认领），unclaimed 为没有任何管理员认领的课件，
+        all 为全部课件并带 claimedBy 归属。排序为学科、articleId。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: scope
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [mine, unclaimed, all]
+            default: mine
+      responses:
+        '200':
+          description: 课件目录与认领状态。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareClaimCatalog'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
           $ref: '#/components/responses/Problem'
   /admin/learners/{learnerId}/impersonate:
     post:
@@ -948,6 +1125,12 @@ components:
       in: path
       required: true
       schema: { type: integer, format: int64, minimum: 1 }
+    SubjectName:
+      name: subject
+      in: path
+      required: true
+      description: URL 编码的学科名称，例如 %E5%8C%96%E5%AD%A6（化学）。
+      schema: { type: string, minLength: 1, maxLength: 100 }
     QuestionId:
       name: questionId
       in: path
@@ -973,6 +1156,12 @@ components:
   responses:
     Problem:
       description: The request could not be completed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ApiProblem'
+    CoursewareNotClaimed:
+      description: 当前管理员未认领该课件，无法访问或修改其数据；`code` 为 `courseware_not_claimed`。
       content:
         application/problem+json:
           schema:
@@ -1163,6 +1352,143 @@ components:
             format: int64
             minimum: 1
             maximum: 2147483647
+    CoursewareCatalogSyncRequest:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 5000
+          items:
+            $ref: '#/components/schemas/CoursewareCatalogSyncItem'
+    CoursewareCatalogSyncItem:
+      type: object
+      additionalProperties: false
+      required: [articleId, subject]
+      properties:
+        articleId:
+          type: integer
+          format: int64
+          minimum: 1
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 100
+        title:
+          type: [string, 'null']
+          maxLength: 300
+    CoursewareCatalogSyncResult:
+      type: object
+      additionalProperties: false
+      required: [synced]
+      properties:
+        synced:
+          type: integer
+          minimum: 0
+    CoursewareClaims:
+      type: object
+      additionalProperties: false
+      required: [subjectClaims, articleClaims]
+      properties:
+        subjectClaims:
+          type: array
+          items:
+            type: string
+        articleClaims:
+          type: array
+          items:
+            type: integer
+            format: int64
+            minimum: 1
+    CoursewareSubjectClaim:
+      type: object
+      additionalProperties: false
+      required: [subject, claimedAt]
+      properties:
+        subject:
+          type: string
+        claimedAt:
+          type: string
+          format: date-time
+    CoursewareArticleClaim:
+      type: object
+      additionalProperties: false
+      required: [articleId, claimedAt]
+      properties:
+        articleId:
+          type: integer
+          format: int64
+          minimum: 1
+        claimedAt:
+          type: string
+          format: date-time
+    ClaimBy:
+      type: object
+      additionalProperties: false
+      required: [accountId, username]
+      properties:
+        accountId:
+          type: integer
+          format: int64
+          minimum: 1
+        username:
+          type: string
+    SubjectClaimSummary:
+      type: object
+      additionalProperties: false
+      required: [subject, total, mine, claimedByOthers]
+      properties:
+        subject:
+          type: string
+        total:
+          type: integer
+          minimum: 0
+        mine:
+          type: boolean
+          description: 当前管理员是否认领了该学科。
+        claimedByOthers:
+          type: array
+          description: 其他认领该学科的管理员用户名。
+          items:
+            type: string
+    CoursewareCatalogItem:
+      type: object
+      additionalProperties: false
+      required: [articleId, subject, title, individuallyClaimed, coveredBySubjectClaim, claimedBy]
+      properties:
+        articleId:
+          type: integer
+          format: int64
+          minimum: 1
+        subject:
+          type: string
+        title:
+          type: [string, 'null']
+        individuallyClaimed:
+          type: boolean
+          description: 当前管理员是否单独认领了该课件。
+        coveredBySubjectClaim:
+          type: boolean
+          description: 当前管理员是否通过学科认领覆盖了该课件。
+        claimedBy:
+          type: array
+          description: 所有认领该课件的管理员（学科认领或单篇认领）。
+          items:
+            $ref: '#/components/schemas/ClaimBy'
+    CoursewareClaimCatalog:
+      type: object
+      additionalProperties: false
+      required: [subjects, items]
+      properties:
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubjectClaimSummary'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoursewareCatalogItem'
     ContentGrants:
       type: object
       additionalProperties: false

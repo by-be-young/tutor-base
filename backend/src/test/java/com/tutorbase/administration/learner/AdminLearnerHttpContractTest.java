@@ -83,6 +83,9 @@ class AdminLearnerHttpContractTest {
                 .addFilters(traceIdFilter)
                 .apply(springSecurity())
                 .build();
+        jdbc.update("DELETE FROM public.admin_courseware_claim");
+        jdbc.update("DELETE FROM public.admin_subject_claim");
+        jdbc.update("DELETE FROM public.courseware_catalog");
         jdbc.update("DELETE FROM public.account_session");
         jdbc.update("DELETE FROM public.account_activation");
         jdbc.update("UPDATE public.student SET claimed_by = NULL, claimed_at = NULL");
@@ -408,9 +411,11 @@ class AdminLearnerHttpContractTest {
                 + "VALUES (3, 'q1', 'a'), (11, 'q1', 'b')");
         jdbc.update("INSERT INTO public.article_question_submissions "
                 + "(blog_id, student_id, question_id, answer_text) VALUES (11, 2, 'q1', 'draft')");
+        jdbc.update("INSERT INTO public.courseware_catalog (article_id, subject) VALUES (3, '数学')");
+        jdbc.update("INSERT INTO public.admin_subject_claim (admin_account_id, subject) VALUES (500, '数学')");
+        Cookie adminCookie = login("admin", "Admin-password-2026");
 
-        mockMvc.perform(get("/api/v1/admin/learners/2/study-progress")
-                        .with(user("admin").roles("ADMINISTRATOR")))
+        mockMvc.perform(get("/api/v1/admin/learners/2/study-progress").cookie(adminCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].articleId").value(3))

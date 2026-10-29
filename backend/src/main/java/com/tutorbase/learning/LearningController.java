@@ -52,13 +52,16 @@ public class LearningController {
     }
 
     @GetMapping("/admin/articles/{articleId}/answer-keys")
-    ResponseEntity<List<AnswerKeyResponse>> answerKeys(@PathVariable @Positive long articleId) {
-        return noStore(learning.answerKeys(articleId).stream().map(AnswerKeyResponse::from).toList());
+    ResponseEntity<List<AnswerKeyResponse>> answerKeys(
+            @AuthenticationPrincipal AccountPrincipal administrator,
+            @PathVariable @Positive long articleId) {
+        return noStore(learning.answerKeys(administrator.accountId(), articleId).stream()
+                .map(AnswerKeyResponse::from).toList());
     }
 
     @GetMapping("/admin/articles/answer-key-article-ids")
-    ResponseEntity<List<Long>> answerKeyArticleIds() {
-        return noStore(learning.answerKeyArticleIds());
+    ResponseEntity<List<Long>> answerKeyArticleIds(@AuthenticationPrincipal AccountPrincipal administrator) {
+        return noStore(learning.answerKeyArticleIds(administrator.accountId()));
     }
 
     @GetMapping("/articles/study-progress")
@@ -70,38 +73,44 @@ public class LearningController {
 
     @GetMapping("/admin/learners/{learnerId}/study-progress")
     ResponseEntity<List<ArticleProgressResponse>> administratorProgress(
+            @AuthenticationPrincipal AccountPrincipal administrator,
             @PathVariable @Positive long learnerId) {
-        return noStore(learning.administratorProgress(learnerId).stream()
+        return noStore(learning.administratorProgress(administrator.accountId(), learnerId).stream()
                 .map(ArticleProgressResponse::from).toList());
     }
 
     @PutMapping("/admin/articles/{articleId}/answer-keys")
     ResponseEntity<List<AnswerKeyResponse>> replaceAnswerKeys(
+            @AuthenticationPrincipal AccountPrincipal administrator,
             @PathVariable @Positive long articleId,
             @Valid @RequestBody ReplaceAnswerKeysRequest request) {
         List<LearningService.AnswerKeyInput> inputs = request.items().stream()
                 .map(item -> new LearningService.AnswerKeyInput(
                         item.questionId(), item.answerText(), item.autoGrade()))
                 .toList();
-        return noStore(learning.replaceAnswerKeys(articleId, inputs).stream()
+        return noStore(learning.replaceAnswerKeys(administrator.accountId(), articleId, inputs).stream()
                 .map(AnswerKeyResponse::from).toList());
     }
 
     @GetMapping("/admin/articles/{articleId}/study-state")
     ResponseEntity<ArticleStudyStateResponse> administratorState(
+            @AuthenticationPrincipal AccountPrincipal administrator,
             @PathVariable @Positive long articleId,
             @RequestParam @Positive long learnerId) {
-        return noStore(ArticleStudyStateResponse.from(learning.administratorState(learnerId, articleId)));
+        return noStore(ArticleStudyStateResponse.from(
+                learning.administratorState(administrator.accountId(), learnerId, articleId)));
     }
 
     @PutMapping("/admin/articles/{articleId}/learners/{learnerId}/submissions/{questionId}/review")
     ResponseEntity<SubmissionResponse> review(
+            @AuthenticationPrincipal AccountPrincipal administrator,
             @PathVariable @Positive long articleId,
             @PathVariable @Positive long learnerId,
             @PathVariable @NotBlank @Size(max = 200) String questionId,
             @Valid @RequestBody ReviewSubmissionRequest request) {
         return noStore(SubmissionResponse.from(
-                learning.review(learnerId, articleId, questionId, request.result().name())));
+                learning.review(administrator.accountId(), learnerId, articleId, questionId,
+                        request.result().name())));
     }
 
     private static long requireLearner(AccountPrincipal principal) {

@@ -76,6 +76,9 @@ class LearnerContentGrantHttpContractTest {
                 .addFilters(traceIdFilter)
                 .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity())
                 .build();
+        jdbc.update("DELETE FROM public.admin_courseware_claim");
+        jdbc.update("DELETE FROM public.admin_subject_claim");
+        jdbc.update("DELETE FROM public.courseware_catalog");
         jdbc.update("DELETE FROM public.account_session");
         jdbc.update("DELETE FROM public.account_activation");
         jdbc.update("DELETE FROM public.account");
@@ -84,6 +87,11 @@ class LearnerContentGrantHttpContractTest {
         jdbc.update("INSERT INTO public.student (id, username, permissions) VALUES (5, 'Alice', '{9,3}')");
         insertActiveAccount(2, "young", "administrator", "Admin-password-2026");
         insertActiveAccount(5, "Alice", "learner", "Learner-password-2026");
+        long administratorAccountId = jdbc.queryForObject(
+                "SELECT id FROM public.account WHERE username = 'young'", Long.class);
+        jdbc.update("INSERT INTO public.courseware_catalog (article_id, subject) VALUES (3, '数学'), (9, '数学')");
+        jdbc.update("INSERT INTO public.admin_subject_claim (admin_account_id, subject) VALUES (?, '数学')",
+                administratorAccountId);
         jdbc.queryForObject(
                 "SELECT setval(pg_get_serial_sequence('public.student', 'id'), 5, true)", Long.class);
         jdbc.queryForObject(

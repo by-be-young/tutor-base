@@ -46,7 +46,19 @@ WITH expected_privilege(table_name, privilege_type) AS (
         ('task_assignments', 'INSERT'),
         ('task_assignments', 'UPDATE'),
         ('card_sets', 'SELECT'),
-        ('card_definitions', 'SELECT')
+        ('card_definitions', 'SELECT'),
+        ('courseware_catalog', 'SELECT'),
+        ('courseware_catalog', 'INSERT'),
+        ('courseware_catalog', 'UPDATE'),
+        ('courseware_catalog', 'DELETE'),
+        ('admin_subject_claim', 'SELECT'),
+        ('admin_subject_claim', 'INSERT'),
+        ('admin_subject_claim', 'UPDATE'),
+        ('admin_subject_claim', 'DELETE'),
+        ('admin_courseware_claim', 'SELECT'),
+        ('admin_courseware_claim', 'INSERT'),
+        ('admin_courseware_claim', 'UPDATE'),
+        ('admin_courseware_claim', 'DELETE')
 ), expected_sequence(sequence_name) AS (
     VALUES
         ('student_id_seq'),
@@ -60,12 +72,15 @@ WITH expected_privilege(table_name, privilege_type) AS (
         ('wrong_questions_id_seq'),
         ('task_claims_id_seq'),
         ('achievement_claims_id_seq'),
-        ('task_assignments_id_seq')
+        ('task_assignments_id_seq'),
+        ('admin_subject_claim_id_seq'),
+        ('admin_courseware_claim_id_seq')
 ), expected_rls_table(table_name) AS (
     VALUES ('student'), ('account'), ('account_activation'), ('account_session'),
         ('daily_check_in'), ('user_points'), ('task_claims'), ('card_collection'),
         ('article_answer_keys'), ('article_question_submissions'), ('wrong_questions'),
-        ('achievement_claims'), ('task_assignments'), ('card_sets'), ('card_definitions')
+        ('achievement_claims'), ('task_assignments'), ('card_sets'), ('card_definitions'),
+        ('courseware_catalog'), ('admin_subject_claim'), ('admin_courseware_claim')
 ), expected_policy(table_name, policy_name, command, using_expression, check_expression) AS (
     VALUES
         ('student', 'tutor_base_runtime_student_select', 'r', 'true', NULL),
@@ -97,7 +112,10 @@ WITH expected_privilege(table_name, privilege_type) AS (
         ('achievement_claims', 'tutor_base_runtime_achievement_claims_all', '*', 'true', 'true'),
         ('task_assignments', 'tutor_base_runtime_task_assignments_all', '*', 'true', 'true'),
         ('card_sets', 'tutor_base_runtime_card_sets_select', 'r', 'true', NULL),
-        ('card_definitions', 'tutor_base_runtime_card_definitions_select', 'r', 'true', NULL)
+        ('card_definitions', 'tutor_base_runtime_card_definitions_select', 'r', 'true', NULL),
+        ('courseware_catalog', 'tutor_base_runtime_courseware_catalog_all', '*', 'true', 'true'),
+        ('admin_subject_claim', 'tutor_base_runtime_admin_subject_claim_all', '*', 'true', 'true'),
+        ('admin_courseware_claim', 'tutor_base_runtime_admin_courseware_claim_all', '*', 'true', 'true')
 ), checks AS (
     SELECT 'runtime roles missing or unsafe' AS check_name, count(*)::bigint AS anomaly_count
     FROM (VALUES ('tutor_base_runtime'), ('tutor_base_app')) AS expected(role_name)

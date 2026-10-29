@@ -18,7 +18,7 @@ anon key 或数据库写权限。
 ### 开发阶段与部署门槛
 
 当前采用“模块化单体 + 分层 MVC”架构。Controller 负责 HTTP，按业务能力划分的 Service 负责授权、事务与业务规则，
-JdbcClient 直接访问 PostgreSQL；数据库结构由 Flyway V1 至 V11 管理。OpenAPI、Testcontainers HTTP contract、
+JdbcClient 直接访问 PostgreSQL；数据库结构由 Flyway V1 至 V12 管理。OpenAPI、Testcontainers HTTP contract、
 前端 gateway 测试和 Playwright E2E 均进入 CI。
 
 首次发布 V5 的门槛是：
@@ -85,7 +85,7 @@ Spring Boot 会从当前 `backend` 工作目录自动读取 `.env`。该文件�
 .\mvnw.cmd spring-boot:run
 ```
 
-首次启动会由 Flyway 自动执行 V1 至 V11；以后启动只校验历史，不会重复执行已经成功的 migration。出现
+首次启动会由 Flyway 自动执行 V1 至 V12；以后启动只校验历史，不会重复执行已经成功的 migration。出现
 `Started TutorBaseApplication` 后，后端地址为 `http://localhost:8080`。
 
 系统环境变量的优先级高于 `.env`，因此仍可以在 CI、Docker 或云服务器中直接注入变量。生产环境不要复制本地示例值；
@@ -172,7 +172,7 @@ docker stop tutor-base-postgres
 .\mvnw.cmd clean verify
 ```
 
-完整验证会启动临时 PostgreSQL 17 容器，执行 V1 至 V11，并再次调用 Flyway，确认第二次 migrate 执行数为 0。
+完整验证会启动临时 PostgreSQL 17 容器，执行 V1 至 V12，并再次调用 Flyway，确认第二次 migrate 执行数为 0。
 
 前端构建验证：
 
@@ -286,6 +286,7 @@ PostgreSQL 结构只通过 Flyway 管理：
 - `V5__complete_rewards_schema.sql`：补齐奖励领取与卡片收藏结构、外键、约束和索引。
 - `V6`–`V10`：成就/任务、抽卡收藏、累计积分、移除里程碑，以及数据驱动卡池。
 - `V11__add_learner_claiming.sql`：为 `student` 增加管理员认领字段、配对约束、部分索引和账户删除时的认领清理触发器。
+- `V12__add_courseware_claiming.sql`：新增课件目录与管理员课件/学科认领表；学科与管理员多对多，认领学科自动覆盖该学科当前及未来全部课件。
 
 ### Supabase 出现 `relation "account" already exists`
 
@@ -379,9 +380,15 @@ docker run --rm -p 8080:8080 tutor-base-backend:dev
 - `PUT /api/v1/admin/learners/{learnerId}/claim`：认领学习者；已被其他管理员认领返回 `409 learner_already_claimed`。
 - `DELETE /api/v1/admin/learners/{learnerId}/claim`：释放自己的认领；未认领时幂等返回 `204`。
 - `DELETE /api/v1/admin/learners/{learnerId}`：删除学习者及其账户与学习数据；管理员账户关联学习者受保护。
-- `PUT /api/v1/admin/learners/{learnerId}/content-grants`：管理员完整替换文章授权。
+- `PUT /api/v1/admin/learners/{learnerId}/content-grants`：在“我的课件”范围内完整替换文章授权，范围外既有授权保留。
 - `PUT /api/v1/admin/learners/{learnerId}/password`：管理员设置或重置学习者密码。
-- `GET /api/v1/admin/learners/{learnerId}/study-progress`：只返回该学习者已授权文章的作答与待批阅进度。
+- `GET /api/v1/admin/learners/{learnerId}/study-progress`：只返回该学习者已授权、且属于当前管理员“我的课件”的作答与待批阅进度。
+- `POST /api/v1/admin/courseware-catalog/sync`：管理端同步静态课件目录（articleId → 学科/标题），幂等 upsert。
+- `GET /api/v1/admin/courseware-claims`：查询当前管理员显式认领的学科与单篇课件。
+- `PUT/DELETE /api/v1/admin/courseware-claims/subjects/{subject}`：认领/释放学科；认领自动覆盖该学科当前及未来课件。
+- `PUT/DELETE /api/v1/admin/courseware-claims/articles/{articleId}`：单篇认领/释放课件。
+- `GET /api/v1/admin/courseware-claims/catalog?scope=mine|unclaimed|all`：课件认领目录与归属。
+- 管理端参考答案、作答状态、人工批阅与内容授权都限定在“我的课件”范围，范围外返回 `403 courseware_not_claimed`。
 
 部署该版本前，必须先重新运行 `../database/operations/provision_runtime_role.sql`，再执行
 `../database/audit/runtime_role_checks.sql`，确认所有 `anomaly_count` 都为 `0`，最后更新后端容器。

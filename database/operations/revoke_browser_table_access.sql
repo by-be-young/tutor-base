@@ -17,14 +17,17 @@ BEGIN
                 'public.article_answer_keys, public.article_question_submissions, '
                 'public.wrong_questions, public.daily_check_in, public.user_points, '
                 'public.task_claims, public.card_collection, '
-                'public.card_sets, public.card_definitions',
+                'public.card_sets, public.card_definitions, '
+                'public.courseware_catalog, public.admin_subject_claim, '
+                'public.admin_courseware_claim',
                 role_name);
             EXECUTE format(
                 'REVOKE ALL PRIVILEGES ON SEQUENCE %s FROM %I',
                 'public.student_id_seq, public.account_id_seq, public.account_activation_id_seq, '
                 'public.account_session_id_seq, public.daily_check_in_id_seq, '
                 'public.article_answer_keys_id_seq, public.article_question_submissions_id_seq, '
-                'public.wrong_questions_id_seq, public.task_claims_id_seq, public.card_collection_id_seq',
+                'public.wrong_questions_id_seq, public.task_claims_id_seq, public.card_collection_id_seq, '
+                'public.admin_subject_claim_id_seq, public.admin_courseware_claim_id_seq',
                 role_name);
         END IF;
     END LOOP;

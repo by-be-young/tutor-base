@@ -53,6 +53,17 @@ final class LearnerHttpExceptionHandler {
                 request);
     }
 
+    @ExceptionHandler(LearnerCoursewareNotClaimed.class)
+    ProblemDetail learnerCoursewareNotClaimed(
+            LearnerCoursewareNotClaimed exception, HttpServletRequest request) {
+        return ApiProblem.create(
+                HttpStatus.FORBIDDEN,
+                "courseware_not_claimed",
+                "课件未认领",
+                exception.getMessage(),
+                request);
+    }
+
     @ExceptionHandler(AdministratorLearnerProtected.class)
     ProblemDetail administratorLearnerProtected(
             AdministratorLearnerProtected exception, HttpServletRequest request) {

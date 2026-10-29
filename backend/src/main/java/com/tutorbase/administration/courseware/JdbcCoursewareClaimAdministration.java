@@ -1,0 +1,285 @@
+package com.tutorbase.administration.courseware;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+@Component
+class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration {
+
+    private final JdbcClient jdbc;
+
+    JdbcCoursewareClaimAdministration(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @Override
+    @Transactional
+    public int syncCatalog(List<CatalogEntry> entries) {
+        for (CatalogEntry entry : entries) {
+            jdbc.sql("""
+                    INSERT INTO public.courseware_catalog (article_id, subject, title, updated_at)
+                    VALUES (:articleId, :subject, :title, now())
+                    ON CONFLICT (article_id) DO UPDATE
+                        SET subject = EXCLUDED.subject,
+                            title = EXCLUDED.title,
+                            updated_at = now()
+                    """)
+                    .param("articleId", entry.articleId())
+                    .param("subject", entry.subject())
+                    .param("title", entry.title())
+                    .update();
+        }
+        return entries.size();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Claims claims(long administratorAccountId) {
+        List<String> subjectClaims = jdbc.sql("""
+                SELECT subject
+                FROM public.admin_subject_claim
+                WHERE admin_account_id = :administratorAccountId
+                ORDER BY subject
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .query(String.class)
+                .list();
+        List<Long> articleClaims = jdbc.sql("""
+                SELECT article_id
+                FROM public.admin_courseware_claim
+                WHERE admin_account_id = :administratorAccountId
+                ORDER BY article_id
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .query(Long.class)
+                .list();
+        return new Claims(subjectClaims, articleClaims);
+    }
+
+    @Override
+    @Transactional
+    public SubjectClaim claimSubject(long administratorAccountId, String subject) {
+        String normalizedSubject = subject.strip();
+        if (!subjectExists(normalizedSubject)) {
+            throw new CoursewareNotFound("未找到学科：" + normalizedSubject);
+        }
+        jdbc.sql("""
+                INSERT INTO public.admin_subject_claim (admin_account_id, subject)
+                VALUES (:administratorAccountId, :subject)
+                ON CONFLICT (admin_account_id, subject) DO NOTHING
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .param("subject", normalizedSubject)
+                .update();
+        Instant claimedAt = jdbc.sql("""
+                SELECT claimed_at
+                FROM public.admin_subject_claim
+                WHERE admin_account_id = :administratorAccountId
+                  AND subject = :subject
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .param("subject", normalizedSubject)
+                .query(JdbcCoursewareClaimAdministration::readInstant)
+                .single();
+        return new SubjectClaim(normalizedSubject, claimedAt);
+    }
+
+    @Override
+    @Transactional
+    public void releaseSubject(long administratorAccountId, String subject) {
+        jdbc.sql("""
+                DELETE FROM public.admin_subject_claim
+                WHERE admin_account_id = :administratorAccountId
+                  AND subject = :subject
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .param("subject", subject.strip())
+                .update();
+    }
+
+    @Override
+    @Transactional
+    public ArticleClaim claimArticle(long administratorAccountId, long articleId) {
+        if (!articleExists(articleId)) {
+            throw new CoursewareNotFound("未找到课件（ID：" + articleId + "）。");
+        }
+        jdbc.sql("""
+                INSERT INTO public.admin_courseware_claim (admin_account_id, article_id)
+                VALUES (:administratorAccountId, :articleId)
+                ON CONFLICT (admin_account_id, article_id) DO NOTHING
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .param("articleId", articleId)
+                .update();
+        Instant claimedAt = jdbc.sql("""
+                SELECT claimed_at
+                FROM public.admin_courseware_claim
+                WHERE admin_account_id = :administratorAccountId
+                  AND article_id = :articleId
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .param("articleId", articleId)
+                .query(JdbcCoursewareClaimAdministration::readInstant)
+                .single();
+        return new ArticleClaim(articleId, claimedAt);
+    }
+
+    @Override
+    @Transactional
+    public void releaseArticle(long administratorAccountId, long articleId) {
+        jdbc.sql("""
+                DELETE FROM public.admin_courseware_claim
+                WHERE admin_account_id = :administratorAccountId
+                  AND article_id = :articleId
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .param("articleId", articleId)
+                .update();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Catalog catalog(long administratorAccountId, CatalogScope scope) {
+        List<CatalogRow> rows = jdbc.sql("""
+                SELECT article_id, subject, title
+                FROM public.courseware_catalog
+                ORDER BY subject, article_id
+                """)
+                .query(JdbcCoursewareClaimAdministration::mapCatalogRow)
+                .list();
+        List<SubjectClaimer> subjectClaimers = jdbc.sql("""
+                SELECT claim.subject, claim.admin_account_id, account.username
+                FROM public.admin_subject_claim AS claim
+                JOIN public.account AS account ON account.id = claim.admin_account_id
+                ORDER BY claim.subject, claim.admin_account_id
+                """)
+                .query((resultSet, rowNumber) -> new SubjectClaimer(
+                        resultSet.getString("subject"),
+                        resultSet.getLong("admin_account_id"),
+                        resultSet.getString("username")))
+                .list();
+        List<ArticleClaimer> articleClaimers = jdbc.sql("""
+                SELECT claim.article_id, claim.admin_account_id, account.username
+                FROM public.admin_courseware_claim AS claim
+                JOIN public.account AS account ON account.id = claim.admin_account_id
+                ORDER BY claim.article_id, claim.admin_account_id
+                """)
+                .query((resultSet, rowNumber) -> new ArticleClaimer(
+                        resultSet.getLong("article_id"),
+                        resultSet.getLong("admin_account_id"),
+                        resultSet.getString("username")))
+                .list();
+
+        Claims myClaims = claims(administratorAccountId);
+        Set<String> mySubjects = Set.copyOf(myClaims.subjectClaims());
+        Set<Long> myArticles = Set.copyOf(myClaims.articleClaims());
+
+        Map<String, List<ClaimBy>> subjectClaimersBySubject = new LinkedHashMap<>();
+        for (SubjectClaimer claimer : subjectClaimers) {
+            subjectClaimersBySubject
+                    .computeIfAbsent(claimer.subject(), subject -> new ArrayList<>())
+                    .add(new ClaimBy(claimer.accountId(), claimer.username()));
+        }
+        Map<Long, List<ClaimBy>> articleClaimersByArticle = new LinkedHashMap<>();
+        for (ArticleClaimer claimer : articleClaimers) {
+            articleClaimersByArticle
+                    .computeIfAbsent(claimer.articleId(), articleId -> new ArrayList<>())
+                    .add(new ClaimBy(claimer.accountId(), claimer.username()));
+        }
+
+        Map<String, Long> articleCountsBySubject = new LinkedHashMap<>();
+        for (CatalogRow row : rows) {
+            articleCountsBySubject.merge(row.subject(), 1L, Long::sum);
+        }
+        List<SubjectSummary> subjects = articleCountsBySubject.entrySet().stream()
+                .map(entry -> new SubjectSummary(
+                        entry.getKey(),
+                        entry.getValue(),
+                        mySubjects.contains(entry.getKey()),
+                        subjectClaimersBySubject.getOrDefault(entry.getKey(), List.of()).stream()
+                                .filter(claimer -> claimer.accountId() != administratorAccountId)
+                                .map(ClaimBy::username)
+                                .toList()))
+                .toList();
+
+        List<CatalogItem> items = new ArrayList<>();
+        for (CatalogRow row : rows) {
+            TreeMap<Long, ClaimBy> claimers = new TreeMap<>();
+            subjectClaimersBySubject.getOrDefault(row.subject(), List.of())
+                    .forEach(claimer -> claimers.putIfAbsent(claimer.accountId(), claimer));
+            articleClaimersByArticle.getOrDefault(row.articleId(), List.of())
+                    .forEach(claimer -> claimers.putIfAbsent(claimer.accountId(), claimer));
+            boolean coveredBySubjectClaim = mySubjects.contains(row.subject());
+            boolean individuallyClaimed = myArticles.contains(row.articleId());
+            boolean visible = coveredBySubjectClaim || individuallyClaimed;
+            boolean included = switch (scope) {
+                case all -> true;
+                case mine -> visible;
+                case unclaimed -> claimers.isEmpty();
+            };
+            if (included) {
+                items.add(new CatalogItem(
+                        row.articleId(),
+                        row.subject(),
+                        row.title(),
+                        individuallyClaimed,
+                        coveredBySubjectClaim,
+                        List.copyOf(claimers.values())));
+            }
+        }
+        return new Catalog(subjects, items);
+    }
+
+    private boolean subjectExists(String subject) {
+        return jdbc.sql("""
+                SELECT EXISTS (
+                    SELECT 1 FROM public.courseware_catalog WHERE subject = :subject
+                )
+                """)
+                .param("subject", subject)
+                .query(Boolean.class)
+                .single();
+    }
+
+    private boolean articleExists(long articleId) {
+        return jdbc.sql("""
+                SELECT EXISTS (
+                    SELECT 1 FROM public.courseware_catalog WHERE article_id = :articleId
+                )
+                """)
+                .param("articleId", articleId)
+                .query(Boolean.class)
+                .single();
+    }
+
+    private static CatalogRow mapCatalogRow(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new CatalogRow(
+                resultSet.getLong("article_id"),
+                resultSet.getString("subject"),
+                resultSet.getString("title"));
+    }
+
+    private static Instant readInstant(ResultSet resultSet, int rowNumber) throws SQLException {
+        return resultSet.getTimestamp("claimed_at").toInstant();
+    }
+
+    private record CatalogRow(long articleId, String subject, String title) {
+    }
+
+    private record SubjectClaimer(String subject, long accountId, String username) {
+    }
+
+    private record ArticleClaimer(long articleId, long accountId, String username) {
+    }
+}

@@ -22,6 +22,12 @@ final class LearningHttpExceptionHandler {
                 "当前学习者没有访问该文章学习数据的权限。", request);
     }
 
+    @ExceptionHandler(LearningFailures.CoursewareNotClaimed.class)
+    ProblemDetail coursewareNotClaimed(RuntimeException exception, HttpServletRequest request) {
+        return ApiProblem.create(HttpStatus.FORBIDDEN, "courseware_not_claimed", "课件未认领",
+                "当前管理员未认领该课件，无法访问或修改其数据。", request);
+    }
+
     @ExceptionHandler(LearningFailures.SubmissionAlreadyReviewed.class)
     ProblemDetail alreadyReviewed(RuntimeException exception, HttpServletRequest request) {
         return ApiProblem.create(HttpStatus.CONFLICT, "submission_already_reviewed", "作答已经批阅",

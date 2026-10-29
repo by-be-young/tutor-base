@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.tutorbase.administration.courseware.CoursewareScope;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,9 +16,11 @@ import org.springframework.transaction.annotation.Transactional;
 class LearningService {
 
     private final JdbcClient jdbc;
+    private final CoursewareScope coursewareScope;
 
-    LearningService(JdbcClient jdbc) {
+    LearningService(JdbcClient jdbc, CoursewareScope coursewareScope) {
         this.jdbc = jdbc;
+        this.coursewareScope = coursewareScope;
     }
 
     @Transactional(readOnly = true)
@@ -27,20 +30,29 @@ class LearningService {
     }
 
     @Transactional(readOnly = true)
-    ArticleStudyState administratorState(long learnerId, long articleId) {
+    ArticleStudyState administratorState(long administratorAccountId, long learnerId, long articleId) {
+        requireVisible(administratorAccountId, articleId);
         requireLearnerExists(learnerId);
         return combine(articleId, findAnswerKeys(articleId), findSubmissions(articleId, learnerId), true);
     }
 
     @Transactional(readOnly = true)
-    List<AnswerKey> answerKeys(long articleId) {
+    List<AnswerKey> answerKeys(long administratorAccountId, long articleId) {
+        requireVisible(administratorAccountId, articleId);
         return findAnswerKeys(articleId);
     }
 
     @Transactional(readOnly = true)
-    List<Long> answerKeyArticleIds() {
-        return jdbc.sql("SELECT DISTINCT blog_id FROM public.article_answer_keys ORDER BY blog_id")
-                .query(Long.class).list();
+    List<Long> answerKeyArticleIds(long administratorAccountId) {
+        return jdbc.sql("""
+                SELECT DISTINCT answer.blog_id
+                FROM public.article_answer_keys AS answer
+                WHERE %s
+                ORDER BY answer.blog_id
+                """.formatted(coursewareScope.visibleArticlePredicate("answer.blog_id")))
+                .param("administratorAccountId", administratorAccountId)
+                .query(Long.class)
+                .list();
     }
 
     @Transactional(readOnly = true)
@@ -66,7 +78,7 @@ class LearningService {
     }
 
     @Transactional(readOnly = true)
-    List<ArticleProgress> administratorProgress(long learnerId) {
+    List<ArticleProgress> administratorProgress(long administratorAccountId, long learnerId) {
         requireLearnerExists(learnerId);
         return jdbc.sql("""
                 SELECT answer.blog_id,
@@ -81,15 +93,18 @@ class LearningService {
                   ON submission.blog_id = answer.blog_id
                  AND submission.question_id = answer.question_id
                  AND submission.student_id = :learnerId
+                WHERE %s
                 GROUP BY answer.blog_id
                 ORDER BY answer.blog_id
-                """)
+                """.formatted(coursewareScope.visibleArticlePredicate("answer.blog_id")))
                 .param("learnerId", learnerId)
+                .param("administratorAccountId", administratorAccountId)
                 .query(ArticleProgress::map).list();
     }
 
     @Transactional
-    List<AnswerKey> replaceAnswerKeys(long articleId, List<AnswerKeyInput> inputs) {
+    List<AnswerKey> replaceAnswerKeys(long administratorAccountId, long articleId, List<AnswerKeyInput> inputs) {
+        requireVisible(administratorAccountId, articleId);
         jdbc.sql("DELETE FROM public.article_answer_keys WHERE blog_id = :articleId")
                 .param("articleId", articleId)
                 .update();
@@ -167,7 +182,9 @@ class LearningService {
     }
 
     @Transactional
-    Submission review(long learnerId, long articleId, String questionId, String reviewResult) {
+    Submission review(long administratorAccountId, long learnerId, long articleId, String questionId,
+                      String reviewResult) {
+        requireVisible(administratorAccountId, articleId);
         Submission existing = jdbc.sql("""
                 SELECT id, blog_id, student_id, question_id, answer_text,
                        review_status, review_result, submitted_at, reviewed_at
@@ -200,6 +217,12 @@ class LearningService {
                     key == null ? "" : key.answerText());
         }
         return reviewed;
+    }
+
+    private void requireVisible(long administratorAccountId, long articleId) {
+        if (!coursewareScope.isVisible(administratorAccountId, articleId)) {
+            throw new LearningFailures.CoursewareNotClaimed();
+        }
     }
 
     private void requireContentGrant(long learnerId, long articleId) {

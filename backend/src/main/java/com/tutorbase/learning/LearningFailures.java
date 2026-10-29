@@ -16,4 +16,7 @@ final class LearningFailures {
 
     static final class SubmissionNotFound extends RuntimeException {
     }
+
+    static final class CoursewareNotClaimed extends RuntimeException {
+    }
 }

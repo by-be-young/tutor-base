@@ -5,12 +5,14 @@ WITH application_table(table_name) AS (
            ('article_answer_keys'), ('article_question_submissions'),
            ('wrong_questions'), ('daily_check_in'), ('user_points'),
            ('task_claims'), ('card_collection'),
-           ('card_sets'), ('card_definitions')
+           ('card_sets'), ('card_definitions'),
+           ('courseware_catalog'), ('admin_subject_claim'), ('admin_courseware_claim')
 ), application_sequence(sequence_name) AS (
     VALUES ('student_id_seq'), ('account_id_seq'), ('account_activation_id_seq'),
            ('account_session_id_seq'), ('daily_check_in_id_seq'),
            ('article_answer_keys_id_seq'), ('article_question_submissions_id_seq'),
-           ('wrong_questions_id_seq'), ('task_claims_id_seq'), ('card_collection_id_seq')
+           ('wrong_questions_id_seq'), ('task_claims_id_seq'), ('card_collection_id_seq'),
+           ('admin_subject_claim_id_seq'), ('admin_courseware_claim_id_seq')
 ), browser_role(role_name) AS (
     VALUES ('anon'), ('authenticated')
 ), privileges(privilege_type) AS (

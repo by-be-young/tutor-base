@@ -2,13 +2,14 @@
 
 本文以用户旅程追踪“浏览器直连 Supabase”到“Java 后端唯一可信入口”的迁移状态。状态只有 `已接管`、`进行中`、`未接管`；仅有表或 controller 不算完成，必须同时具备服务端授权、事务、OpenAPI 和自动化测试。
 
-## 当前基线（2026-10-27）
+## 当前基线（2026-10-29）
 
 | 业务能力 | 当前数据路径 | 后端状态 | 完成所需验证 |
 | --- | --- | --- | --- |
 | 身份、会话、注册、改密 | Java `/api/v1` | 已接管 | Identity HTTP contract、管理员重置、会话撤销 |
-| 学习者管理与内容授权 | Java `/api/v1/admin/learners` | 已接管 | 管理员/越权 contract、原子替换授权 |
+| 学习者管理与内容授权 | Java `/api/v1/admin/learners` | 已接管 | 管理员/越权 contract、原子替换授权、范围外授权保留 |
 | 多管理员学员认领 | Java `/api/v1/admin/learners` | 已接管 | V11 migration、FOR UPDATE 认领/释放、409 冲突 contract、删除学员级联 |
+| 多管理员课件认领 | Java `/api/v1/admin/courseware-claims` | 进行中 | V12 migration、目录同步、学科多对多认领、单篇认领、业务接口按“我的课件”收敛 |
 | 学员最近动态 | Java `/api/v1/admin/learners` | 已接管 | 服务端聚合作答/错题/签到/登录时间，前端只用于排序与展示 |
 | 每日签到 | Java `/api/v1/checkins` | 已接管 | 时区、月界、7/14 日奖励、并发幂等 |
 | 积分与卡片收藏 | Java `/api/v1/rewards` | 已接管 | 后端目录决定奖励；数据库唯一键阻止重复领取 |
@@ -16,8 +17,8 @@
 | 分级成就 | Java `/api/v1/achievements` | 进行中 | V6 migration、领取幂等、积分原子累加、HTTP contract |
 | 周期/限时任务 | Java `/api/v1/tasks` | 进行中 | 日/周边界、接取截止、过期重接、领取幂等、HTTP contract |
 | 学习状态与保存作答 | Java `/api/v1/articles` | 已接管 | 内容授权、自动批阅与错题收集位于同一 transaction |
-| 参考答案管理 | Java `/api/v1/admin/articles` | 已接管 | 管理员角色、整组保存、输入校验 |
-| 人工批阅 | Java `/api/v1/admin/articles` | 已接管 | 管理员角色、合法结果、错题收集；进度只统计学习者已授权文章 |
+| 参考答案管理 | Java `/api/v1/admin/articles` | 已接管 | 管理员角色、整组保存、输入校验、仅限“我的课件” |
+| 人工批阅 | Java `/api/v1/admin/articles` | 已接管 | 管理员角色、合法结果、错题收集；只处理“我的课件”且学员已授权文章 |
 | 错题本 | Java `/api/v1/wrong-book` | 已接管 | owner 隔离、手动加入、编辑、掌握、删除/复活 |
 | 文章正文与目录 | GitHub Pages 静态文件 | 保留静态 | 明确授权只控制导航/学习数据，不代表正文保密 |
 

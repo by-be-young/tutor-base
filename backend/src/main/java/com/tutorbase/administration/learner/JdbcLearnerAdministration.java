@@ -2,9 +2,14 @@ package com.tutorbase.administration.learner;
 
 import java.sql.Array;
 import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.TreeSet;
 
+import com.tutorbase.administration.courseware.CoursewareScope;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -16,10 +21,13 @@ public class JdbcLearnerAdministration implements LearnerAdministration {
 
     private final JdbcClient jdbc;
     private final JdbcTemplate jdbcTemplate;
+    private final CoursewareScope coursewareScope;
 
-    public JdbcLearnerAdministration(JdbcClient jdbc, JdbcTemplate jdbcTemplate) {
+    public JdbcLearnerAdministration(
+            JdbcClient jdbc, JdbcTemplate jdbcTemplate, CoursewareScope coursewareScope) {
         this.jdbc = jdbc;
         this.jdbcTemplate = jdbcTemplate;
+        this.coursewareScope = coursewareScope;
     }
 
     @Override
@@ -52,10 +60,24 @@ public class JdbcLearnerAdministration implements LearnerAdministration {
 
     @Override
     @Transactional
-    public void replaceContentGrants(long learnerId, List<Long> articleIds) {
-        Integer[] values = articleIds.stream()
+    public void replaceContentGrants(long learnerId, long administratorAccountId, List<Long> articleIds) {
+        Set<Long> visible = Set.copyOf(coursewareScope.visibleArticleIds(administratorAccountId));
+        List<Long> requested = articleIds.stream()
                 .distinct()
                 .sorted()
+                .toList();
+        for (Long articleId : requested) {
+            if (!visible.contains(articleId)) {
+                throw new LearnerCoursewareNotClaimed(articleId);
+            }
+        }
+        List<Long> existing = lockContentGrants(learnerId);
+        TreeSet<Long> finalArticleIds = new TreeSet<>();
+        existing.stream()
+                .filter(articleId -> !visible.contains(articleId))
+                .forEach(finalArticleIds::add);
+        finalArticleIds.addAll(requested);
+        Integer[] values = finalArticleIds.stream()
                 .map(Math::toIntExact)
                 .toArray(Integer[]::new);
         int changed = jdbcTemplate.update(connection -> {
@@ -68,6 +90,38 @@ public class JdbcLearnerAdministration implements LearnerAdministration {
         });
         if (changed == 0) {
             throw new LearnerNotFound(learnerId);
+        }
+    }
+
+    private List<Long> lockContentGrants(long learnerId) {
+        return jdbc.sql("""
+                SELECT permissions
+                FROM public.student
+                WHERE id = :learnerId
+                FOR UPDATE
+                """)
+                .param("learnerId", learnerId)
+                .query((resultSet, rowNumber) -> readArticleIds(resultSet.getArray("permissions")))
+                .optional()
+                .orElseThrow(() -> new LearnerNotFound(learnerId));
+    }
+
+    private static List<Long> readArticleIds(Array permissions) throws SQLException {
+        if (permissions == null) {
+            return List.of();
+        }
+        try {
+            Object value = permissions.getArray();
+            if (!(value instanceof Object[] values)) {
+                throw new SQLException("Unsupported PostgreSQL array representation");
+            }
+            return Arrays.stream(values)
+                    .map(Number.class::cast)
+                    .map(Number::longValue)
+                    .sorted()
+                    .toList();
+        } finally {
+            permissions.free();
         }
     }
 

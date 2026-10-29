@@ -69,6 +69,9 @@ class LearningAndWrongBookHttpContractTest {
         jdbc.update("DELETE FROM public.wrong_questions");
         jdbc.update("DELETE FROM public.article_question_submissions");
         jdbc.update("DELETE FROM public.article_answer_keys");
+        jdbc.update("DELETE FROM public.admin_courseware_claim");
+        jdbc.update("DELETE FROM public.admin_subject_claim");
+        jdbc.update("DELETE FROM public.courseware_catalog");
         jdbc.update("DELETE FROM public.account_session");
         jdbc.update("DELETE FROM public.account_activation");
         jdbc.update("DELETE FROM public.account");
@@ -77,6 +80,11 @@ class LearningAndWrongBookHttpContractTest {
         account(2, "young", "administrator", "Admin-password-2026");
         account(5, "Alice", "learner", "Learner-password-2026");
         account(6, "Bob", "learner", "Bob-password-2026");
+        long administratorAccountId = jdbc.queryForObject(
+                "SELECT id FROM public.account WHERE username = 'young'", Long.class);
+        jdbc.update("INSERT INTO public.courseware_catalog (article_id, subject) VALUES (10, '数学')");
+        jdbc.update("INSERT INTO public.admin_subject_claim (admin_account_id, subject) VALUES (?, '数学')",
+                administratorAccountId);
         jdbc.update("INSERT INTO public.article_answer_keys (blog_id, question_id, answer_text, auto_grade) VALUES (10, 'q1', '42', true)");
     }
 

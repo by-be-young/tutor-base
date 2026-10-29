@@ -51,9 +51,10 @@ public class AdminLearnerController {
 
     @PutMapping("/{learnerId}/content-grants")
     LearnerResponse replaceContentGrants(
+            @AuthenticationPrincipal AccountPrincipal administrator,
             @PathVariable @Positive long learnerId,
             @Valid @RequestBody ReplaceContentGrantsRequest request) {
-        learnerAdministration.replaceContentGrants(learnerId, request.articleIds());
+        learnerAdministration.replaceContentGrants(learnerId, administrator.accountId(), request.articleIds());
         return requireLearner(learnerId);
     }
 

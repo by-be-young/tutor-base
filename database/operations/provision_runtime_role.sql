@@ -75,11 +75,16 @@ GRANT SELECT, INSERT, UPDATE ON TABLE public.task_assignments TO tutor_base_runt
 -- 卡池目录由运营通过 migration/reconciliation 维护，运行角色只读。
 GRANT SELECT ON TABLE public.card_sets TO tutor_base_runtime;
 GRANT SELECT ON TABLE public.card_definitions TO tutor_base_runtime;
+-- 课件目录由管理端同步接口写入；认领关系由管理员增删。
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.courseware_catalog TO tutor_base_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.admin_subject_claim TO tutor_base_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.admin_courseware_claim TO tutor_base_runtime;
 GRANT USAGE ON SEQUENCE public.student_id_seq, public.account_id_seq,
     public.account_activation_id_seq, public.account_session_id_seq,
     public.daily_check_in_id_seq, public.task_claims_id_seq, public.card_collection_id_seq,
     public.article_answer_keys_id_seq, public.article_question_submissions_id_seq,
-    public.wrong_questions_id_seq, public.achievement_claims_id_seq, public.task_assignments_id_seq
+    public.wrong_questions_id_seq, public.achievement_claims_id_seq, public.task_assignments_id_seq,
+    public.admin_subject_claim_id_seq, public.admin_courseware_claim_id_seq
     TO tutor_base_runtime;
 
 -- The application login is not a table owner and must pass these policies.
@@ -99,6 +104,9 @@ ALTER TABLE public.achievement_claims ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.task_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.card_sets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.card_definitions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.courseware_catalog ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admin_subject_claim ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admin_courseware_claim ENABLE ROW LEVEL SECURITY;
 
 DO $policies$
 BEGIN
@@ -251,6 +259,21 @@ BEGIN
                    AND polname = 'tutor_base_runtime_card_definitions_select') THEN
         CREATE POLICY tutor_base_runtime_card_definitions_select ON public.card_definitions
             FOR SELECT TO tutor_base_runtime USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.courseware_catalog'::regclass
+                   AND polname = 'tutor_base_runtime_courseware_catalog_all') THEN
+        CREATE POLICY tutor_base_runtime_courseware_catalog_all ON public.courseware_catalog
+            FOR ALL TO tutor_base_runtime USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.admin_subject_claim'::regclass
+                   AND polname = 'tutor_base_runtime_admin_subject_claim_all') THEN
+        CREATE POLICY tutor_base_runtime_admin_subject_claim_all ON public.admin_subject_claim
+            FOR ALL TO tutor_base_runtime USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.admin_courseware_claim'::regclass
+                   AND polname = 'tutor_base_runtime_admin_courseware_claim_all') THEN
+        CREATE POLICY tutor_base_runtime_admin_courseware_claim_all ON public.admin_courseware_claim
+            FOR ALL TO tutor_base_runtime USING (true) WITH CHECK (true);
     END IF;
 END
 $policies$;

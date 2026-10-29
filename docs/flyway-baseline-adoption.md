@@ -104,3 +104,14 @@ baseline 完成后必须立即执行：
 - **不要**再通过 `skipExecutingMigrations` 或手工插入历史表来对齐；幂等 migration 让 Flyway 自己记账即可。
 - 反向场景（历史表已记录 V11、对象却丢失）不会自动修复，需要人工比对 V11 的对象清单后补建。
 
+## V12 课件认领（2026-10-29）
+
+`V12__add_courseware_claiming.sql` 从一开始就按幂等编写（`CREATE TABLE IF NOT EXISTS`、`CREATE INDEX IF NOT EXISTS`、
+policy 用 `DO` 块判断存在性），并配套可重复执行的
+`database/reconciliation/2026-10-29_courseware_claiming.sql`。因此无论走正常 CD migration，还是先在 Supabase
+SQL Editor 手工对齐、再由 Flyway 记账，重复执行都不会失败。
+
+- 3 张新表启用 RLS；运行时角色 policy 只在角色已存在时由 migration 创建，空库由 `provision_runtime_role.sql` 补建。
+- 部署顺序保持“先运行 `provision_runtime_role.sql`，再执行 Flyway migration”，否则新表在本轮迁移时没有运行时
+  policy，需要再跑一次 provision（脚本幂等）。
+

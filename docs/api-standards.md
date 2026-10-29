@@ -80,6 +80,7 @@
 | 409 | `username_conflict` | 注册或创建账户时用户名已被占用（不公开具体用户名） |
 | 409 | `learner_already_claimed` | 学习者已被其他管理员认领；认领、释放或删除前需由原认领管理员释放 |
 | 409 | `administrator_learner_protected` | 目标学习者关联管理员账户，不能通过学员管理删除 |
+| 403 | `courseware_not_claimed` | 当前管理员未认领该课件；业务写操作与敏感读取被拒绝 |
 | 412 | `version_conflict` | `If-Match` 与当前资源版本不符 |
 | 429 | `rate_limited` | 请求频率超过限制 |
 | 500 | `internal_error` | 未分类服务端错误，不返回内部异常 |
@@ -124,19 +125,19 @@
 | GET | `/articles` | account | 管理员返回全部，学习者只返回已授权学习文章 |
 | GET | `/articles/{articleId}/study-state` | content grant | 返回参考答案可见性规则下的作答状态 |
 | GET | `/articles/study-progress` | learner | 返回当前学习者已授权文章的作答进度 |
-| PUT | `/admin/learners/{learnerId}/content-grants` | administrator | 原子替换某学习者的内容授权集合 |
+| PUT | `/admin/learners/{learnerId}/content-grants` | administrator | 在“我的课件”范围内原子替换授权；范围外的既有授权保留 |
 
 ### Learning and Review
 
 | Method | Path | Auth | 语义 |
 | --- | --- | --- | --- |
 | PUT | `/articles/{articleId}/submissions/{questionKey}` | content grant | 保存当前账户的当前作答并执行自动批阅 |
-| GET | `/admin/articles/answer-key-article-ids` | administrator | 返回已经设置参考答案的文章 ID |
-| GET | `/admin/articles/{articleId}/answer-keys` | administrator | 查询一篇文章的参考答案与自动批阅规则 |
-| PUT | `/admin/articles/{articleId}/answer-keys` | administrator | 创建或替换该文章提交的参考答案集合 |
-| GET | `/admin/articles/{articleId}/study-state?learnerId=` | administrator | 查询指定学习者的文章作答与答案 |
-| GET | `/admin/learners/{learnerId}/study-progress` | administrator | 查询指定学习者已授权文章的作答进度；未授权文章不参与待批阅统计 |
-| PUT | `/admin/articles/{articleId}/learners/{learnerId}/submissions/{questionKey}/review` | administrator | 保存人工批阅结果 |
+| GET | `/admin/articles/answer-key-article-ids` | administrator | 返回“我的课件”中已设置参考答案的文章 ID |
+| GET | `/admin/articles/{articleId}/answer-keys` | administrator | 查询一篇文章的参考答案与自动批阅规则；非我的课件返回 403 |
+| PUT | `/admin/articles/{articleId}/answer-keys` | administrator | 创建或替换该文章的参考答案集合；非我的课件拒绝写 |
+| GET | `/admin/articles/{articleId}/study-state?learnerId=` | administrator | 查询指定学习者的文章作答与答案；非我的课件返回 403 |
+| GET | `/admin/learners/{learnerId}/study-progress` | administrator | 查询指定学习者在“我的课件”内的作答进度，且只含该学员已授权文章 |
+| PUT | `/admin/articles/{articleId}/learners/{learnerId}/submissions/{questionKey}/review` | administrator | 保存人工批阅结果；非我的课件返回 403 |
 
 ### Wrong Book
 
@@ -206,6 +207,24 @@
 - 学习者响应额外返回 `claimedByAccountId`、`claimedByUsername`、`claimedAt` 与 `lastActivityAt`；最近动态由服务端聚合作答提交、错题、签到和登录会话时间，客户端不得提交该值。
 - 删除学习者会级联删除账户会话、激活码、作答、错题、签到、积分、卡片和任务/成就记录；管理员账户关联的学习者不可通过该接口删除。
 - 管理员查询学习者作答进度只返回该学习者当前已授权文章；授权被收回的文章不再参与待批阅与进度统计。
+
+### Courseware Claims
+
+| Method | Path | Auth | 语义 |
+| --- | --- | --- | --- |
+| POST | `/admin/courseware-catalog/sync` | administrator | 由前端同步静态课件目录（articleId → 学科/标题），幂等 upsert |
+| GET | `/admin/courseware-claims` | administrator | 返回当前管理员显式认领的学科与单篇课件 |
+| PUT | `/admin/courseware-claims/subjects/{subject}` | administrator | 认领学科；自动覆盖该学科当前及未来新增课件，幂等 |
+| DELETE | `/admin/courseware-claims/subjects/{subject}` | administrator | 释放学科认领；仅靠学科覆盖的课件回到待认领，单篇认领保留 |
+| PUT | `/admin/courseware-claims/articles/{articleId}` | administrator | 单篇认领课件，幂等 |
+| DELETE | `/admin/courseware-claims/articles/{articleId}` | administrator | 释放单篇课件认领 |
+| GET | `/admin/courseware-claims/catalog?scope=mine\|unclaimed\|all` | administrator | 课件认领目录，含学科汇总与每篇课件的认领归属 |
+
+- “我的课件” = 我认领学科下的全部课件 ∪ 我单篇认领的课件；学科认领覆盖未来新增课件，因此不物化每篇归属行。
+- 学科与管理员是多对多：同一学科可被多名管理员认领；单篇课件也可被多名管理员认领。
+- 未认领课件在业务页隐藏，但 `catalog?scope=unclaimed` 仍返回其内容元信息；读取正文仍走公开静态内容。
+- 业务范围：参考答案读写、学员作答状态、人工批阅、学习者作答进度与内容授权替换都限定在“我的课件”内；范围外课件返回 `403 courseware_not_claimed`。
+- 内容授权替换只作用于“我的课件”范围，范围外的既有授权必须保留，避免多名管理员互相覆盖。
 
 ## 7. System Status contract
 
