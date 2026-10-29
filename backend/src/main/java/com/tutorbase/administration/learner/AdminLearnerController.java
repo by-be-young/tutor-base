@@ -133,6 +133,8 @@ public class AdminLearnerController {
     record LearnerResponse(
             long learnerId,
             String username,
+            boolean isTest,
+            boolean isSpecialTest,
             List<Long> contentGrantArticleIds,
             Long claimedByAccountId,
             String claimedByUsername,
@@ -143,6 +145,8 @@ public class AdminLearnerController {
             return new LearnerResponse(
                     learner.learnerId(),
                     learner.username(),
+                    learner.isTest(),
+                    learner.isSpecialTest(),
                     learner.contentGrantArticleIds(),
                     learner.claimedByAccountId(),
                     learner.claimedByUsername(),

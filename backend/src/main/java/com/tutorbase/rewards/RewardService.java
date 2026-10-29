@@ -27,6 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 class RewardService {
 
+    /** 特殊测试学员的固定高积分：不因抽卡或其它消耗减少。 */
+    static final long SPECIAL_TEST_POINTS = 999_999_999L;
+
     private final JdbcClient jdbc;
     private final Clock clock;
     private final ZoneId zone;
@@ -49,7 +52,10 @@ class RewardService {
     }
 
     RewardSummary summary(long learnerId) {
-        PointsRow points = pointsRow(learnerId);
+        PointsRow stored = pointsRow(learnerId);
+        PointsRow points = isSpecialTestLearner(learnerId)
+                ? new PointsRow(SPECIAL_TEST_POINTS, SPECIAL_TEST_POINTS, stored.drawCount())
+                : stored;
         List<CardReward> cards = jdbc.sql("""
                 SELECT id, card_key, set_key, rarity, claimed_at
                 FROM public.card_collection
@@ -84,6 +90,7 @@ class RewardService {
         if (catalog.sets().isEmpty() || catalog.rareCards().isEmpty() || catalog.commonCards().isEmpty()) {
             throw new IllegalStateException("card catalog has no active cards");
         }
+        boolean specialTest = isSpecialTestLearner(learnerId);
         jdbc.sql("""
                 INSERT INTO public.user_points (student_id, points, updated_at)
                 VALUES (:studentId, 0, now())
@@ -96,7 +103,7 @@ class RewardService {
                 FOR UPDATE
                 """).param("studentId", learnerId).query(RewardService::mapPoints).single();
         long cost = RewardCatalog.DRAW_COST * count;
-        if (locked.points() < cost) {
+        if (!specialTest && locked.points() < cost) {
             throw new RewardInsufficientPoints();
         }
 
@@ -124,18 +131,45 @@ class RewardService {
                     card.claimedAt(), definition.cardKey().equals(upCard.cardKey())));
         }
 
-        PointsRow updated = jdbc.sql("""
-                UPDATE public.user_points
-                SET points = :points, draw_count = draw_count + :count, updated_at = now()
-                WHERE student_id = :studentId
-                RETURNING points, lifetime_points, draw_count
-                """).param("points", locked.points() - cost)
-                .param("count", count)
-                .param("studentId", learnerId)
-                .query(RewardService::mapPoints)
-                .single();
+        PointsRow updated;
+        if (specialTest) {
+            // 特殊测试学员只累计抽卡次数，积分不扣减（响应固定为高积分）。
+            PointsRow drawn = jdbc.sql("""
+                    UPDATE public.user_points
+                    SET draw_count = draw_count + :count, updated_at = now()
+                    WHERE student_id = :studentId
+                    RETURNING points, lifetime_points, draw_count
+                    """).param("count", count)
+                    .param("studentId", learnerId)
+                    .query(RewardService::mapPoints)
+                    .single();
+            updated = new PointsRow(SPECIAL_TEST_POINTS, SPECIAL_TEST_POINTS, drawn.drawCount());
+        } else {
+            updated = jdbc.sql("""
+                    UPDATE public.user_points
+                    SET points = :points, draw_count = draw_count + :count, updated_at = now()
+                    WHERE student_id = :studentId
+                    RETURNING points, lifetime_points, draw_count
+                    """).param("points", locked.points() - cost)
+                    .param("count", count)
+                    .param("studentId", learnerId)
+                    .query(RewardService::mapPoints)
+                    .single();
+        }
         return new DrawResult(updated.points(), updated.lifetimePoints(), currentUp, cards,
                 collectionStats(learnerId, updated.drawCount()));
+    }
+
+    private boolean isSpecialTestLearner(long learnerId) {
+        return jdbc.sql("""
+                SELECT is_special_test
+                FROM public.student
+                WHERE id = :studentId
+                """)
+                .param("studentId", learnerId)
+                .query(Boolean.class)
+                .optional()
+                .orElse(false);
     }
 
     private RewardCatalog.CardDefinition drawOne(RewardCatalog.Catalog catalog,

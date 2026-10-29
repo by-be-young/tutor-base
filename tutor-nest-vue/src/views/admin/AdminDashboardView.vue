@@ -132,14 +132,20 @@
           <span class="eyebrow">ACTIVITY / 学员动态</span>
           <h2 class="section-title">最近活跃的学员</h2>
         </div>
-        <span class="section-note">按最近动态倒序 · 前 {{ recentStudents.length }} 名</span>
+        <span class="section-note">按最近动态倒序 · 不含测试学员 · 前 {{ recentStudents.length }} 名</span>
       </div>
 
       <div v-if="recentStudents.length === 0" class="empty empty--inline">
         <span class="empty__icon"><i class="fas fa-user-plus" aria-hidden="true"></i></span>
-        <p class="empty__title">还没有学员</p>
-        <p class="empty__text">到「学员」页新增第一位学员，认领后即可配置内容授权与批阅。</p>
-        <router-link to="/admin/learners" class="btn btn--soft btn--sm">去新增学员</router-link>
+        <p class="empty__title">{{ adminStore.students.length ? '暂无普通学员动态' : '还没有学员' }}</p>
+        <p class="empty__text">
+          {{ adminStore.students.length
+            ? '测试学员不计入活跃度统计与学员动态列表，可到学员页查看或维护。'
+            : '到「学员」页新增第一位学员，认领后即可配置内容授权与批阅。' }}
+        </p>
+        <router-link to="/admin/learners" class="btn btn--soft btn--sm">
+          {{ adminStore.students.length ? '去学员列表' : '去新增学员' }}
+        </router-link>
       </div>
 
       <ul v-else class="activity-list" role="list" aria-label="学员动态列表">
@@ -185,7 +191,7 @@ import { useCoursewareStore } from '@/stores/coursewareStore'
 import { useAdminWorkspace } from '@/composables/useAdminWorkspace'
 import { analyticsGateway } from '@/gateways/analyticsGateway'
 import { buildLinePath, formatCompactNumber, maxValue } from '@/utils/analytics'
-import { claimState, formatRelativeActivity, sortStudentsByRecentActivity } from '@/utils/adminStudents'
+import { claimState, formatRelativeActivity, isTestStudent, sortStudentsByRecentActivity } from '@/utils/adminStudents'
 import { activeSubjects, buildSubjectScope } from '@/utils/adminSubjects'
 import EmptyState from '@/components/ui/EmptyState.vue'
 
@@ -358,8 +364,11 @@ const trendAriaLabel = computed(() => (
   + `批阅 ${activityTotals.value.reviews} 次。`
 ))
 
+// 学员动态与 7 天活跃横条只统计普通学员：测试学员不进入活跃度视图。
 const recentStudents = computed(() =>
-  sortStudentsByRecentActivity(adminStore.students).slice(0, 8))
+  sortStudentsByRecentActivity(
+    adminStore.students.filter(student => !isTestStudent(student))
+  ).slice(0, 8))
 
 const allSubjects = computed(() => {
   const subjects = new Set()

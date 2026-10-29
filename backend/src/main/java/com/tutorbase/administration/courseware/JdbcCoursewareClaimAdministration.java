@@ -40,7 +40,26 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
                     .param("title", entry.title())
                     .update();
         }
+        refreshSpecialTestLearnerPermissions();
         return entries.size();
+    }
+
+    /**
+     * 特殊测试学员拥有全部课件权限：目录同步后在同一事务内把 catalog 全部 article_id 写回其
+     * permissions；catalog 为空时保留原值。article_id 为 bigint，permissions 为 integer[]。
+     */
+    private void refreshSpecialTestLearnerPermissions() {
+        jdbc.sql("""
+                UPDATE public.student AS special
+                SET permissions = catalog_articles.article_ids
+                FROM (
+                    SELECT array_agg(catalog.article_id::integer ORDER BY catalog.article_id)
+                               AS article_ids
+                    FROM public.courseware_catalog AS catalog
+                ) AS catalog_articles
+                WHERE special.is_special_test
+                  AND catalog_articles.article_ids IS NOT NULL
+                """).update();
     }
 
     @Override

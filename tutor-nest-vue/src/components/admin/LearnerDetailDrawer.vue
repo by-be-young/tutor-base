@@ -8,7 +8,13 @@
           <span class="avatar avatar--lg detail-drawer__avatar" aria-hidden="true">{{ initialOf(username) }}</span>
           <div class="detail-drawer__title">
             <span class="eyebrow">LEARNER / 学员详情</span>
-            <h2 class="detail-drawer__name">{{ username }}</h2>
+            <div class="detail-drawer__name-row">
+              <h2 class="detail-drawer__name">{{ username }}</h2>
+              <span v-if="testBadge" class="chip detail-drawer__test-chip" :class="testBadge.tone"
+                :title="testBadge.title" :aria-label="testBadge.title">
+                {{ testBadge.label }}
+              </span>
+            </div>
             <span class="detail-drawer__meta">
               <span class="chip chip--cyan">{{ claimLabel }}</span>
               <span class="detail-drawer__activity">
@@ -16,6 +22,10 @@
                 最近动态 · {{ lastActivityLabel }}
               </span>
             </span>
+            <p v-if="isSpecialTest" class="detail-special-note">
+              <i class="fas fa-flask" aria-hidden="true"></i>
+              <span>特殊测试学员：拥有全部课件权限，积分固定为 999999999 且不会减少。</span>
+            </p>
           </div>
           <button type="button" class="modal__close detail-drawer__close" aria-label="关闭学员详情"
             @click="close">
@@ -162,7 +172,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { learnerGateway } from '@/gateways/learnerGateway'
 import { buildLinePath, formatCompactNumber, levelFromLifetime, maxValue } from '@/utils/analytics'
-import { formatRelativeActivity } from '@/utils/adminStudents'
+import { formatRelativeActivity, isSpecialTestStudent, isTestStudent } from '@/utils/adminStudents'
 
 const props = defineProps({
   learnerId: { type: [String, Number], required: true },
@@ -201,6 +211,26 @@ const studentSummary = computed(() => props.students.find(
 
 const username = computed(() =>
   profile.value?.username || studentSummary.value?.username || '学员')
+
+// 测试标记来自学员列表项（详情接口只返回学习数据，不重复传测试标记）。
+const testBadge = computed(() => {
+  const student = studentSummary.value
+  if (!isTestStudent(student)) return null
+  if (isSpecialTestStudent(student)) {
+    return {
+      label: '特殊测试',
+      tone: 'chip--coral',
+      title: '特殊测试学员：拥有全部课件权限，积分固定为 999999999 且不会减少'
+    }
+  }
+  return {
+    label: '测试',
+    tone: 'chip--amber',
+    title: '测试学员：用于功能验证，不计入活跃度统计与学员动态'
+  }
+})
+
+const isSpecialTest = computed(() => isSpecialTestStudent(studentSummary.value))
 
 const claimLabel = computed(() => {
   const claimedByAccountId = profile.value?.claimedByAccountId ?? studentSummary.value?.claimedByAccountId
@@ -442,9 +472,44 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.detail-drawer__name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
 .detail-drawer__name {
   font-size: 1.3rem;
   overflow-wrap: anywhere;
+}
+
+/* 测试/特殊测试标记：沿用全局 chip 配色，只在标题行内收小尺寸 */
+.detail-drawer__test-chip {
+  height: 22px;
+  padding: 0 9px;
+  font-size: 0.64rem;
+  flex-shrink: 0;
+}
+
+.detail-special-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-sm);
+  background: var(--coral);
+  color: var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.detail-special-note i {
+  margin-top: 2px;
 }
 
 .detail-drawer__meta {

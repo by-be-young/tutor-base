@@ -10,6 +10,11 @@
                     {{ currentStudent ? currentActivityLabel : '点击选择学员' }}
                 </span>
             </span>
+            <span v-if="currentStudent && isTestStudent(currentStudent)" class="chip switcher__test-flag"
+                :class="testBadgeClass(currentStudent)" :title="testBadgeTitle(currentStudent)"
+                :aria-label="testBadgeTitle(currentStudent)">
+                {{ testBadgeLabel(currentStudent) }}
+            </span>
             <span v-if="currentStudent" class="switcher__claim" :class="`is-${currentClaimState}`">
                 {{ currentStudent && currentClaimState === 'mine' ? '我的' : currentClaimState === 'unclaimed' ? '未认领' : `由 ${currentStudent.claimedByUsername || '其他管理员'} 认领` }}
             </span>
@@ -48,6 +53,11 @@
                             <span class="switcher__option-main">
                                 <span class="switcher__option-name">
                                     {{ student.username }}
+                                    <span v-if="isTestStudent(student)" class="chip switcher__test-chip"
+                                        :class="testBadgeClass(student)" :title="testBadgeTitle(student)"
+                                        :aria-label="testBadgeTitle(student)">
+                                        {{ testBadgeLabel(student) }}
+                                    </span>
                                     <span v-if="adminStore.hasUnsavedChanges(student.id)" class="switcher__dirty"
                                         role="img" aria-label="有未保存的权限改动"></span>
                                 </span>
@@ -94,6 +104,8 @@ import {
     claimState,
     formatRelativeActivity,
     groupStudentsForSwitcher,
+    isSpecialTestStudent,
+    isTestStudent,
     studentMatchesQuery
 } from '@/utils/adminStudents'
 import { showToast } from '@/utils/toast'
@@ -128,10 +140,29 @@ const groups = computed(() => groupStudentsForSwitcher(filteredStudents.value, a
 
 const sections = computed(() => [
     { key: 'mine', title: '我的学员', items: groups.value.mine },
-    { key: 'others', title: '其他学员', items: groups.value.others }
+    { key: 'others', title: '其他学员', items: groups.value.others },
+    { key: 'test', title: '测试学员', items: groups.value.test }
 ].filter(section => section.items.length > 0))
 
-const options = computed(() => [...groups.value.mine, ...groups.value.others])
+const options = computed(() => [
+    ...groups.value.mine,
+    ...groups.value.others,
+    ...groups.value.test
+])
+
+function testBadgeLabel(student) {
+    return isSpecialTestStudent(student) ? '特殊测试' : '测试'
+}
+
+function testBadgeTitle(student) {
+    return isSpecialTestStudent(student)
+        ? '特殊测试学员：拥有全部课件权限，积分固定为 999999999 且不会减少'
+        : '测试学员：用于功能验证，不计入活跃度统计与学员动态'
+}
+
+function testBadgeClass(student) {
+    return isSpecialTestStudent(student) ? 'chip--coral' : 'chip--amber'
+}
 
 function initialOf(username) {
     return Array.from(String(username || '?'))[0]?.toUpperCase() || '?'
@@ -354,6 +385,21 @@ onBeforeUnmount(() => {
 
 .switcher__claim.is-unclaimed {
     background: var(--butter);
+}
+
+/* 测试/特殊测试标记：沿用全局 chip 配色，只在切换器内收小尺寸 */
+.switcher__test-flag {
+    flex-shrink: 0;
+    height: 21px;
+    padding: 0 8px;
+    font-size: 0.62rem;
+}
+
+.switcher__test-chip {
+    height: 18px;
+    padding: 0 7px;
+    font-size: 0.58rem;
+    flex-shrink: 0;
 }
 
 .switcher__caret {

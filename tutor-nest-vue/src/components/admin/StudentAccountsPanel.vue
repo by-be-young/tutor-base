@@ -55,7 +55,14 @@
                         <span class="avatar student-avatar" aria-hidden="true">{{ initialOf(student.username) }}</span>
 
                         <span class="student-id">
-                            <span class="student-name">{{ student.username }}</span>
+                            <span class="student-name-row">
+                                <span class="student-name">{{ student.username }}</span>
+                                <span v-if="isTestStudent(student)" class="chip student-test-chip"
+                                    :class="testBadgeClass(student)" :title="testBadgeTitle(student)"
+                                    :aria-label="testBadgeTitle(student)">
+                                    {{ testBadgeLabel(student) }}
+                                </span>
+                            </span>
                             <span class="student-sub">学员 ID · {{ student.id }}</span>
                             <span class="student-activity">
                                 <i class="far fa-clock" aria-hidden="true"></i>
@@ -223,7 +230,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useAdminStore } from '@/stores/adminStore'
-import { claimState, formatRelativeActivity, sortStudentsByRecentActivity, studentMatchesQuery } from '@/utils/adminStudents'
+import { claimState, formatRelativeActivity, isSpecialTestStudent, isTestStudent, sortStudentsByRecentActivity, studentMatchesQuery } from '@/utils/adminStudents'
 import { identityGateway, IdentityGatewayError } from '@/gateways/identityGateway'
 import { showToast } from '@/utils/toast'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -292,6 +299,20 @@ function claimLabel(student) {
 
 function viewDetail(student) {
     emit('view-detail', student)
+}
+
+function testBadgeLabel(student) {
+    return isSpecialTestStudent(student) ? '特殊测试' : '测试'
+}
+
+function testBadgeTitle(student) {
+    return isSpecialTestStudent(student)
+        ? '特殊测试学员：拥有全部课件权限，积分固定为 999999999 且不会减少'
+        : '测试学员：用于功能验证，不计入活跃度统计与学员动态'
+}
+
+function testBadgeClass(student) {
+    return isSpecialTestStudent(student) ? 'chip--coral' : 'chip--amber'
 }
 
 function resetFilters() {
@@ -577,6 +598,14 @@ async function confirmDeleteStudent() {
     min-width: 0;
 }
 
+.student-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
 .student-name {
     font-size: 0.9rem;
     font-weight: 700;
@@ -584,6 +613,14 @@ async function confirmDeleteStudent() {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* 测试/特殊测试标记：沿用全局 chip 配色，只在学员行内收小尺寸 */
+.student-test-chip {
+    height: 20px;
+    padding: 0 7px;
+    font-size: 0.6rem;
+    flex-shrink: 0;
 }
 
 .student-sub {

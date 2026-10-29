@@ -33,7 +33,7 @@ class AdminAnalyticsService {
 
     /**
      * 与 LearnerSql 的 last_activity_at 聚合口径一致：作答、错题、签到与登录会话的最新时间。
-     * 学习者目录排除关联 administrator 账户的 learner 行。
+     * 学习者目录排除关联 administrator 账户的 learner 行；统计接口再排除测试学员。
      */
     private static final String LEARNER_ACTIVITY_SQL = """
             WITH learner_activity AS (
@@ -58,6 +58,7 @@ class AdminAnalyticsService {
                 FROM public.student AS s
                 LEFT JOIN public.account AS learner_account ON learner_account.learner_id = s.id
                 WHERE COALESCE(learner_account.role, 'learner') <> 'administrator'
+                  AND NOT s.is_test
             )
             SELECT count(*) AS learners,
                    count(*) FILTER (WHERE claimed_by IS NOT NULL) AS claimed_learners,
@@ -155,6 +156,9 @@ class AdminAnalyticsService {
                        count(*) FILTER (WHERE submission.submitted_at >= now() - interval '7 days')
                            AS submissions_7d
                 FROM public.article_question_submissions AS submission
+                JOIN public.student AS learner
+                  ON learner.id = submission.student_id
+                 AND NOT learner.is_test
                 WHERE %s
                 """.formatted(coursewareScope.visibleArticlePredicate("submission.blog_id")))
                 .param("administratorAccountId", administratorAccountId)
@@ -205,6 +209,9 @@ class AdminAnalyticsService {
                     SELECT (submission.submitted_at AT TIME ZONE CAST(:zone AS text))::date AS activity_date,
                            'submission' AS kind
                     FROM public.article_question_submissions AS submission
+                    JOIN public.student AS learner
+                      ON learner.id = submission.student_id
+                     AND NOT learner.is_test
                     WHERE %s
                       AND (submission.submitted_at AT TIME ZONE CAST(:zone AS text))::date
                           BETWEEN :startDate AND :endDate
@@ -212,6 +219,9 @@ class AdminAnalyticsService {
                     SELECT (submission.reviewed_at AT TIME ZONE CAST(:zone AS text))::date AS activity_date,
                            'review' AS kind
                     FROM public.article_question_submissions AS submission
+                    JOIN public.student AS learner
+                      ON learner.id = submission.student_id
+                     AND NOT learner.is_test
                     WHERE submission.review_status = 'reviewed'
                       AND %s
                       AND (submission.reviewed_at AT TIME ZONE CAST(:zone AS text))::date

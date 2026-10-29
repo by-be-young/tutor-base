@@ -226,11 +226,15 @@ class LearningService {
     }
 
     private void requireContentGrant(long learnerId, long articleId) {
+        // 特殊测试学员拥有全部课件权限，不需要显式授权行。
         boolean granted = jdbc.sql("""
                 SELECT EXISTS (
                     SELECT 1 FROM public.student
                     WHERE id = :learnerId
-                      AND CAST(:articleId AS bigint) = ANY (permissions::bigint[])
+                      AND (
+                          is_special_test
+                          OR CAST(:articleId AS bigint) = ANY (permissions::bigint[])
+                      )
                 )
                 """)
                 .param("learnerId", learnerId)
