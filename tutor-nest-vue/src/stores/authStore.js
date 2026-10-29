@@ -30,7 +30,10 @@ export const useAuthStore = defineStore('auth', () => {
   async function loadLearningPermissions(session) {
     if (session.roles.includes('ADMINISTRATOR')) return loadAllArticleIds()
     if (!session.learnerId) return []
-    return learnerGateway.getCurrentContentGrants()
+    const grants = await learnerGateway.getCurrentContentGrants()
+    // 特殊测试学员拥有全部文章权限：即使课件目录尚未同步，也按静态目录全量放行。
+    if (grants.allArticles) return loadAllArticleIds()
+    return grants.articleIds
   }
 
   function normalizeSession(session) {

@@ -207,7 +207,9 @@
 | GET | `/admin/learners/{learnerId}/profile` | administrator | 学员详情：积分/累计/等级、近 30 天签到、分学科进度、最近作答、30 天动态；学习数据只含“我的课件” |
 
 - 认领是管理员之间的组织归属，不改变内容授权、批阅权限或学习者可见范围；管理员目录排除 `role=administrator` 的账户。
-- 学习者响应额外返回 `claimedByAccountId`、`claimedByUsername`、`claimedAt` 与 `lastActivityAt`；最近动态由服务端聚合作答提交、错题、签到和登录会话时间，客户端不得提交该值。
+- 学习者响应额外返回 `claimedByAccountId`、`claimedByUsername`、`claimedAt`、`lastActivityAt`、`isTest` 与 `isSpecialTest`；最近动态由服务端聚合作答提交、错题、签到和登录会话时间，客户端不得提交这些值。
+- 测试学员保留正常登录与学习能力，但 analytics 的学员计数、活跃度、提交/批阅趋势排除测试学员；管理端切换器单独分组展示。
+- 特殊测试学员全局最多一个，拥有全部课件访问权限，`/rewards` 返回固定 999999999 积分且抽卡不减少；`/me/content-grants` 返回课件目录全量文章并带 `allArticles=true`，前端据此按静态目录全量放行。
 - 删除学习者会级联删除账户会话、激活码、作答、错题、签到、积分、卡片和任务/成就记录；管理员账户关联的学习者不可通过该接口删除。
 - 管理员查询学习者作答进度只返回该学习者当前已授权文章；授权被收回的文章不再参与待批阅与进度统计。
 

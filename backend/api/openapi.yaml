@@ -1088,8 +1088,8 @@ paths:
       operationId: getAdministratorAnalyticsOverview
       summary: 获取管理员首页统计概览
       description: >-
-        学习者数量与 /admin/learners 口径一致（排除 administrator 角色的学习者行）。
-        待批阅与近 7 天提交只统计当前管理员“我的课件”范围内的作答；
+        学习者数量与 /admin/learners 口径一致（排除 administrator 角色的学习者行，并排除测试学员）。
+        待批阅与近 7 天提交只统计当前管理员“我的课件”范围内、非测试学员的作答；
         courseware.unclaimed 为没有任何管理员认领的课件数。
       security:
         - sessionCookie: []
@@ -1110,7 +1110,7 @@ paths:
       summary: 获取管理员“我的课件”范围内的每日活动趋势
       description: >-
         按 Asia/Shanghai 自然日统计当前管理员可见课件的提交数与批阅数，日期升序并补零。
-        days 取值 7～90，默认 30。
+        测试学员的提交与批阅不计入；days 取值 7～90，默认 30。
       security:
         - sessionCookie: []
       parameters:
@@ -1392,6 +1392,8 @@ components:
       required:
         - learnerId
         - username
+        - isTest
+        - isSpecialTest
         - contentGrantArticleIds
       properties:
         learnerId:
@@ -1401,6 +1403,14 @@ components:
         username:
           type: string
           minLength: 1
+        isTest:
+          type: boolean
+          description: 是否为测试学员；测试学员不参与管理员侧活跃度与动态统计。
+        isSpecialTest:
+          type: boolean
+          description: >-
+            是否为特殊测试学员（全局最多一个，必定同时是测试学员）。
+            特殊测试学员拥有全部课件权限且积分固定为高值。
         contentGrantArticleIds:
           type: array
           items:
@@ -1595,7 +1605,7 @@ components:
     ContentGrants:
       type: object
       additionalProperties: false
-      required: [articleIds]
+      required: [articleIds, allArticles]
       properties:
         articleIds:
           type: array
@@ -1603,6 +1613,9 @@ components:
             type: integer
             format: int64
             minimum: 1
+        allArticles:
+          type: boolean
+          description: true 表示特殊测试学员拥有全部文章权限，前端应放行静态目录中的全部文章。
     CheckInMonthOverview:
       type: object
       additionalProperties: false

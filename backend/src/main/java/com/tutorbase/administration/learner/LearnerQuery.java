@@ -24,6 +24,8 @@ public interface LearnerQuery {
             long learnerId,
             String username,
             List<Long> contentGrantArticleIds,
+            boolean isTest,
+            boolean isSpecialTest,
             Long claimedByAccountId,
             String claimedByUsername,
             Instant claimedAt,

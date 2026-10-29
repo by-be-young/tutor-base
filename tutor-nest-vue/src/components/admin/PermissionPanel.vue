@@ -369,7 +369,7 @@ watch(() => props.selectedStudentId, () => {
     /* 展开多个文件夹时限制高度，内部滚动，避免整页被撑高 */
     max-height: 640px;
     overflow-y: auto;
-    overscroll-behavior: contain;
+    overscroll-behavior: auto;
     padding-right: 4px;
     scrollbar-width: thin;
 }

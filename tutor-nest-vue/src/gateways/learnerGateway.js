@@ -9,7 +9,10 @@ function adminLearnersPath(cursor) {
 export const learnerGateway = {
   async getCurrentContentGrants() {
     const response = await backendClient.request('/me/content-grants')
-    return Array.isArray(response.articleIds) ? response.articleIds : []
+    return {
+      articleIds: Array.isArray(response.articleIds) ? response.articleIds : [],
+      allArticles: response.allArticles === true
+    }
   },
 
   async listAllLearners() {

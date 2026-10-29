@@ -85,18 +85,40 @@ export function claimState(student, currentAccountId) {
   return sameAccountId(claimedByAccountId, currentAccountId) ? 'mine' : 'other'
 }
 
-/** 切换器分组：我认领的 / 其他（含未认领与其他管理员认领），组内都按最近动态排序。 */
+/** 测试学员：不进入活跃度统计、学员动态列表与默认选择。 */
+export function isTestStudent(student) {
+  return Boolean(student?.isTest)
+}
+
+/** 特殊测试学员：拥有全部课件权限，积分固定为 999999999 且不会减少。 */
+export function isSpecialTestStudent(student) {
+  return Boolean(student?.isSpecialTest)
+}
+
+/**
+ * 切换器分组：
+ * - mine：我认领的普通学员
+ * - others：未认领 / 其他管理员认领的普通学员
+ * - test：所有测试学员（含特殊测试）
+ * 测试学员不从 mine/others 中重复出现；组内都按最近动态排序。
+ */
 export function groupStudentsForSwitcher(students, currentAccountId) {
   const mine = []
   const others = []
+  const test = []
 
   for (const student of students || []) {
+    if (isTestStudent(student)) {
+      test.push(student)
+      continue
+    }
     if (claimState(student, currentAccountId) === 'mine') mine.push(student)
     else others.push(student)
   }
 
   return {
     mine: sortStudentsByRecentActivity(mine),
-    others: sortStudentsByRecentActivity(others)
+    others: sortStudentsByRecentActivity(others),
+    test: sortStudentsByRecentActivity(test)
   }
 }

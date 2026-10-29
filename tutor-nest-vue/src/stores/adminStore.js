@@ -2,7 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { BackendGatewayError } from '@/gateways/backendClient'
 import { learnerGateway } from '@/gateways/learnerGateway'
-import { activityTimestamp, claimState, sortStudentsByRecentActivity } from '@/utils/adminStudents'
+import { activityTimestamp, claimState, isTestStudent, sortStudentsByRecentActivity } from '@/utils/adminStudents'
 
 function toStudent(learner) {
   return {
@@ -14,7 +14,10 @@ function toStudent(learner) {
     claimedByAccountId: learner.claimedByAccountId ?? null,
     claimedByUsername: learner.claimedByUsername ?? null,
     claimedAt: learner.claimedAt ?? null,
-    lastActivityAt: learner.lastActivityAt ?? null
+    lastActivityAt: learner.lastActivityAt ?? null,
+    // 后端默认 false/false；新增学员的响应若缺少字段也按普通学员处理。
+    isTest: Boolean(learner.isTest),
+    isSpecialTest: Boolean(learner.isSpecialTest)
   }
 }
 
@@ -116,7 +119,9 @@ export const useAdminStore = defineStore('admin', () => {
   }
 
   /**
-   * 首次进入/刷新时的默认学员：我认领且最近有动态 → 我认领 → 最近有动态 → 第一个。
+   * 首次进入/刷新时的默认学员，优先普通（非测试）学员：
+   * 我的普通学员按最近动态 → 我的普通学员 → 其他普通学员按最近动态 → 其他普通学员 →
+   * 只有普通学员为空时才回退到测试学员。
    * currentAccountId 由调用方从 authStore 传入，store 不直接依赖 authStore。
    */
   function selectInitialStudent(currentAccountId = null) {
@@ -125,10 +130,11 @@ export const useAdminStore = defineStore('admin', () => {
       return null
     }
 
-    const mine = students.value.filter(student => claimState(student, currentAccountId) === 'mine')
+    const regular = students.value.filter(student => !isTestStudent(student))
+    const mine = regular.filter(student => claimState(student, currentAccountId) === 'mine')
     const mineWithActivity = mine.filter(student => activityTimestamp(student) !== null)
-    const withActivity = students.value.filter(student => activityTimestamp(student) !== null)
-    const candidate = mineWithActivity[0] || mine[0] || withActivity[0] || students.value[0]
+    const withActivity = regular.filter(student => activityTimestamp(student) !== null)
+    const candidate = mineWithActivity[0] || mine[0] || withActivity[0] || regular[0] || students.value[0]
 
     currentStudentId.value = candidate.id
     return currentStudentId.value

@@ -10,6 +10,7 @@
 | 学习者管理与内容授权 | Java `/api/v1/admin/learners` | 已接管 | 管理员/越权 contract、原子替换授权、范围外授权保留 |
 | 多管理员学员认领 | Java `/api/v1/admin/learners` | 已接管 | V11 migration、FOR UPDATE 认领/释放、409 冲突 contract、删除学员级联 |
 | 多管理员课件认领 | Java `/api/v1/admin/courseware-claims` | 已接管 | V12/V15 migration、目录同步、学科多对多认领、单篇认领与学科覆盖下单独释放（排除）、业务接口按“我的课件”收敛 |
+| 测试学员与特殊测试学员 | Java `/api/v1/admin/learners`、`/rewards` | 已接管 | V16 migration、测试标记、唯一特殊测试、全课件权限、固定高积分、统计排除 |
 | 管理端统计与学员详情 | Java `/api/v1/admin/analytics`、`/admin/learners/{id}/profile` | 已接管 | 只读聚合、按“我的课件”过滤、积分/签到全局口径、HTTP contract |
 | 学员最近动态 | Java `/api/v1/admin/learners` | 已接管 | 服务端聚合作答/错题/签到/登录时间，前端只用于排序与展示 |
 | 每日签到 | Java `/api/v1/checkins` | 已接管 | 时区、月界、7/14 日奖励、并发幂等 |

@@ -31,7 +31,7 @@
             <span class="click-folder__count">{{ fileCount }} 篇</span>
         </button>
 
-        <div v-show="expanded" class="click-folder__children" :class="{ 'is-scrollable': depth === 0 }">
+        <div v-show="expanded" class="click-folder__children">
             <ClickableTreeNode v-for="child in node.children"
                 :key="child.name + (child.isFile ? child.blogId : '')" :node="child" :badge-map="badgeMap"
                 :badge-label="badgeLabel" :marked-ids="markedIds" :marked-label="markedLabel" :tone="tone"
@@ -280,14 +280,6 @@ const isMarked = computed(() => {
     border-left: 1px dashed var(--line);
 }
 
-/* 只限制最外层文件夹的展开内容高度，避免嵌套文件夹出现多级滚动。 */
-.click-folder__children.is-scrollable {
-    max-height: 320px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding-right: 6px;
-    scrollbar-width: thin;
-}
 
 @media (max-width: 600px) {
     .click-file {

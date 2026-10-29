@@ -671,7 +671,7 @@ onMounted(async () => {
 .cw-subject__body {
     max-height: 320px;
     overflow-y: auto;
-    overscroll-behavior: contain;
+    overscroll-behavior: auto;
     padding-right: 4px;
     scrollbar-width: thin;
 }
@@ -798,7 +798,7 @@ onMounted(async () => {
 .cw-claim-list {
     max-height: 320px;
     overflow-y: auto;
-    overscroll-behavior: contain;
+    overscroll-behavior: auto;
     padding-right: 4px;
     scrollbar-width: thin;
 }

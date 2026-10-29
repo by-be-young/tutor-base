@@ -68,7 +68,7 @@ class FlywayMigrationTest {
                     .count();
         }
         assertThat(result.migrationsExecuted).isEqualTo((int) expectedMigrations);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("15");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("16");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
         try (Connection connection = POSTGRES.createConnection("")) {
@@ -81,6 +81,11 @@ class FlywayMigrationTest {
             assertThat(isColumnNullable(connection, "student", "permissions")).isFalse();
             assertThat(hasColumn(connection, "student", "claimed_by")).isTrue();
             assertThat(hasColumn(connection, "student", "claimed_at")).isTrue();
+            assertThat(hasColumn(connection, "student", "is_test")).isTrue();
+            assertThat(hasColumn(connection, "student", "is_special_test")).isTrue();
+            assertThat(isColumnNullable(connection, "student", "is_test")).isFalse();
+            assertThat(isColumnNullable(connection, "student", "is_special_test")).isFalse();
+            assertThat(hasConstraint(connection, "student_special_test_state_check")).isTrue();
             assertThat(hasConstraint(connection, "student_claimed_by_fkey")).isTrue();
             assertThat(hasConstraint(connection, "student_claim_state_check")).isTrue();
             assertThat(readCount(connection, """
@@ -165,8 +170,19 @@ class FlywayMigrationTest {
                     "..", "database", "reconciliation", "2026-10-30_courseware_exclusion.sql"));
             execute(connection, coursewareExclusionReconciliation);
             execute(connection, coursewareExclusionReconciliation);
+            String testLearnersReconciliation = Files.readString(Path.of(
+                    "..", "database", "reconciliation", "2026-10-30_test_learners.sql"));
+            execute(connection, testLearnersReconciliation);
+            execute(connection, testLearnersReconciliation);
             assertThat(hasColumn(connection, "student", "claimed_by")).isTrue();
             assertThat(hasColumn(connection, "student", "claimed_at")).isTrue();
+            assertThat(hasColumn(connection, "student", "is_test")).isTrue();
+            assertThat(hasColumn(connection, "student", "is_special_test")).isTrue();
+            assertThat(hasConstraint(connection, "student_special_test_state_check")).isTrue();
+            assertThat(readCount(connection, """
+                    SELECT count(*) FROM pg_indexes
+                    WHERE schemaname = 'public' AND indexname = 'student_single_special_test_idx'
+                    """)).isEqualTo(1);
             assertThat(hasConstraint(connection, "student_claimed_by_fkey")).isTrue();
             assertThat(hasConstraint(connection, "student_claim_state_check")).isTrue();
             assertThat(hasConstraint(connection, "admin_subject_claim_admin_subject_unique")).isTrue();
@@ -202,8 +218,8 @@ class FlywayMigrationTest {
 
     @Test
     void givenV11SchemaAppliedManuallyWhenFlywayReplaysV11ThenMigrationIsIdempotent() throws Exception {
-        // 生产事故回归：先手工执行 reconciliation（schema 已含 V11/V12/V15），但历史表停在 V10；
-        // 新镜像启动时 Flyway 会再次执行 V11、V12、V14、V15，必须成功记账而不是因对象已存在而失败。
+        // 生产事故回归：先手工执行 reconciliation（schema 已含 V11/V12/V15/V16），但历史表停在 V10；
+        // 新镜像启动时 Flyway 会再次执行 V11、V12、V14、V15、V16，必须成功记账而不是因对象已存在而失败。
         try (PostgreSQLContainer driftDatabase = new PostgreSQLContainer("postgres:17-alpine")) {
             driftDatabase.start();
             Flyway.configure()
@@ -213,7 +229,7 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            // 复刻生产状态：V11/V12/V15 的对象已手工建好，历史表仍停在 V10。
+            // 复刻生产状态：V11/V12/V15/V16 的对象已手工建好，历史表仍停在 V10。
             try (Connection connection = driftDatabase.createConnection("")) {
                 execute(connection, Files.readString(Path.of(
                         "..", "database", "reconciliation", "2026-10-27_learner_claiming.sql")));
@@ -235,7 +251,7 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(4);
+            assertThat(result.migrationsExecuted).isEqualTo(5);
             try (Connection connection = driftDatabase.createConnection("")) {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.flyway_schema_history
@@ -253,8 +269,15 @@ class FlywayMigrationTest {
                         SELECT count(*) FROM public.flyway_schema_history
                         WHERE version = '15' AND success
                         """)).isEqualTo(1);
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.flyway_schema_history
+                        WHERE version = '16' AND success
+                        """)).isEqualTo(1);
                 assertThat(hasColumn(connection, "student", "claimed_by")).isTrue();
                 assertThat(hasColumn(connection, "student", "claimed_at")).isTrue();
+                assertThat(hasColumn(connection, "student", "is_test")).isTrue();
+                assertThat(hasColumn(connection, "student", "is_special_test")).isTrue();
+                assertThat(hasConstraint(connection, "student_special_test_state_check")).isTrue();
                 assertThat(hasConstraint(connection, "student_claimed_by_fkey")).isTrue();
                 assertThat(hasConstraint(connection, "student_claim_state_check")).isTrue();
                 assertThat(hasConstraint(connection, "admin_subject_claim_admin_subject_unique")).isTrue();
@@ -275,6 +298,78 @@ class FlywayMigrationTest {
                         SELECT count(*) FROM pg_indexes
                         WHERE schemaname = 'public' AND indexname = 'student_claimed_by_idx'
                         """)).isEqualTo(1);
+            }
+        }
+    }
+
+    @Test
+    void givenPreV16LearnersWhenMigratingToV16ThenFlagsAndSpecialPermissionsAreBackfilled() throws Exception {
+        try (PostgreSQLContainer preV16Database = new PostgreSQLContainer("postgres:17-alpine")) {
+            preV16Database.start();
+            Flyway.configure()
+                    .dataSource(preV16Database.getJdbcUrl(), preV16Database.getUsername(),
+                            preV16Database.getPassword())
+                    .locations("classpath:db/migration")
+                    .target(MigrationVersion.fromVersion("12"))
+                    .load()
+                    .migrate();
+
+            try (Connection connection = preV16Database.createConnection("")) {
+                execute(connection, """
+                        INSERT INTO public.student (id, username, permissions) VALUES
+                            (1, 'pyt', '{}'::integer[]),
+                            (2, 'Mel.', '{}'::integer[]),
+                            (3, 'test', '{99}'::integer[]),
+                            (4, 'alice', '{7}'::integer[]);
+                        INSERT INTO public.courseware_catalog (article_id, subject)
+                            VALUES (11, '数学'), (12, '数学');
+                        """);
+            }
+
+            MigrateResult result = Flyway.configure()
+                    .dataSource(preV16Database.getJdbcUrl(), preV16Database.getUsername(),
+                            preV16Database.getPassword())
+                    .locations("classpath:db/migration")
+                    .load()
+                    .migrate();
+
+            assertThat(result.migrationsExecuted).isEqualTo(3);
+            try (Connection connection = preV16Database.createConnection("")) {
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.student
+                        WHERE lower(username) = 'pyt' AND NOT is_test AND NOT is_special_test
+                        """)).isEqualTo(1);
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.student
+                        WHERE lower(username) = 'mel.' AND NOT is_test AND NOT is_special_test
+                        """)).isEqualTo(1);
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.student
+                        WHERE lower(username) = 'test' AND is_test AND is_special_test
+                        """)).isEqualTo(1);
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.student
+                        WHERE lower(username) = 'alice' AND is_test AND NOT is_special_test
+                        """)).isEqualTo(1);
+                // 特殊测试学员的 permissions 补齐为 catalog 全部 article_id（int8 -> int4）。
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.student
+                        WHERE lower(username) = 'test' AND permissions = '{11,12}'::integer[]
+                        """)).isEqualTo(1);
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.student
+                        WHERE lower(username) = 'pyt' AND permissions = '{}'::integer[]
+                        """)).isEqualTo(1);
+                // 特殊测试学员必须同时是测试学员。
+                assertSqlState(connection, "23514", """
+                        INSERT INTO public.student (username, is_special_test)
+                        VALUES ('special-only', true)
+                        """);
+                // 全局最多一个特殊测试学员。
+                assertSqlState(connection, "23505", """
+                        INSERT INTO public.student (username, is_test, is_special_test)
+                        VALUES ('second-special', true, true)
+                        """);
             }
         }
     }

@@ -25,10 +25,12 @@ final class CurrentContentGrantController {
         }
         List<Long> articleIds = contentGrantQuery.findArticleIds(principal.learnerId())
                 .orElseThrow(LearnerRecordMissing::new);
-        return new ContentGrantResponse(articleIds);
+        boolean allArticles = contentGrantQuery.isSpecialTestLearner(principal.learnerId())
+                .orElseThrow(LearnerRecordMissing::new);
+        return new ContentGrantResponse(articleIds, allArticles);
     }
 
-    record ContentGrantResponse(List<Long> articleIds) {
+    record ContentGrantResponse(List<Long> articleIds, boolean allArticles) {
         ContentGrantResponse {
             articleIds = List.copyOf(articleIds);
         }

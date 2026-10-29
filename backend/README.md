@@ -289,6 +289,7 @@ PostgreSQL 结构只通过 Flyway 管理：
 - `V12__add_courseware_claiming.sql`：新增课件目录与管理员课件/学科认领表；学科与管理员多对多，认领学科自动覆盖该学科当前及未来全部课件。
 - `V14__grant_courseware_runtime_privileges.sql`：为已存在的运行时角色补齐 V12 表/序列权限与 RLS policy，避免升级后管理端接口因权限缺失返回 503。
 - `V15__add_courseware_exclusion.sql`：新增课件排除表；学科认领覆盖下可单独释放某篇课件，重新认领恢复，释放学科时清理该科排除。
+- `V16__add_test_learners.sql`：为 `student` 增加测试学员/特殊测试学员标记、唯一特殊测试约束，并回填既有学员（除 pyt、Mel. 外全部测试，test 为特殊测试）。
 
 ### Supabase 出现 `relation "account" already exists`
 
