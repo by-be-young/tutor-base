@@ -67,7 +67,7 @@ class FlywayMigrationTest {
                     .count();
         }
         assertThat(result.migrationsExecuted).isEqualTo((int) expectedMigrations);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("12");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("14");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
         try (Connection connection = POSTGRES.createConnection("")) {
@@ -220,7 +220,7 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(2);
+            assertThat(result.migrationsExecuted).isEqualTo(3);
             try (Connection connection = driftDatabase.createConnection("")) {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.flyway_schema_history
@@ -229,6 +229,10 @@ class FlywayMigrationTest {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.flyway_schema_history
                         WHERE version = '12' AND success
+                        """)).isEqualTo(1);
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.flyway_schema_history
+                        WHERE version = '14' AND success
                         """)).isEqualTo(1);
                 assertThat(hasColumn(connection, "student", "claimed_by")).isTrue();
                 assertThat(hasColumn(connection, "student", "claimed_at")).isTrue();

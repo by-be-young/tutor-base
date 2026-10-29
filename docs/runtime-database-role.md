@@ -16,6 +16,10 @@ smoke 后，使用 `database/operations/revoke_browser_table_access.sql` 撤销 
 删除学员时运行角色直接删除 `student`/`account` 行，关联的会话、激活码、作答、错题、签到、积分、卡片与任务记录由
 外键级联处理。未先更新权限时，旧容器仍可健康运行，但新增学习者、保存文章授权、课件认领或删除学员会返回服务端错误。
 
+`V14__grant_courseware_runtime_privileges.sql` 会在迁移时自动为已存在的运行时角色补发课件表/序列权限与 RLS
+policy（角色不存在时跳过，空库由 provision 脚本创建角色后仍建议手工运行一次）；如果升级前遗漏了 provision，
+新 migration 会自愈这部分权限。
+
 ## 执行顺序
 
 1. 使用 Supabase SQL Editor 的 `postgres` 管理身份运行

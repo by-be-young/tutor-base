@@ -119,8 +119,6 @@ jobs:
         run: |
           scp -o BatchMode=yes deploy/compose.yaml \
             "$DEPLOY_USER@$DEPLOY_HOST:/tmp/tutor-base-compose-${IMAGE_SHA}.yaml"
-          scp -o BatchMode=yes database/operations/provision_runtime_role.sql \
-            "$DEPLOY_USER@$DEPLOY_HOST:/tmp/tutor-base-provision-${IMAGE_SHA}.sql"
 
       - name: Migrate, deploy and verify
         env:
@@ -175,19 +173,6 @@ jobs:
           sed -i -E "s|^BACKEND_IMAGE=.*$|BACKEND_IMAGE=ghcr.io/by-be-young/tutor-base-backend:sha-${image_sha}|" .env
           sudo docker compose pull backend migration
           sudo docker compose --profile release run --rm migration </dev/null
-          # 迁移完成后自动校准运行时角色权限：新增表/序列若未授权，后端首次访问会返回
-          # 503 dependency_unavailable。使用 migration 账户幂等执行 provision 脚本。
-          provision_file="/tmp/tutor-base-provision-${image_sha}.sql"
-          test -s "$provision_file"
-          echo "Provisioning least-privilege runtime database role"
-          sudo docker run --rm --env-file ./migration.env \
-            -v "$provision_file:/provision.sql:ro" \
-            postgres:17-alpine sh -ceu '
-              url="${DATABASE_URL#jdbc:}"
-              PGPASSWORD="$DATABASE_PASSWORD" psql "$url" -U "$DATABASE_USERNAME" \
-                -v ON_ERROR_STOP=1 -f /provision.sql
-            '
-          rm -f "$provision_file"
           sudo docker compose up -d --no-deps backend
           sudo docker compose ps backend
           wait_for_backend

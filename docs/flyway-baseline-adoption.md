@@ -115,3 +115,17 @@ SQL Editor 手工对齐、再由 Flyway 记账，重复执行都不会失败。
 - 部署顺序保持“先运行 `provision_runtime_role.sql`，再执行 Flyway migration”，否则新表在本轮迁移时没有运行时
   policy，需要再跑一次 provision（脚本幂等）。
 
+## V14 运行时权限自愈（2026-10-30）
+
+staging 升级到含 V12 的后端后，管理端接口返回 `503 dependency_unavailable`：数据库已有新表，但运行时角色
+`tutor_base_runtime` 没有 `courseware_catalog`/`admin_subject_claim`/`admin_courseware_claim` 的权限
+（provision 脚本未在 staging 库重跑）。
+
+修复方式是把授权做成 migration `V14__grant_courseware_runtime_privileges.sql`：以 schema owner 身份、在角色
+存在时幂等补发 3 张表的 `SELECT/INSERT/UPDATE/DELETE`、两个 identity 序列 `USAGE` 与 RLS policy。空库上角色
+尚不存在时跳过，由 `provision_runtime_role.sql` 创建。配套
+`database/reconciliation/2026-10-30_runtime_courseware_grants.sql` 可手工对齐。
+
+规则：新增表的运行时权限尽量通过 migration 自愈（`provision_runtime_role.sql` 仍保留为完整授权与手工兜底），
+避免“代码已发布、权限未同步”导致的线上 503。
+

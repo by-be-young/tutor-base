@@ -287,6 +287,7 @@ PostgreSQL 结构只通过 Flyway 管理：
 - `V6`–`V10`：成就/任务、抽卡收藏、累计积分、移除里程碑，以及数据驱动卡池。
 - `V11__add_learner_claiming.sql`：为 `student` 增加管理员认领字段、配对约束、部分索引和账户删除时的认领清理触发器。
 - `V12__add_courseware_claiming.sql`：新增课件目录与管理员课件/学科认领表；学科与管理员多对多，认领学科自动覆盖该学科当前及未来全部课件。
+- `V14__grant_courseware_runtime_privileges.sql`：为已存在的运行时角色补齐 V12 表/序列权限与 RLS policy，避免升级后管理端接口因权限缺失返回 503。
 
 ### Supabase 出现 `relation "account" already exists`
 
