@@ -129,3 +129,10 @@ staging 升级到含 V12 的后端后，管理端接口返回 `503 dependency_un
 规则：新增表的运行时权限尽量通过 migration 自愈（`provision_runtime_role.sql` 仍保留为完整授权与手工兜底），
 避免“代码已发布、权限未同步”导致的线上 503。
 
+## V15 课件排除（2026-10-30）
+
+`V15__add_courseware_exclusion.sql` 新增 `admin_courseware_exclusion`，让学科认领覆盖下的课件也能单独释放；
+脚本幂等、包含排除表/唯一约束/索引/RLS，并在运行时角色存在时补发权限、序列与 policy（与 V14 同思路）。
+配套 `database/reconciliation/2026-10-30_courseware_exclusion.sql` 可手工对齐。可见范围统一为
+`(学科已认领且未排除) ∪ 单篇认领`，业务接口与 analytics 自动跟随。
+
