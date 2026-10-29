@@ -23,6 +23,11 @@ export const learnerGateway = {
     return learners
   },
 
+  /** 学员详情：积分、签到、分学科进度、最近作答与近 30 天动态。 */
+  getLearnerProfile(learnerId) {
+    return backendClient.request(`/admin/learners/${encodeURIComponent(learnerId)}/profile`)
+  },
+
   createLearner(username) {
     return backendClient.request('/admin/learners', {
       method: 'POST',

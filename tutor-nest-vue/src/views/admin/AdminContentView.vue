@@ -4,7 +4,7 @@
         <header class="panel cw-head">
             <div class="cw-head__copy">
                 <span class="eyebrow">COURSEWARE CLAIMS</span>
-                <h1 class="cw-head__title">我的课件</h1>
+                <h1 class="page-title cw-head__title">我的课件</h1>
                 <p class="page-sub">
                     先认领学科或单篇课件：学科认领会自动覆盖该学科当前与之后同步的全部课件。业务页（权限、批阅、答案）只显示你认领的范围。
                 </p>
@@ -33,13 +33,13 @@
             </div>
         </header>
 
-        <div class="cw-tabs" role="tablist" aria-label="课件工作区切换">
-            <button v-for="tab in tabs" :key="tab.id" type="button" role="tab" class="cw-tab"
+        <div class="seg cw-tabs" role="tablist" aria-label="课件工作区切换">
+            <button v-for="tab in tabs" :key="tab.id" type="button" role="tab" class="seg__btn cw-tab"
                 :class="{ 'is-active': activeTab === tab.id }" :aria-selected="activeTab === tab.id"
                 @click="switchTab(tab.id)">
                 <i aria-hidden="true" :class="tab.icon"></i>
                 {{ tab.label }}
-                <span v-if="tab.count !== null" class="cw-tab__count">{{ tab.count }}</span>
+                <span v-if="tab.count !== null" class="seg__count cw-tab__count">{{ tab.count }}</span>
             </button>
         </div>
 
@@ -509,59 +509,12 @@ onMounted(async () => {
     flex-shrink: 0;
 }
 
-/* 内部标签 */
+/* 内部标签：复用学员端 .seg 分段控件，仅补充滚动与对齐 */
 .cw-tabs {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 5px;
-    border: 1.5px solid var(--ink);
-    border-radius: var(--r-full);
-    background: var(--paper-1);
-    box-shadow: 3px 3px 0 var(--ink);
     align-self: flex-start;
     max-width: 100%;
     overflow-x: auto;
     scrollbar-width: none;
-}
-
-.cw-tab {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    height: 38px;
-    padding: 0 16px;
-    border-radius: var(--r-full);
-    color: var(--text-2);
-    font-size: 0.86rem;
-    font-weight: 700;
-    white-space: nowrap;
-    transition: background var(--dur), color var(--dur);
-}
-
-.cw-tab:hover {
-    background: var(--paper-2);
-    color: var(--ink);
-}
-
-.cw-tab.is-active {
-    background: var(--ink);
-    color: var(--paper-1);
-}
-
-.cw-tab__count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 22px;
-    height: 22px;
-    padding: 0 6px;
-    border-radius: var(--r-full);
-    border: 1px solid var(--ink);
-    background: var(--lime);
-    color: var(--ink);
-    font-size: 0.7rem;
-    font-weight: 800;
 }
 
 /* 面板 */

@@ -78,6 +78,11 @@
                         </span>
 
                         <span class="student-actions">
+                            <button type="button" class="btn btn--sm"
+                                :aria-label="`查看 ${student.username} 的学习详情`"
+                                @click="viewDetail(student)">
+                                <i class="fas fa-chart-line" aria-hidden="true"></i> 查看详情
+                            </button>
                             <button type="button" class="btn btn--soft btn--sm" @click="openPasswordDialog(student)">
                                 <i class="fas fa-key" aria-hidden="true"></i> 设置/重置密码
                             </button>
@@ -228,6 +233,8 @@ const props = defineProps({
     selectedStudentId: { type: [String, Number], default: null }
 })
 
+const emit = defineEmits(['view-detail'])
+
 const router = useRouter()
 const authStore = useAuthStore()
 const adminStore = useAdminStore()
@@ -281,6 +288,10 @@ function claimLabel(student) {
     if (state === 'mine') return '我的'
     if (state === 'unclaimed') return '未认领'
     return `由 ${student.claimedByUsername || '其他管理员'} 认领`
+}
+
+function viewDetail(student) {
+    emit('view-detail', student)
 }
 
 function resetFilters() {

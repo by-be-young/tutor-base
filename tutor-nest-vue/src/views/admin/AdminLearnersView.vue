@@ -38,8 +38,8 @@
       </div>
     </section>
 
-    <div class="admin-tabs" role="tablist" aria-label="学员管理分类">
-      <button v-for="tab in tabs" :key="tab.id" type="button" role="tab" class="admin-tabs__btn"
+    <div class="seg admin-tabs" role="tablist" aria-label="学员管理分类">
+      <button v-for="tab in tabs" :key="tab.id" type="button" role="tab" class="seg__btn"
         :class="{ 'is-active': activeTab === tab.id }" :aria-selected="activeTab === tab.id"
         :aria-controls="`admin-tab-${tab.id}`" @click="activeTab = tab.id">
         <i :class="tab.icon" aria-hidden="true"></i>
@@ -49,7 +49,7 @@
 
     <section :id="`admin-tab-${activeTab}`" class="admin-panel" role="tabpanel">
       <StudentAccountsPanel v-if="activeTab === 'students'" :students="students"
-        :selected-student-id="selectedStudentId" />
+        :selected-student-id="selectedStudentId" @view-detail="openDetailDrawer" />
       <LearnerSubjectPanel v-else-if="activeTab === 'subjects'" :students="students"
         :selected-student-id="selectedStudentId" :blog-data="blogData" :all-subjects="allSubjects"
         :dirty="permissionDirty" :saving="savingPermissions" @permission-change="onPermissionChange"
@@ -58,6 +58,10 @@
         :blog-data="blogData" :all-subjects="allSubjects" :dirty="permissionDirty"
         :saving="savingPermissions" @permission-change="onPermissionChange" @save-permissions="savePermissions" />
     </section>
+
+    <!-- 学员详情抽屉：v-if 控制挂载，关闭后不影响当前标签与已选学员 -->
+    <LearnerDetailDrawer v-if="detailLearnerId !== null" :learner-id="detailLearnerId" :students="students"
+      @close="closeDetailDrawer" @select="selectFromDetailDrawer" />
   </div>
 </template>
 
@@ -68,6 +72,7 @@ import StudentSwitcher from '@/components/admin/StudentSwitcher.vue'
 import StudentAccountsPanel from '@/components/admin/StudentAccountsPanel.vue'
 import LearnerSubjectPanel from '@/components/admin/LearnerSubjectPanel.vue'
 import PermissionPanel from '@/components/admin/PermissionPanel.vue'
+import LearnerDetailDrawer from '@/components/admin/LearnerDetailDrawer.vue'
 
 const {
   students,
@@ -94,12 +99,27 @@ const {
 } = useAdminWorkspace()
 
 const activeTab = ref('students')
+const detailLearnerId = ref(null)
 
 const tabs = [
   { id: 'students', label: '学员账户', icon: 'fas fa-users-gear' },
   { id: 'subjects', label: '学员科目', icon: 'fas fa-book-open' },
   { id: 'permission', label: '权限管理', icon: 'fas fa-shield-halved' }
 ]
+
+function openDetailDrawer(student) {
+  if (student === null || student === undefined) return
+  detailLearnerId.value = student.id
+}
+
+function closeDetailDrawer() {
+  detailLearnerId.value = null
+}
+
+function selectFromDetailDrawer(learnerId) {
+  handleSelectStudent(learnerId)
+  closeDetailDrawer()
+}
 
 onMounted(loadWorkspace)
 </script>
@@ -179,49 +199,11 @@ onMounted(loadWorkspace)
   min-width: 118px;
 }
 
+/* 复用学员端 .seg 分段控件，仅补充横向滚动 */
 .admin-tabs {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px;
-  border: 1.5px solid var(--ink);
-  border-radius: var(--r-full);
-  background: var(--paper-1);
-  box-shadow: 2px 2px 0 var(--ink);
+  max-width: 100%;
   overflow-x: auto;
   scrollbar-width: thin;
-}
-
-.admin-tabs__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-  height: 38px;
-  padding: 0 16px;
-  border-radius: var(--r-full);
-  border: 1.5px solid transparent;
-  color: var(--text-2);
-  font-size: 0.84rem;
-  font-weight: 700;
-  white-space: nowrap;
-  transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
-}
-
-.admin-tabs__btn:hover {
-  color: var(--ink);
-  background: var(--paper-2);
-  border-color: var(--ink);
-}
-
-.admin-tabs__btn.is-active {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--paper-1);
-}
-
-.admin-tabs__btn.is-active i {
-  color: var(--butter);
 }
 
 .admin-panel {

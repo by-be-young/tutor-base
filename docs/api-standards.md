@@ -202,6 +202,9 @@
 | PUT | `/admin/learners/{learnerId}/password` | administrator | 直接设置或重置学习者密码，并撤销其旧会话和未使用激活码 |
 | POST | `/admin/learners/{learnerId}/impersonate` | administrator | 免密进入学习者账户：创建新会话并轮换 Cookie；仅限 `role=learner` 且已激活的账户，不撤销管理员既有会话 |
 | POST | `/admin/account-activations` | administrator | 兼容接口：为待激活账户生成一次性激活码；当前前端不使用 |
+| GET | `/admin/analytics/overview` | administrator | 管理台概览指标；待批阅/提交数只统计“我的课件” |
+| GET | `/admin/analytics/activity?days=` | administrator | 近 7～90 天每日提交/批阅趋势，按 Asia/Shanghai 自然日补零，只统计“我的课件” |
+| GET | `/admin/learners/{learnerId}/profile` | administrator | 学员详情：积分/累计/等级、近 30 天签到、分学科进度、最近作答、30 天动态；学习数据只含“我的课件” |
 
 - 认领是管理员之间的组织归属，不改变内容授权、批阅权限或学习者可见范围；管理员目录排除 `role=administrator` 的账户。
 - 学习者响应额外返回 `claimedByAccountId`、`claimedByUsername`、`claimedAt` 与 `lastActivityAt`；最近动态由服务端聚合作答提交、错题、签到和登录会话时间，客户端不得提交该值。

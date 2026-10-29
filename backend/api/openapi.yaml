@@ -1074,6 +1074,90 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+  /admin/analytics/overview:
+    get:
+      operationId: getAdministratorAnalyticsOverview
+      summary: 获取管理员首页统计概览
+      description: >-
+        学习者数量与 /admin/learners 口径一致（排除 administrator 角色的学习者行）。
+        待批阅与近 7 天提交只统计当前管理员“我的课件”范围内的作答；
+        courseware.unclaimed 为没有任何管理员认领的课件数。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 管理员概览统计。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdministratorAnalyticsOverview'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/analytics/activity:
+    get:
+      operationId: getAdministratorAnalyticsActivity
+      summary: 获取管理员“我的课件”范围内的每日活动趋势
+      description: >-
+        按 Asia/Shanghai 自然日统计当前管理员可见课件的提交数与批阅数，日期升序并补零。
+        days 取值 7～90，默认 30。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 7
+            maximum: 90
+            default: 30
+      responses:
+        '200':
+          description: 每日提交与批阅趋势。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdministratorAnalyticsActivity'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/learners/{learnerId}/profile:
+    get:
+      operationId: getAdministratorLearnerProfile
+      summary: 获取单个学习者的学习与成长详情
+      description: >-
+        积分、累计积分、等级与签到为学习者全局数据；分学科进度、近期作答与每日提交
+        只统计当前管理员“我的课件”范围，且分学科进度只含该学习者已授权的文章。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: learnerId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '200':
+          description: 学习者详情。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdministratorLearnerProfile'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
   /admin/learners/{learnerId}/impersonate:
     post:
       operationId: impersonateLearner
@@ -1877,6 +1961,195 @@ components:
         claimedAt:
           type: string
           format: date-time
+    AdministratorAnalyticsOverview:
+      type: object
+      additionalProperties: false
+      required:
+        - learners
+        - claimedLearners
+        - unclaimedLearners
+        - activeLearners7d
+        - pendingReviews
+        - submissions7d
+        - courseware
+      properties:
+        learners:
+          type: integer
+          minimum: 0
+          description: 全部学习者数量（排除 administrator 账户）。
+        claimedLearners:
+          type: integer
+          minimum: 0
+        unclaimedLearners:
+          type: integer
+          minimum: 0
+        activeLearners7d:
+          type: integer
+          minimum: 0
+          description: 最近 7 天内有作答、错题、签到或登录活动的学习者数量。
+        pendingReviews:
+          type: integer
+          minimum: 0
+          description: 当前管理员可见课件中待批阅的作答数量。
+        submissions7d:
+          type: integer
+          minimum: 0
+          description: 当前管理员可见课件中最近 7 天的提交数量。
+        courseware:
+          $ref: '#/components/schemas/AdministratorCoursewareStats'
+    AdministratorCoursewareStats:
+      type: object
+      additionalProperties: false
+      required: [visible, unclaimed, subjects]
+      properties:
+        visible:
+          type: integer
+          minimum: 0
+          description: 当前管理员可见课件数量。
+        unclaimed:
+          type: integer
+          minimum: 0
+          description: 没有任何管理员认领的课件数量。
+        subjects:
+          type: integer
+          minimum: 0
+          description: 当前管理员可见课件涉及的学科数量。
+    AdministratorAnalyticsActivity:
+      type: object
+      additionalProperties: false
+      required: [days, points]
+      properties:
+        days:
+          type: integer
+          minimum: 7
+          maximum: 90
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdministratorActivityPoint'
+    AdministratorActivityPoint:
+      type: object
+      additionalProperties: false
+      required: [date, submissions, reviews]
+      properties:
+        date:
+          type: string
+          format: date
+          description: Asia/Shanghai 自然日。
+        submissions:
+          type: integer
+          minimum: 0
+        reviews:
+          type: integer
+          minimum: 0
+    AdministratorLearnerProfile:
+      type: object
+      additionalProperties: false
+      required:
+        - learnerId
+        - username
+        - claimedByAccountId
+        - claimedByUsername
+        - lastActivityAt
+        - points
+        - lifetimePoints
+        - level
+        - checkInDays30
+        - subjectProgress
+        - recentSubmissions
+        - activity
+      properties:
+        learnerId:
+          type: integer
+          format: int64
+          minimum: 1
+        username:
+          type: string
+          minLength: 1
+        claimedByAccountId:
+          type: [integer, 'null']
+          format: int64
+          minimum: 1
+        claimedByUsername:
+          type: [string, 'null']
+        lastActivityAt:
+          type: [string, 'null']
+          format: date-time
+        points:
+          type: integer
+          minimum: 0
+        lifetimePoints:
+          type: integer
+          minimum: 0
+        level:
+          type: integer
+          minimum: 1
+          description: 由累计积分计算，每 200 累计积分提升一级。
+        checkInDays30:
+          type: integer
+          minimum: 0
+          description: 最近 30 个 Asia/Shanghai 自然日内的签到天数。
+        subjectProgress:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdministratorSubjectProgress'
+        recentSubmissions:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/AdministratorRecentSubmission'
+        activity:
+          type: array
+          maxItems: 30
+          items:
+            $ref: '#/components/schemas/AdministratorLearnerActivityPoint'
+    AdministratorSubjectProgress:
+      type: object
+      additionalProperties: false
+      required: [subject, totalQuestions, submittedQuestions, pendingReviews]
+      properties:
+        subject:
+          type: string
+        totalQuestions:
+          type: integer
+          minimum: 0
+        submittedQuestions:
+          type: integer
+          minimum: 0
+        pendingReviews:
+          type: integer
+          minimum: 0
+    AdministratorRecentSubmission:
+      type: object
+      additionalProperties: false
+      required: [articleId, questionId, reviewStatus, reviewResult, submittedAt]
+      properties:
+        articleId:
+          type: integer
+          format: int64
+        questionId:
+          type: string
+        reviewStatus:
+          type: string
+          enum: [pending, reviewed]
+        reviewResult:
+          type: [string, 'null']
+          enum: [correct, partial, wrong, null]
+        submittedAt:
+          type: string
+          format: date-time
+    AdministratorLearnerActivityPoint:
+      type: object
+      additionalProperties: false
+      required: [date, submissions]
+      properties:
+        date:
+          type: string
+          format: date
+          description: Asia/Shanghai 自然日。
+        submissions:
+          type: integer
+          minimum: 0
     ApiProblem:
       type: object
       required:

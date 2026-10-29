@@ -388,6 +388,9 @@ docker run --rm -p 8080:8080 tutor-base-backend:dev
 - `PUT/DELETE /api/v1/admin/courseware-claims/subjects/{subject}`：认领/释放学科；认领自动覆盖该学科当前及未来课件。
 - `PUT/DELETE /api/v1/admin/courseware-claims/articles/{articleId}`：单篇认领/释放课件。
 - `GET /api/v1/admin/courseware-claims/catalog?scope=mine|unclaimed|all`：课件认领目录与归属。
+- `GET /api/v1/admin/analytics/overview`：管理台概览指标；待批阅/提交数只统计当前管理员的“我的课件”。
+- `GET /api/v1/admin/analytics/activity?days=30`：近 7～90 天每日提交/批阅趋势（Asia/Shanghai 自然日补零，只统计“我的课件”）。
+- `GET /api/v1/admin/learners/{learnerId}/profile`：学员详情（积分/等级/近 30 天签到/分学科进度/最近作答/30 天动态）；学习数据只含“我的课件”。
 - 管理端参考答案、作答状态、人工批阅与内容授权都限定在“我的课件”范围，范围外返回 `403 courseware_not_claimed`。
 
 部署该版本前，必须先重新运行 `../database/operations/provision_runtime_role.sql`，再执行
