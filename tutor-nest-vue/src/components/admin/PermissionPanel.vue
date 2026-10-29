@@ -17,6 +17,23 @@
             <EmptyState v-if="!selectedStudentId" icon="fas fa-user-graduate" title="尚未选择学员"
                 text="在顶部切换或新增学员后，即可配置内容授权。" />
 
+            <div v-else-if="coursewareStatus === 'loading'" class="perm-skeletons" aria-hidden="true">
+                <div class="skeleton perm-skeleton"></div>
+                <div class="skeleton perm-skeleton"></div>
+                <div class="skeleton perm-skeleton"></div>
+            </div>
+
+            <EmptyState v-else-if="coursewareStatus === 'error'" icon="fas fa-triangle-exclamation"
+                title="课件目录加载失败" :text="coursewareStore.error || '请稍后重试。'">
+                <button type="button" class="btn btn--soft btn--sm" @click="reloadCourseware">
+                    <i aria-hidden="true" class="fas fa-rotate"></i> 重新加载
+                </button>
+            </EmptyState>
+
+            <EmptyState v-else-if="coursewareStatus === 'empty'" icon="fas fa-hand-holding-heart"
+                title="你还没有可见课件"
+                text="你先到课件页认领学科或课件，认领后即可为学员配置这些课件的授权。" />
+
             <div v-else-if="allSubjects.length === 0" class="perm-skeletons" aria-hidden="true">
                 <div class="skeleton perm-skeleton"></div>
                 <div class="skeleton perm-skeleton"></div>
@@ -86,6 +103,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useAdminStore } from '@/stores/adminStore'
+import { useCoursewareStore } from '@/stores/coursewareStore'
 import { openedSubjects } from '@/utils/adminSubjects'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import PermissionTreeNode from './PermissionTreeNode.vue'
@@ -102,6 +120,7 @@ const props = defineProps({
 const emit = defineEmits(['permission-change', 'save-permissions'])
 
 const adminStore = useAdminStore()
+const coursewareStore = useCoursewareStore()
 
 const currentSubject = ref('')
 const activeFilter = ref('all')
@@ -121,23 +140,46 @@ const currentPermissions = computed(() => {
 
 const currentTone = computed(() => subjectTone(currentSubject.value))
 
-// 只显示学员已开通（至少授权过一篇文章）的学科，避免看到未开通科目。
+// 业务面板只处理「我的课件」：目录未加载时先给骨架屏，加载完成且为空才提示去认领。
+const coursewareStatus = computed(() => {
+    if (!coursewareStore.loaded) return coursewareStore.error ? 'error' : 'loading'
+    return coursewareStore.visibleArticleIds.size === 0 ? 'empty' : 'ready'
+})
+
+const visibleArticles = computed(() => {
+    if (!coursewareStore.loaded) return []
+    return props.blogData.filter(blog => coursewareStore.visibleArticleIds.has(Number(blog.id)))
+})
+
+function reloadCourseware() {
+    coursewareStore.loadWorkspace(props.blogData).catch(() => {})
+}
+
+// 父页面可能先挂载再异步加载文章目录；文章到位后自动补一次同步+加载。
+watch(() => props.blogData, (articles) => {
+    if (!Array.isArray(articles) || articles.length === 0) return
+    coursewareStore.ensureWorkspace(articles).catch(() => {})
+}, { immediate: true })
+
+// 只显示学员已开通（至少授权过一篇文章）且在我的课件范围内的学科。
 // 保留当前正在编辑的学科：管理员把某科最后一篇取消勾选时，目录树不会突然跳走。
 const scopedSubjects = computed(() => {
+    const subjects = props.allSubjects.filter(subject =>
+        visibleArticles.value.some(blog => blog.series === subject))
     const opened = new Set(openedSubjects({
-        subjects: props.allSubjects,
-        articles: props.blogData,
+        subjects,
+        articles: visibleArticles.value,
         permissions: currentPermissions.value
     }))
-    return props.allSubjects.filter(subject => {
+    return subjects.filter(subject => {
         if (subject === currentSubject.value) {
-            return props.blogData.some(blog => blog.series === subject)
+            return visibleArticles.value.some(blog => blog.series === subject)
         }
         return opened.has(subject)
     })
 })
 
-const subjectArticles = computed(() => props.blogData.filter(blog => blog.series === currentSubject.value))
+const subjectArticles = computed(() => visibleArticles.value.filter(blog => blog.series === currentSubject.value))
 
 // 筛选标签右侧保留数量（未授权/已授权/全部），只针对当前学科
 const filters = computed(() => {

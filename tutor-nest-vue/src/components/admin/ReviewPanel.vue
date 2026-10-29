@@ -58,6 +58,23 @@
                     <EmptyState v-else-if="!selectedStudentId" icon="fas fa-user-graduate" title="尚未选择学员"
                         text="在顶部切换学员后，即可查看他的待批阅内容。" />
 
+                    <div v-else-if="coursewareStatus === 'loading'" class="review-skeletons" aria-hidden="true">
+                        <div class="skeleton review-skeleton"></div>
+                        <div class="skeleton review-skeleton"></div>
+                        <div class="skeleton review-skeleton"></div>
+                    </div>
+
+                    <EmptyState v-else-if="coursewareStatus === 'error'" icon="fas fa-triangle-exclamation"
+                        title="课件目录加载失败" :text="coursewareStore.error || '请稍后重试。'">
+                        <button type="button" class="btn btn--soft btn--sm" @click="reloadCourseware">
+                            <i aria-hidden="true" class="fas fa-rotate"></i> 重新加载
+                        </button>
+                    </EmptyState>
+
+                    <EmptyState v-else-if="coursewareStatus === 'empty'" icon="fas fa-hand-holding-heart"
+                        title="你还没有可见课件"
+                        text="你先到课件页认领学科或课件，认领后即可批阅这些课件下的作答。" />
+
                     <EmptyState v-else-if="grantedArticleCount === 0" icon="fas fa-shield-halved"
                         title="该学员尚未开通内容授权"
                         text="请到「权限管理」为该学员开通文章权限后，再回到批阅中心查看作答。" />
@@ -174,6 +191,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useCoursewareStore } from '@/stores/coursewareStore'
 import { learningGateway } from '@/gateways/learningGateway'
 import { showToast } from '@/utils/toast'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -187,6 +205,7 @@ const props = defineProps({
 })
 
 const router = useRouter()
+const coursewareStore = useCoursewareStore()
 
 const currentSubject = ref('')
 const activeFilter = ref('all')
@@ -226,7 +245,24 @@ const grantedIds = computed(() => {
     return new Set(permissions.map(Number).filter(Number.isFinite))
 })
 
-const grantedArticles = computed(() => props.blogData.filter(blog => grantedIds.value.has(Number(blog.id))))
+// 批阅范围 = 学员已授权 ∩ 我的课件；目录未加载完成前不渲染列表。
+const coursewareStatus = computed(() => {
+    if (!coursewareStore.loaded) return coursewareStore.error ? 'error' : 'loading'
+    return coursewareStore.visibleArticleIds.size === 0 ? 'empty' : 'ready'
+})
+
+function reloadCourseware() {
+    coursewareStore.loadWorkspace(props.blogData).catch(() => {})
+}
+
+watch(() => props.blogData, (articles) => {
+    if (!Array.isArray(articles) || articles.length === 0) return
+    coursewareStore.ensureWorkspace(articles).catch(() => {})
+}, { immediate: true })
+
+const grantedArticles = computed(() => props.blogData.filter(blog =>
+    grantedIds.value.has(Number(blog.id))
+    && coursewareStore.visibleArticleIds.has(Number(blog.id))))
 
 const grantedArticleCount = computed(() => grantedArticles.value.length)
 
@@ -509,9 +545,12 @@ watch(grantedSubjects, (subjects) => {
     }
 }, { immediate: true })
 
-// 授权被收回时关闭已不在授权范围内的批阅详情。
-watch(grantedIds, (ids) => {
-    if (selectedArticle.value && !ids.has(Number(selectedArticle.value.id))) {
+// 授权被收回或课件移出我的认领范围时，关闭不再可批阅的详情。
+watch([grantedIds, () => coursewareStore.visibleArticleIds], ([ids]) => {
+    const article = selectedArticle.value
+    if (!article) return
+    const articleId = Number(article.id)
+    if (!ids.has(articleId) || !coursewareStore.visibleArticleIds.has(articleId)) {
         selectedArticle.value = null
     }
 })

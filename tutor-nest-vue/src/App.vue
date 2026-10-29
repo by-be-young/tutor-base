@@ -4,54 +4,65 @@
 
   <PaperBackdrop />
 
-  <AppHeader />
+  <AppHeader v-if="!adminShell || routeState.error" />
 
-  <main id="main" class="app-main">
-    <div v-if="routeState.loading" class="route-progress" role="status" aria-label="页面加载中">
-      <span></span>
+  <div v-if="routeState.loading" class="route-progress" role="status" aria-label="页面加载中">
+    <span></span>
+  </div>
+
+  <div v-if="routeState.error" class="route-error panel">
+    <span class="empty__icon"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i></span>
+    <h1 class="route-error__title">页面加载失败</h1>
+    <p class="route-error__text">{{ errorMessage }}</p>
+    <div class="route-error__actions">
+      <button type="button" class="btn btn--primary" @click="retryRoute">重新加载</button>
+      <router-link to="/" class="btn btn--ghost" @click="clearRouteError()">回到首页</router-link>
     </div>
+  </div>
 
-    <div v-if="routeState.error" class="route-error panel">
-      <span class="empty__icon"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i></span>
-      <h1 class="route-error__title">页面加载失败</h1>
-      <p class="route-error__text">{{ errorMessage }}</p>
-      <div class="route-error__actions">
-        <button type="button" class="btn btn--primary" @click="retryRoute">重新加载</button>
-        <router-link to="/" class="btn btn--ghost" @click="clearRouteError()">回到首页</router-link>
-      </div>
-    </div>
-
-    <router-view v-else v-slot="{ Component }">
-      <transition name="page">
-        <component :is="Component" :key="route.path" />
-      </transition>
+  <!-- 管理端：独立外壳由 /admin 路由的 AdminLayout 提供，这里只负责挂载 router-view -->
+  <main v-else-if="adminShell" id="main" class="app-main app-main--admin">
+    <router-view v-slot="{ Component }">
+      <component :is="Component" :key="route.path" />
     </router-view>
   </main>
 
-  <footer class="site-footer">
-    <div class="footer__inner">
-      <div class="footer__brand">
-        <BrandMark :size="30" />
-        <span class="footer__wordmark">NEST · 学巢</span>
-      </div>
-      <p class="footer__tagline">把每一次努力，变成看得见的成长。</p>
-      <div class="footer__links">
-        <template v-if="authStore.isLoggedIn">
-          <router-link to="/tasks">任务中心</router-link>
-          <router-link to="/wrong-questions">错题本</router-link>
-          <router-link to="/settings/password">账户设置</router-link>
-        </template>
-        <template v-else>
-          <button type="button" class="footer__link-btn" @click="uiStore.requestAuth('login')">登录</button>
-          <button type="button" class="footer__link-btn" @click="uiStore.requestAuth('register')">注册</button>
-        </template>
-      </div>
-      <span class="footer__meta">© 2026 NEST · RISO CAMPUS</span>
-    </div>
-  </footer>
+  <!-- 学员端：保持现有布局 -->
+  <template v-else>
+    <main id="main" class="app-main">
+      <router-view v-slot="{ Component }">
+        <transition name="page">
+          <component :is="Component" :key="route.path" />
+        </transition>
+      </router-view>
+    </main>
 
-  <CheckInModal />
-  <MobileDock />
+    <footer class="site-footer">
+      <div class="footer__inner">
+        <div class="footer__brand">
+          <BrandMark :size="30" />
+          <span class="footer__wordmark">NEST · 学巢</span>
+        </div>
+        <p class="footer__tagline">把每一次努力，变成看得见的成长。</p>
+        <div class="footer__links">
+          <template v-if="authStore.isLoggedIn">
+            <router-link to="/tasks">任务中心</router-link>
+            <router-link to="/wrong-questions">错题本</router-link>
+            <router-link to="/settings/password">账户设置</router-link>
+          </template>
+          <template v-else>
+            <button type="button" class="footer__link-btn" @click="uiStore.requestAuth('login')">登录</button>
+            <button type="button" class="footer__link-btn" @click="uiStore.requestAuth('register')">注册</button>
+          </template>
+        </div>
+        <span class="footer__meta">© 2026 NEST · RISO CAMPUS</span>
+      </div>
+    </footer>
+
+    <CheckInModal />
+    <MobileDock />
+  </template>
+
   <CommandPalette />
 </template>
 
@@ -72,6 +83,9 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const uiStore = useUiStore()
+
+// 管理端 5 页共用独立外壳；学员端页面保持现有 AppHeader / footer / MobileDock。
+const adminShell = computed(() => route.meta.adminShell === true)
 
 const errorMessage = computed(() => {
   const message = String(routeState.error?.message || routeState.error || '')
@@ -164,6 +178,10 @@ onMounted(() => {
 
 .app-main {
   min-height: calc(100vh - var(--header-h) - 220px);
+}
+
+.app-main--admin {
+  min-height: calc(100vh - var(--header-h));
 }
 
 .site-footer {

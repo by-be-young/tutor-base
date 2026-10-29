@@ -40,14 +40,19 @@ test('administrator and learner complete the protected learning journey', async 
   const learnerPassword = 'E2e-learner-password-2026'
 
   await login(page, administrator, administratorPassword)
-  await page.goto('/#/admin', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('管理员', { exact: true })).toBeVisible()
-  // 默认落地在「学生账户」，它现在是侧栏最上面的板块。
+  // 管理员登录后直达管理工作台（/admin），不再落在学员端首页。
+  await expect(page).toHaveURL(/#\/admin/)
+  await expect(page.getByRole('heading', { name: '工作台' })).toBeVisible()
+  await expect(page.getByText('管理员', { exact: true }).first()).toBeVisible()
+
+  // 学员管理是独立页面 /admin/learners，内部横向标签：学员账户 / 学员科目 / 权限管理。
+  await page.locator('.admin-nav').getByRole('link', { name: '学员' }).click()
+  await expect(page).toHaveURL(/#\/admin\/learners/)
+  await expect(page.getByRole('tab', { name: '学员账户' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '学生账户' })).toBeVisible()
-  // 「学员科目」位于学生账户之下、权限管理之上。
-  await page.getByRole('button', { name: /学员科目/ }).click()
+  await page.getByRole('tab', { name: '学员科目' }).click()
   await expect(page.getByRole('heading', { name: '学员科目' })).toBeVisible()
-  await page.getByRole('button', { name: /学生账户/ }).click()
+  await page.getByRole('tab', { name: '学员账户' }).click()
 
   page.once('dialog', dialog => dialog.accept(learner))
   await page.getByRole('button', { name: /新增/ }).click()
@@ -68,6 +73,14 @@ test('administrator and learner complete the protected learning journey', async 
   expect(createdLearner.claimedByUsername).toBeTruthy()
   expect(createdLearner.claimedByAccountId).not.toBeNull()
   const learnerId = createdLearner.learnerId
+  // 管理端业务接口只处理「我的课件」：先同步课件目录并认领学科，再授权与设置答案。
+  expect((await api(page, '/admin/courseware-catalog/sync', {
+    method: 'POST',
+    body: { items: [{ articleId: 23, subject: '化学', title: 'e2e-article' }] }
+  })).status).toBe(200)
+  expect((await api(page, '/admin/courseware-claims/subjects/%E5%8C%96%E5%AD%A6', {
+    method: 'PUT'
+  })).status).toBe(200)
   expect((await api(page, `/admin/learners/${learnerId}/content-grants`, {
     method: 'PUT', body: { articleIds: [23] }
   })).status).toBe(200)
@@ -76,8 +89,8 @@ test('administrator and learner complete the protected learning journey', async 
     body: { items: [{ questionId: '1', answerText: 'e2e-reference-answer', autoGrade: false }] }
   })).status).toBe(200)
 
-  await page.getByRole('button', { name: /学生账户/ }).click()
   // 学生账户默认筛选「我的学员」；新建学员会被自动认领，因此应直接出现在列表里。
+  await expect(page.getByRole('heading', { name: '学生账户' })).toBeVisible()
   await expect(page.getByRole('button', { name: /我的学员/ })).toHaveAttribute('aria-pressed', 'true')
   const learnerRow = page.getByRole('listitem').filter({ hasText: learner })
   await expect(learnerRow).toBeVisible()
@@ -167,11 +180,13 @@ test('administrator and learner complete the protected learning journey', async 
     method: 'POST', body: { username: administrator, password: administratorPassword }
   })).status).toBe(200)
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.getByRole('link', { name: '管理' }).click()
+  // 管理员会话刷新后，学员端页面 /tasks 会被路由守卫重定向回管理台。
   await expect(page).toHaveURL(/#\/admin/)
+  await expect(page.getByRole('heading', { name: '工作台' })).toBeVisible()
+  await page.locator('.admin-nav').getByRole('link', { name: '学员' }).click()
+  await expect(page).toHaveURL(/#\/admin\/learners/)
   await expect(page.getByRole('button', { name: '切换学员' })).toBeVisible()
 
-  await page.getByRole('button', { name: /学生账户/ }).click()
   // 「我的学员」筛选下看不到未认领的学员，先切到「全部」再操作认领/删除。
   await page.getByRole('button', { name: /^全部/ }).click()
   const managedRow = page.getByRole('listitem').filter({ hasText: learner })

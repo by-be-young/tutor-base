@@ -2,7 +2,8 @@
 <template>
   <header class="site-header" :class="{ 'is-scrolled': scrolled }">
     <div class="header__inner">
-      <router-link to="/" class="brand" aria-label="NEST 学巢 首页">
+      <router-link :to="authStore.isAdministrator ? '/admin' : '/'" class="brand"
+      :aria-label="authStore.isAdministrator ? 'NEST 管理台工作台' : 'NEST 学巢 首页'">
         <BrandMark :size="32" />
         <span class="brand__text">
           <strong>NEST</strong>
@@ -25,14 +26,14 @@
           <kbd class="kbd search-trigger__kbd">⌘K</kbd>
         </button>
 
-        <button v-if="authStore.isLoggedIn" type="button" class="level-chip" :title="levelTooltip"
-          @click="router.push('/tasks?tab=achievements')">
+        <button v-if="authStore.isLoggedIn && !authStore.isAdministrator" type="button" class="level-chip"
+          :title="levelTooltip" @click="router.push('/tasks?tab=achievements')">
           <LevelBadge :points="tasksStore.lifetimePoints" size="xs" />
           <span class="level-chip__title">{{ levelInfo.title }}</span>
         </button>
 
-        <button v-if="authStore.isLoggedIn" type="button" class="points-chip" title="我的积分"
-          @click="router.push('/tasks')">
+        <button v-if="authStore.isLoggedIn && !authStore.isAdministrator" type="button" class="points-chip"
+          title="我的积分" @click="router.push('/tasks')">
           <i class="fas fa-coins" aria-hidden="true"></i>
           <span>{{ tasksStore.points }}</span>
         </button>
@@ -44,7 +45,7 @@
               <span class="avatar user__avatar">{{ userInitial }}</span>
               <span class="user__meta">
                 <span class="user__name">{{ authStore.username }}</span>
-                <span class="user__level">LV.{{ levelInfo.level }} · {{ levelInfo.title }}</span>
+                <span class="user__level">{{ authStore.isAdministrator ? '管理员' : `LV.${levelInfo.level} · ${levelInfo.title}` }}</span>
               </span>
               <i class="fas fa-chevron-down user__caret" aria-hidden="true"></i>
             </button>
@@ -58,7 +59,7 @@
                     <p class="user-menu__sub">
                       <span v-if="authStore.isAdministrator" class="chip chip--coral">管理员</span>
                       <span v-else class="chip chip--cyan">学习者</span>
-                      <span class="user-menu__points">LV.{{ levelInfo.level }} {{ levelInfo.title }} · {{ tasksStore.lifetimePoints }} pts</span>
+                      <span v-if="!authStore.isAdministrator" class="user-menu__points">LV.{{ levelInfo.level }} {{ levelInfo.title }} · {{ tasksStore.lifetimePoints }} pts</span>
                     </p>
                   </div>
                 </div>
@@ -113,27 +114,31 @@ const userMenuOpen = ref(false)
 const userMenuRef = ref(null)
 
 const navItems = computed(() => {
+  // 管理员使用独立管理台，前台导航只保留工作台入口。
+  if (authStore.isAdministrator) {
+    return [{ to: '/admin', label: '工作台', icon: 'fas fa-chart-line' }]
+  }
   const items = [{ to: '/', label: '首页', icon: 'fas fa-house' }]
   if (authStore.isLoggedIn) {
     items.push({ to: '/tasks', label: '任务', icon: 'fas fa-list-check' })
     items.push({ to: '/wrong-questions', label: '错题本', icon: 'fas fa-book-medical' })
   }
-  if (authStore.isAdministrator) {
-    items.push({ to: '/admin', label: '管理', icon: 'fas fa-shield-halved' })
-  }
   return items
 })
 
 const userMenuItems = computed(() => {
+  if (authStore.isAdministrator) {
+    return [
+      { label: '管理中心', icon: 'fas fa-shield-halved', to: '/admin' },
+      { label: '修改密码', icon: 'fas fa-key', to: '/settings/password' }
+    ]
+  }
   const entries = [
     { label: '任务中心', icon: 'fas fa-list-check', to: '/tasks' },
     { label: '成就', icon: 'fas fa-medal', to: '/tasks?tab=achievements' },
     { label: '错题本', icon: 'fas fa-book-medical', to: '/wrong-questions' },
     { label: '修改密码', icon: 'fas fa-key', to: '/settings/password' }
   ]
-  if (authStore.isAdministrator) {
-    entries.unshift({ label: '管理中心', icon: 'fas fa-shield-halved', to: '/admin' })
-  }
   return entries
 })
 
@@ -180,7 +185,8 @@ watch(() => authStore.isLoggedIn, async (loggedIn) => {
     userMenuOpen.value = false
     return
   }
-  if (!tasksStore.isLoading) {
+  // 管理员不展示等级/积分，无需加载学员成长数据。
+  if (!authStore.isAdministrator && !tasksStore.isLoading) {
     await tasksStore.load(authStore.currentUser)
   }
 })
@@ -190,7 +196,7 @@ onMounted(async () => {
   document.addEventListener('click', onDocumentClick)
   document.addEventListener('keydown', onKeydown)
   onScroll()
-  if (authStore.isLoggedIn && !tasksStore.isLoading) {
+  if (authStore.isLoggedIn && !authStore.isAdministrator && !tasksStore.isLoading) {
     await tasksStore.load(authStore.currentUser)
   }
 })

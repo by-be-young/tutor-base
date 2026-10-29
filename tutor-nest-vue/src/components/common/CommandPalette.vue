@@ -34,7 +34,7 @@
             <div v-else class="palette__empty">
               <i class="fas fa-satellite-dish" aria-hidden="true"></i>
               <p>没有匹配的结果</p>
-              <span>试试「签到」「化学」或「错题」</span>
+              <span>{{ authStore.isAdministrator ? '试试「学员」「批阅」或「课件」' : '试试「签到」「化学」或「错题」' }}</span>
             </div>
           </div>
 
@@ -76,6 +76,37 @@ const SUBJECT_TINTS = {
 }
 
 const allGroups = computed(() => {
+  // 管理员只保留管理中心入口、修改密码与退出，不暴露任务/错题/收藏等学员端操作。
+  if (authStore.isAdministrator) {
+    return [
+      {
+        label: '管理中心',
+        items: [
+          { id: 'admin-dashboard', label: '工作台', hint: '概览、学员动态与快捷入口', icon: 'fas fa-chart-line', to: '/admin', meta: '页面' },
+          { id: 'admin-learners', label: '学员', hint: '账户、科目与权限管理', icon: 'fas fa-users', to: '/admin/learners', meta: '页面' },
+          { id: 'admin-reviews', label: '批阅', hint: '待批阅作业与标准答案', icon: 'fas fa-pen-nib', to: '/admin/reviews', meta: '页面' },
+          { id: 'admin-content', label: '课件', hint: '认领学科与课件', icon: 'fas fa-book-open', to: '/admin/content', meta: '页面' },
+          { id: 'admin-profile', label: '我的', hint: '管理员资料与认领概览', icon: 'fas fa-user-gear', to: '/admin/me', meta: '页面' }
+        ]
+      },
+      {
+        label: '快捷操作',
+        items: [
+          { id: 'admin-password', label: '修改密码', hint: '账户安全设置', icon: 'fas fa-key', to: '/settings/password', meta: '账户' },
+          {
+            id: 'act-logout',
+            label: '退出登录',
+            hint: '结束当前会话',
+            icon: 'fas fa-arrow-right-from-bracket',
+            action: 'logout',
+            meta: '账户',
+            tint: 'linear-gradient(135deg, #ff9ebb, #ed4b2a)'
+          }
+        ]
+      }
+    ]
+  }
+
   const navigation = [
     { id: 'nav-home', label: '首页', hint: '回到学习空间', icon: 'fas fa-house', to: '/', meta: '页面' }
   ]
@@ -112,10 +143,6 @@ const allGroups = computed(() => {
       { id: 'act-login', label: '登录', hint: '进入你的学习空间', icon: 'fas fa-right-to-bracket', action: 'login', meta: '账户' },
       { id: 'act-register', label: '注册', hint: '创建新账户', icon: 'fas fa-user-plus', action: 'register', meta: '账户' }
     )
-  }
-
-  if (authStore.isAdministrator) {
-    navigation.push({ id: 'nav-admin', label: '管理中心', hint: '权限、批阅与答案', icon: 'fas fa-shield-halved', to: '/admin', meta: '页面' })
   }
 
   const subjects = [...new Set(blogStore.blogData.map(article => article.series).filter(Boolean))]

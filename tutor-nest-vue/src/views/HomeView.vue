@@ -714,6 +714,11 @@ async function handleLogin() {
     await authStore.login(trimmed, password.value)
     password.value = ''
     useCheckinStore().openAfterLogin()
+    // 管理员登录后直达管理台，不进入学员端首页。
+    if (authStore.isAdministrator) {
+      await router.push('/admin')
+      return
+    }
     await loadDashboardData()
     const redirect = router.currentRoute.value.query.redirect
     if (typeof redirect === 'string' && redirect.startsWith('/')) {
@@ -748,6 +753,11 @@ async function handleRegister() {
     await authStore.register(trimmed, password.value)
     password.value = ''
     confirmPassword.value = ''
+    // 管理员注册（或在管理员账号下注册）同样直达管理台。
+    if (authStore.isAdministrator) {
+      await router.push('/admin')
+      return
+    }
     await loadDashboardData()
     const redirect = router.currentRoute.value.query.redirect
     if (typeof redirect === 'string' && redirect.startsWith('/')) {
@@ -827,7 +837,8 @@ function resetVisual() {
 
 watch(() => authStore.isLoggedIn, async (loggedIn) => {
   if (loggedIn) {
-    await loadDashboardData()
+    // 管理员会立即被路由守卫带到管理台，不需要加载学员仪表盘数据。
+    if (!authStore.isAdministrator) await loadDashboardData()
   } else {
     mode.value = 'login'
     progress.value = []

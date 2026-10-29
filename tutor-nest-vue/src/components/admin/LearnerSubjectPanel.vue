@@ -21,11 +21,31 @@
             <EmptyState v-if="!selectedStudentId" icon="fas fa-user-graduate" title="尚未选择学员"
                 text="在顶部切换或新增学员后，即可为他设定所学科目。" />
 
+            <div v-else-if="coursewareStatus === 'loading'" class="subject-skeletons" aria-hidden="true">
+                <div class="skeleton subject-skeleton"></div>
+                <div class="skeleton subject-skeleton"></div>
+                <div class="skeleton subject-skeleton"></div>
+            </div>
+
+            <EmptyState v-else-if="coursewareStatus === 'error'" icon="fas fa-triangle-exclamation"
+                title="课件目录加载失败" :text="coursewareStore.error || '请稍后重试。'">
+                <button type="button" class="btn btn--soft btn--sm" @click="reloadCourseware">
+                    <i aria-hidden="true" class="fas fa-rotate"></i> 重新加载
+                </button>
+            </EmptyState>
+
+            <EmptyState v-else-if="coursewareStatus === 'empty'" icon="fas fa-hand-holding-heart"
+                title="你还没有可见学科"
+                text="你先到课件页认领学科或课件，认领后即可在这里为学员整科开通。" />
+
             <div v-else-if="allSubjects.length === 0" class="subject-skeletons" aria-hidden="true">
                 <div class="skeleton subject-skeleton"></div>
                 <div class="skeleton subject-skeleton"></div>
                 <div class="skeleton subject-skeleton"></div>
             </div>
+
+            <EmptyState v-else-if="subjectCards.length === 0" icon="fas fa-book-open" title="还没有可见学科"
+                text="你先到课件页认领学科或课件，认领后即可在这里为学员整科开通。" />
 
             <template v-else>
                 <div class="subject-grid" role="group" aria-label="学员科目设定">
@@ -67,8 +87,9 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useAdminStore } from '@/stores/adminStore'
+import { useCoursewareStore } from '@/stores/coursewareStore'
 import { buildSubjectScope, subjectToggleIds } from '@/utils/adminSubjects'
 import EmptyState from '@/components/ui/EmptyState.vue'
 
@@ -84,6 +105,7 @@ const props = defineProps({
 const emit = defineEmits(['permission-change', 'save-permissions'])
 
 const adminStore = useAdminStore()
+const coursewareStore = useCoursewareStore()
 
 function subjectTone(subject) {
     if (!subject) return 'violet'
@@ -98,9 +120,34 @@ const currentStudent = computed(() => props.students
 const currentStudentName = computed(() => currentStudent.value?.username || '未选择学员')
 const currentPermissions = computed(() => currentStudent.value?.permissions || [])
 
+// 学员科目也只在「我的课件」内操作：学科卡片只显示可见学科，文章范围同样收敛。
+const coursewareStatus = computed(() => {
+    if (!coursewareStore.loaded) return coursewareStore.error ? 'error' : 'loading'
+    return coursewareStore.visibleArticleIds.size === 0 ? 'empty' : 'ready'
+})
+
+function reloadCourseware() {
+    coursewareStore.loadWorkspace(props.blogData).catch(() => {})
+}
+
+watch(() => props.blogData, (articles) => {
+    if (!Array.isArray(articles) || articles.length === 0) return
+    coursewareStore.ensureWorkspace(articles).catch(() => {})
+}, { immediate: true })
+
+const visibleArticles = computed(() => {
+    if (!coursewareStore.loaded) return []
+    return props.blogData.filter(blog => coursewareStore.visibleArticleIds.has(Number(blog.id)))
+})
+
+const visibleSubjects = computed(() => props.allSubjects.filter(subject =>
+    coursewareStore.loaded
+    && coursewareStore.visibleSubjects.includes(subject)
+    && visibleArticles.value.some(blog => blog.series === subject)))
+
 const scope = computed(() => buildSubjectScope({
-    subjects: props.allSubjects,
-    articles: props.blogData,
+    subjects: visibleSubjects.value,
+    articles: visibleArticles.value,
     permissions: currentPermissions.value
 }))
 

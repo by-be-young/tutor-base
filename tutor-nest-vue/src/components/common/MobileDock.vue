@@ -1,6 +1,6 @@
 <!-- src/components/common/MobileDock.vue -->
 <template>
-  <nav v-if="authStore.isLoggedIn" class="mobile-dock" aria-label="移动端快捷导航">
+  <nav v-if="authStore.isLoggedIn && !authStore.isAdministrator" class="mobile-dock" aria-label="移动端快捷导航">
     <router-link v-for="item in leftItems" :key="item.to" :to="item.to" class="dock-item"
       :class="{ 'is-active': isActive(item.to) }">
       <i :class="item.icon" aria-hidden="true"></i>
@@ -38,15 +38,10 @@ const leftItems = computed(() => [
   { to: '/tasks', label: '任务', icon: 'fas fa-list-check' }
 ])
 
-const rightItems = computed(() => {
-  const items = [{ to: '/wrong-questions', label: '错题', icon: 'fas fa-book-medical' }]
-  if (authStore.isAdministrator) {
-    items.push({ to: '/admin', label: '管理', icon: 'fas fa-shield-halved' })
-  } else {
-    items.push({ to: '/settings/password', label: '设置', icon: 'fas fa-gear' })
-  }
-  return items
-})
+const rightItems = computed(() => [
+  { to: '/wrong-questions', label: '错题', icon: 'fas fa-book-medical' },
+  { to: '/settings/password', label: '设置', icon: 'fas fa-gear' }
+])
 
 function isActive(to) {
   if (to === '/') return route.path === '/'
@@ -63,7 +58,7 @@ function openCheckin() {
 }
 
 onMounted(() => {
-  if (authStore.isLoggedIn && checkinStore.month === null) {
+  if (authStore.isLoggedIn && !authStore.isAdministrator && checkinStore.month === null) {
     checkinStore.loadMonth()
   }
 })

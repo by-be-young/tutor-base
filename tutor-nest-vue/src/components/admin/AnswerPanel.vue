@@ -23,6 +23,23 @@
             <EmptyState v-if="!selectedStudentId" icon="fas fa-user-graduate" title="尚未选择学员"
                 text="在顶部切换学员后，这里只显示他在学的科目与已授权文章。" />
 
+            <div v-else-if="coursewareStatus === 'loading'" class="answer-skeletons" aria-hidden="true">
+                <div class="skeleton answer-skeleton"></div>
+                <div class="skeleton answer-skeleton"></div>
+                <div class="skeleton answer-skeleton"></div>
+            </div>
+
+            <EmptyState v-else-if="coursewareStatus === 'error'" icon="fas fa-triangle-exclamation"
+                title="课件目录加载失败" :text="coursewareStore.error || '请稍后重试。'">
+                <button type="button" class="btn btn--soft btn--sm" @click="reloadCourseware">
+                    <i aria-hidden="true" class="fas fa-rotate"></i> 重新加载
+                </button>
+            </EmptyState>
+
+            <EmptyState v-else-if="coursewareStatus === 'empty'" icon="fas fa-hand-holding-heart"
+                title="你还没有可见课件"
+                text="你先到课件页认领学科或课件，认领后即可为这些课件设置标准答案。" />
+
             <EmptyState v-else-if="scopedArticles.length === 0" icon="fas fa-shield-halved"
                 title="该学员尚未开通任何内容授权"
                 text="先到「权限管理」为该学员整科开通在学科目，再回到这里设置标准答案。" />
@@ -197,6 +214,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useCoursewareStore } from '@/stores/coursewareStore'
 import { grantedArticles } from '@/utils/adminSubjects'
 import { learningGateway } from '@/gateways/learningGateway'
 import { showToast } from '@/utils/toast'
@@ -211,6 +229,7 @@ const props = defineProps({
 })
 
 const router = useRouter()
+const coursewareStore = useCoursewareStore()
 
 const currentSubject = ref('')
 const activeFilter = ref('unset')
@@ -234,16 +253,30 @@ function subjectTone(subject) {
 const currentTone = computed(() => subjectTone(currentSubject.value))
 
 // 只允许在当前学员「在学」的科目与「已授权」文章里设置答案：
-// 未授权文章对该学员不可见，也不需要维护标准答案。
+// 未授权文章对该学员不可见，也不需要维护标准答案；同时限定在我的课件范围内。
 const currentStudent = computed(() => props.students
     .find(item => String(item.id) === String(props.selectedStudentId)) || null)
 const currentStudentName = computed(() => currentStudent.value?.username || '未选择学员')
+
+const coursewareStatus = computed(() => {
+    if (!coursewareStore.loaded) return coursewareStore.error ? 'error' : 'loading'
+    return coursewareStore.visibleArticleIds.size === 0 ? 'empty' : 'ready'
+})
+
+function reloadCourseware() {
+    coursewareStore.loadWorkspace(props.blogData).catch(() => {})
+}
+
+watch(() => props.blogData, (articles) => {
+    if (!Array.isArray(articles) || articles.length === 0) return
+    coursewareStore.ensureWorkspace(articles).catch(() => {})
+}, { immediate: true })
 
 const scopedArticles = computed(() => grantedArticles({
     articles: props.blogData,
     permissions: currentStudent.value?.permissions || [],
     hasLearner: Boolean(props.selectedStudentId)
-}))
+}).filter(blog => coursewareStore.visibleArticleIds.has(Number(blog.id))))
 
 const subjectArticles = computed(() => scopedArticles.value.filter(blog => blog.series === currentSubject.value))
 

@@ -2,6 +2,13 @@
 import { reactive } from 'vue'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
+import AdminLayout from '@/layouts/AdminLayout.vue'
+
+const ADMIN_SHELL_META = {
+  requiresAuth: true,
+  requiredRole: 'ADMINISTRATOR',
+  adminShell: true
+}
 
 const routes = [
   {
@@ -22,10 +29,42 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    // 管理端独立外壳：左侧导航 + 顶部管理栏 + 内容区，不再复用学员端布局。
     path: '/admin',
-    name: 'Admin',
-    component: () => import('@/views/AdminView.vue'),
-    meta: { requiresAuth: true, requiredRole: 'ADMINISTRATOR' }
+    component: AdminLayout,
+    meta: ADMIN_SHELL_META,
+    children: [
+      {
+        path: '',
+        name: 'AdminDashboard',
+        component: () => import('@/views/admin/AdminDashboardView.vue'),
+        meta: { adminTitle: '工作台' }
+      },
+      {
+        path: 'learners',
+        name: 'AdminLearners',
+        component: () => import('@/views/admin/AdminLearnersView.vue'),
+        meta: { adminTitle: '学员' }
+      },
+      {
+        path: 'reviews',
+        name: 'AdminReviews',
+        component: () => import('@/views/admin/AdminReviewsView.vue'),
+        meta: { adminTitle: '批阅' }
+      },
+      {
+        path: 'content',
+        name: 'AdminContent',
+        component: () => import('@/views/admin/AdminContentView.vue'),
+        meta: { adminTitle: '课件' }
+      },
+      {
+        path: 'me',
+        name: 'AdminProfile',
+        component: () => import('@/views/admin/AdminProfileView.vue'),
+        meta: { adminTitle: '我的' }
+      }
+    ]
   },
   {
     path: '/tasks',
@@ -78,6 +117,15 @@ const router = createRouter({
   }
 })
 
+/** 管理员进入这些学员端入口时统一回到管理工作台。 */
+const ADMIN_REDIRECT_PATHS = new Set([
+  '/',
+  '/category',
+  '/tasks',
+  '/wrong-questions',
+  '/wrong-training'
+])
+
 /** 路由加载/异常状态：用于顶部进度条与整页兜底，避免异步 chunk 失败时白屏 */
 export const routeState = reactive({ loading: false, error: null })
 
@@ -108,6 +156,10 @@ router.beforeEach(async (to) => {
     || (to.name === 'ArticleDetail' && ['answer', 'review'].includes(to.query.mode))
   if (requiresAdministrator && !authStore.isAdministrator) {
     return { name: 'Home' }
+  }
+  // 管理员不进入学员端页面（首页 / 学科 / 任务 / 错题），统一回管理工作台。
+  if (authStore.isAdministrator && ADMIN_REDIRECT_PATHS.has(to.path)) {
+    return { name: 'AdminDashboard' }
   }
   return true
 })
