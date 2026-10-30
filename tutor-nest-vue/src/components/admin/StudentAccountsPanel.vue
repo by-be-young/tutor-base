@@ -108,7 +108,7 @@
                                 class="btn btn--sm" :disabled="claimingStudentId !== null"
                                 @click="releaseStudentAccount(student)">
                                 <i class="fas fa-arrow-up-from-bracket" aria-hidden="true"></i>
-                                {{ claimingStudentId === student.id ? '释放中…' : '释放' }}
+                                {{ claimingStudentId === student.id ? '取消认领中…' : '取消认领' }}
                             </button>
                             <button type="button" class="btn btn--danger btn--sm" :disabled="deleteSaving"
                                 @click="openDeleteDialog(student)">
@@ -442,9 +442,9 @@ async function releaseStudentAccount(student) {
     claimingStudentId.value = student.id
     try {
         await adminStore.releaseStudent(student.id)
-        showToast(`已释放学员“${student.username}”的认领`, 'success')
+        showToast(`已取消认领学员“${student.username}”`, 'success')
     } catch (error) {
-        actionError.value = error.message || '释放认领失败，请稍后重试'
+        actionError.value = error.message || '取消认领失败，请稍后重试'
         showToast(actionError.value, 'error')
     } finally {
         claimingStudentId.value = null

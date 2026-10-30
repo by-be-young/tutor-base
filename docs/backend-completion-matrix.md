@@ -9,7 +9,7 @@
 | 身份、会话、注册、改密 | Java `/api/v1` | 已接管 | Identity HTTP contract、管理员重置、会话撤销；`POST /accounts` 已补 OpenAPI |
 | 教师注册审核 | Java `/api/v1/teacher-applications`、`/admin/teacher-applications` | 已接管 | V17 migration、申请/通过/驳回 contract、超级管理员越权 403、同事务建号、密码哈希复用 |
 | 学习者管理与内容授权 | Java `/api/v1/admin/learners` | 已接管 | 管理员/越权 contract、原子替换授权、范围外授权保留 |
-| 多管理员学员认领 | Java `/api/v1/admin/learners` | 已接管 | V11 migration、FOR UPDATE 认领/释放、409 冲突 contract、删除学员级联 |
+| 多管理员学员认领 | Java `/api/v1/admin/learners` | 已接管 | V11 migration、FOR UPDATE 认领/取消认领、409 冲突 contract、删除学员级联 |
 | 多管理员课件认领 | Java `/api/v1/admin/courseware-claims` | 已接管 | V12/V15 migration、目录同步、学科多对多认领、单篇认领与学科覆盖下单独释放（排除）、业务接口按“我的课件”收敛 |
 | 测试学员与特殊测试学员 | Java `/api/v1/admin/learners`、`/rewards` | 已接管 | V16 migration、测试标记、唯一特殊测试、全课件权限、固定高积分、统计排除、管理端新增入口固定创建测试学员 |
 | 管理端统计与学员详情 | Java `/api/v1/admin/analytics`、`/admin/learners/{id}/profile` | 已接管 | 只读聚合、按“我的课件”过滤、积分/签到全局口径、HTTP contract |

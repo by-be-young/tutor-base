@@ -78,7 +78,7 @@
 | 404 | `resource_not_found` | 在授权范围内资源不存在 |
 | 409 | `state_conflict` | 当前状态不允许该操作 |
 | 409 | `username_conflict` | 注册或创建账户时用户名已被占用（不公开具体用户名） |
-| 409 | `learner_already_claimed` | 学习者已被其他管理员认领；认领、释放或删除前需由原认领管理员释放 |
+| 409 | `learner_already_claimed` | 学习者已被其他管理员认领；认领、取消认领或删除前需由原认领管理员先取消认领 |
 | 409 | `administrator_learner_protected` | 目标学习者关联管理员账户，不能通过学员管理删除 |
 | 403 | `courseware_not_claimed` | 当前管理员未认领该课件；业务写操作与敏感读取被拒绝 |
 | 412 | `version_conflict` | `If-Match` 与当前资源版本不符 |
@@ -197,7 +197,7 @@
 | GET | `/admin/learners` | administrator | 按学习者 ID 游标查询学习者及内容授权；账户状态在身份迁移后增加 |
 | POST | `/admin/learners` | administrator | 新增测试学员（固定 `isTest=true`）并创建待设置密码账户；由创建它的管理员自动认领 |
 | PUT | `/admin/learners/{learnerId}/claim` | administrator | 认领学习者；重复认领幂等，已被其他管理员认领返回 `409 learner_already_claimed` |
-| DELETE | `/admin/learners/{learnerId}/claim` | administrator | 释放自己的认领；未认领时幂等返回 `204` |
+| DELETE | `/admin/learners/{learnerId}/claim` | administrator | 取消认领；未认领时幂等返回 `204` |
 | DELETE | `/admin/learners/{learnerId}` | administrator | 删除学习者及其账户、会话和学习数据；被他人认领或关联管理员账户时返回 `409` |
 | PUT | `/admin/learners/{learnerId}/password` | administrator | 直接设置或重置学习者密码，并撤销其旧会话和未使用激活码 |
 | POST | `/admin/learners/{learnerId}/impersonate` | administrator | 免密进入学习者账户：创建新会话并轮换 Cookie；仅限 `role=learner` 且已激活的账户，不撤销管理员既有会话 |

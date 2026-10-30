@@ -89,7 +89,7 @@ export const useAdminStore = defineStore('admin', () => {
     const incoming = toStudent(learner)
     const index = students.value.findIndex(item => studentKey(item.id) === studentKey(incoming.id))
     const existing = index === -1 ? null : students.value[index]
-    // 认领/释放不改变内容授权：若该学员有尚未保存的勾选，保留本地改动和脏标记。
+    // 认领/取消认领不改变内容授权：若该学员有尚未保存的勾选，保留本地改动和脏标记。
     const keepLocalPermissions = existing !== null && hasUnsavedChanges(existing.id)
     const student = keepLocalPermissions
       ? { ...incoming, permissions: [...existing.permissions] }
@@ -163,7 +163,7 @@ export const useAdminStore = defineStore('admin', () => {
     try {
       await learnerGateway.releaseLearnerClaim(studentId)
     } catch (error) {
-      throw learnerActionError(error, '释放认领')
+      throw learnerActionError(error, '取消认领')
     }
 
     // DELETE /claim 返回 204，没有响应体：本地把认领归属清空，其余字段保持不变。

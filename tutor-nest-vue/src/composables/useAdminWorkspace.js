@@ -121,10 +121,10 @@ export function useAdminWorkspace() {
     claimBusy.value = true
     try {
       await adminStore.releaseStudent(adminStore.currentStudentId)
-      showToast(`已释放学员“${username}”的认领`, 'success')
+      showToast(`已取消认领学员“${username}”`, 'success')
       return true
     } catch (error) {
-      showToast(error.message || '释放认领失败，请稍后重试', 'error')
+      showToast(error.message || '取消认领失败，请稍后重试', 'error')
       return false
     } finally {
       claimBusy.value = false

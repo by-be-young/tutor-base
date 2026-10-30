@@ -31,7 +31,7 @@
 
             <div ref="listRef" class="switcher__list">
                 <p v-if="students.length === 0" class="switcher__empty">
-                    还没有学员，请先到「学生账户」或顶部「新增」创建第一位学员。
+                    还没有学员，请先到「学生账户」或顶部「新增测试学员」创建第一位测试学员。
                 </p>
                 <p v-else-if="options.length === 0" class="switcher__empty">
                     没有匹配“{{ query }}”的学员。
@@ -79,7 +79,7 @@
                                 <button v-else-if="claimState(student, accountId) === 'mine'" type="button"
                                     class="switcher__row-btn" :disabled="busyStudentId !== null"
                                     @click.stop="release(student)">
-                                    {{ busyStudentId === student.id ? '释放中…' : '释放' }}
+                                    {{ busyStudentId === student.id ? '取消认领中…' : '取消认领' }}
                                 </button>
                             </span>
                         </div>
@@ -230,7 +230,7 @@ function moveHighlight(step) {
 }
 
 function onPanelKeydown(event) {
-    // 行内「认领/释放」按钮获得焦点时，Enter 交给按钮自身处理，避免同时切换学员。
+    // 行内「认领/取消认领」按钮获得焦点时，Enter 交给按钮自身处理，避免同时切换学员。
     if (event.key === 'Enter' && event.target instanceof HTMLElement
         && event.target.closest('.switcher__row-actions')) {
         return
@@ -277,9 +277,9 @@ async function release(student) {
     busyStudentId.value = student.id
     try {
         await adminStore.releaseStudent(student.id)
-        showToast(`已释放学员“${student.username}”的认领`, 'success')
+        showToast(`已取消认领学员“${student.username}”`, 'success')
     } catch (error) {
-        showToast(error.message || '释放认领失败，请稍后重试', 'error')
+        showToast(error.message || '取消认领失败，请稍后重试', 'error')
     } finally {
         busyStudentId.value = null
     }

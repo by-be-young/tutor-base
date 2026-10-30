@@ -387,7 +387,7 @@ docker run --rm -p 8080:8080 tutor-base-backend:dev
 - `GET /api/v1/admin/learners`：管理员分页查询学习者、内容授权、认领归属与最近动态；排除管理员账户。
 - `POST /api/v1/admin/learners`：管理员新增测试学员（固定 `isTest=true`），同时创建待设置密码账户，并由创建者自动认领。
 - `PUT /api/v1/admin/learners/{learnerId}/claim`：认领学习者；已被其他管理员认领返回 `409 learner_already_claimed`。
-- `DELETE /api/v1/admin/learners/{learnerId}/claim`：释放自己的认领；未认领时幂等返回 `204`。
+- `DELETE /api/v1/admin/learners/{learnerId}/claim`：取消自己的认领；未认领时幂等返回 `204`。
 - `DELETE /api/v1/admin/learners/{learnerId}`：删除学习者及其账户与学习数据；管理员账户关联学习者受保护。
 - `PUT /api/v1/admin/learners/{learnerId}/content-grants`：在“我的课件”范围内完整替换文章授权，范围外既有授权保留。
 - `PUT /api/v1/admin/learners/{learnerId}/password`：管理员设置或重置学习者密码。

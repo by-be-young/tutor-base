@@ -20,7 +20,8 @@
         </button>
         <button v-else-if="currentStudent && currentClaimState === 'mine'" type="button"
           class="btn btn--ghost btn--sm admin-claim-btn" :disabled="claimBusy" @click="releaseCurrentStudent">
-          <i aria-hidden="true" class="fas fa-arrow-up-from-bracket"></i> 释放
+          <i aria-hidden="true" class="fas fa-arrow-up-from-bracket"></i>
+          {{ claimBusy ? '取消认领中…' : '取消认领' }}
         </button>
       </div>
 
