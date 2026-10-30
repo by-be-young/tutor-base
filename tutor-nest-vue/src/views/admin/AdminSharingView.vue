@@ -5,6 +5,18 @@
       <p class="sharing__hint">
         分享自己的整科或单篇课件，或从资源目录获取其他老师的课件。获取后先进入草稿，发布时才随版本上线。
       </p>
+      <div v-if="notifications.length" class="sharing__notify">
+        <span class="sharing__tag is-new">{{ unreadCount }} 条未读提醒</span>
+        <ul class="sharing__notify-list">
+          <li v-for="item in notifications.slice(0, 3)" :key="item.id">
+            <strong>{{ item.title }}</strong>
+            <span>{{ item.body }}</span>
+          </li>
+        </ul>
+        <button type="button" class="sharing__link" :disabled="!unreadCount" @click="markAllRead">
+          全部标记已读
+        </button>
+      </div>
     </header>
 
     <div class="sharing__tabs" role="tablist" aria-label="课件共享视图">
@@ -130,6 +142,7 @@
                 <span>{{ article.logicalPath }}</span>
                 <em v-if="!article.allowCopy" class="sharing__tag">仅预览</em>
               </label>
+              <button type="button" class="sharing__link" @click="openPreview(article)">预览</button>
             </li>
           </ul>
 
@@ -150,27 +163,114 @@
     </div>
 
     <!-- 我的获取 -->
-    <div v-else class="sharing__panel">
+    <div v-else-if="activeTab === 'copies'" class="sharing__panel">
       <div class="sharing__card">
         <h2 class="sharing__card-title">我的获取</h2>
         <p v-if="!copies.length" class="sharing__empty">还没有获取任何课件。</p>
         <table v-else class="sharing__table">
           <thead>
-            <tr><th>标题</th><th>来源</th><th>来源路径</th><th>我的路径</th><th>状态</th></tr>
+            <tr><th>标题</th><th>来源</th><th>来源路径</th><th>我的路径</th><th>状态</th><th>操作</th></tr>
           </thead>
           <tbody>
             <tr v-for="copy in copies" :key="copy.copyId">
-              <td>{{ copy.title }}</td>
+              <td>
+                <input v-if="renaming.copyId === copy.copyId" v-model="renaming.title" type="text" />
+                <template v-else>{{ copy.title }}</template>
+              </td>
               <td>{{ copy.sourceTeacherName }}</td>
               <td class="sharing__path">{{ copy.sourceLogicalPath }}</td>
-              <td class="sharing__path">{{ copy.localLogicalPath }}</td>
+              <td class="sharing__path">
+                <input v-if="renaming.copyId === copy.copyId" v-model="renaming.logicalPath" type="text" />
+                <template v-else>{{ copy.localLogicalPath }}</template>
+              </td>
               <td>
                 <span v-if="copy.hasUpdate" class="sharing__tag is-new">有更新</span>
                 <span v-else>已同步</span>
               </td>
+              <td>
+                <template v-if="renaming.copyId === copy.copyId">
+                  <button type="button" class="sharing__link" :disabled="busy" @click="saveRename">保存</button>
+                  <button type="button" class="sharing__link" @click="cancelRename">取消</button>
+                </template>
+                <button v-else type="button" class="sharing__link" @click="startRename(copy)">改名</button>
+              </td>
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- 更新 -->
+    <div v-else class="sharing__panel">
+      <div class="sharing__card">
+        <h2 class="sharing__card-title">
+          更新汇总
+          <span class="sharing__tag">有更新 {{ digest.updatedCount }} · 新增 {{ digest.addedCount }} · 下线 {{ digest.removedCount }}</span>
+        </h2>
+        <p v-if="!hasDigestItems" class="sharing__empty">所有获取的课件都与来源一致。</p>
+        <div v-else class="sharing__digest">
+          <section v-if="digest.updated.length">
+            <h3>有更新</h3>
+            <ul>
+              <li v-for="item in digest.updated" :key="`u-${item.copyId}`">
+                <span>{{ item.title }}</span>
+                <button type="button" class="sharing__link" @click="openUpdate(item.copyId)">查看差异</button>
+              </li>
+            </ul>
+          </section>
+          <section v-if="digest.added.length">
+            <h3>来源新增（尚未获取）</h3>
+            <ul>
+              <li v-for="item in digest.added" :key="`a-${item.sourceArticleId}`">
+                <span>{{ item.title }}</span>
+                <em class="sharing__path">{{ item.logicalPath }}</em>
+              </li>
+            </ul>
+          </section>
+          <section v-if="digest.removed.length">
+            <h3>来源已下线</h3>
+            <ul>
+              <li v-for="item in digest.removed" :key="`r-${item.copyId}`">
+                <span>{{ item.title }}</span>
+                <em class="sharing__path">来源不再提供该篇，本地副本仍可用</em>
+              </li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="previewDialog.open" class="sharing__dialog" role="dialog" aria-modal="true">
+      <div class="sharing__dialog-body">
+        <h2 class="sharing__card-title">{{ previewDialog.title }}</h2>
+        <p v-if="previewDialog.loading" class="sharing__empty">加载中…</p>
+        <pre v-else class="sharing__preview">{{ previewDialog.markdown }}</pre>
+        <div class="sharing__actions">
+          <button type="button" class="sharing__ghost" @click="previewDialog.open = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="updateDialog.open" class="sharing__dialog" role="dialog" aria-modal="true">
+      <div class="sharing__dialog-body">
+        <h2 class="sharing__card-title">{{ updateDialog.sourceTitle }}</h2>
+        <p v-if="updateDialog.loading" class="sharing__empty">加载中…</p>
+        <template v-else>
+          <p class="sharing__hint">
+            来源版本 v{{ updateDialog.detail.sourceVersion }} ·
+            <span v-if="updateDialog.detail.localModified">本地已有改动，覆盖前会自动备份</span>
+            <span v-else>本地未改动</span>
+            <span v-if="updateDialog.detail.answerChanged"> · 答案键有变更</span>
+          </p>
+          <pre class="sharing__preview">{{ updateDialog.detail.diff || '（无差异）' }}</pre>
+          <div class="sharing__actions">
+            <button type="button" class="sharing__primary" :disabled="busy" @click="applyUpdate('overwrite')">
+              以来源覆盖
+            </button>
+            <button type="button" class="sharing__ghost" :disabled="busy" @click="applyUpdate('keep')">忽略此版本</button>
+            <button type="button" class="sharing__ghost" @click="updateDialog.open = false">稍后处理</button>
+          </div>
+        </template>
       </div>
     </div>
   </section>
@@ -185,7 +285,8 @@ import { showToast } from '@/utils/toast'
 const tabs = [
   { id: 'shares', label: '我的分享' },
   { id: 'resources', label: '资源目录' },
-  { id: 'copies', label: '我的获取' }
+  { id: 'copies', label: '我的获取' },
+  { id: 'updates', label: '更新' }
 ]
 
 const blogStore = useArticleStore()
@@ -196,6 +297,23 @@ const shares = ref([])
 const resources = ref([])
 const copies = ref([])
 const loadingResources = ref(false)
+
+const notifications = ref([])
+const unreadCount = ref(0)
+
+const digest = ref({ updatedCount: 0, addedCount: 0, removedCount: 0, updated: [], added: [], removed: [] })
+const hasDigestItems = computed(() =>
+  digest.value.updatedCount + digest.value.addedCount + digest.value.removedCount > 0)
+
+const renaming = reactive({ copyId: null, title: '', logicalPath: '' })
+const previewDialog = reactive({ open: false, title: '', markdown: '', loading: false })
+const updateDialog = reactive({
+  open: false,
+  loading: false,
+  copyId: null,
+  sourceTitle: '',
+  detail: { sourceVersion: 0, localModified: false, answerChanged: false, diff: '', sourceHash: '' }
+})
 
 const expandedKey = ref('')
 const expandedTitle = ref('')
@@ -258,6 +376,114 @@ async function loadCopies() {
     copies.value = await coursewareGateway.listCopies()
   } catch (error) {
     reportError(error)
+  }
+}
+
+async function loadNotifications() {
+  try {
+    const result = await coursewareGateway.listNotifications(false)
+    notifications.value = result.items
+    unreadCount.value = result.unreadCount
+  } catch (error) {
+    reportError(error)
+  }
+}
+
+async function loadDigest() {
+  try {
+    digest.value = await coursewareGateway.getUpdates()
+  } catch (error) {
+    reportError(error)
+  }
+}
+
+async function markAllRead() {
+  try {
+    const result = await coursewareGateway.markNotificationsRead([])
+    unreadCount.value = result.unreadCount
+    notifications.value = notifications.value.map(item => ({ ...item, read: true }))
+  } catch (error) {
+    reportError(error)
+  }
+}
+
+async function openPreview(article) {
+  previewDialog.open = true
+  previewDialog.title = article.logicalPath
+  previewDialog.markdown = ''
+  previewDialog.loading = true
+  const [teacherId] = expandedKey.value.split(':')
+  try {
+    previewDialog.markdown = await coursewareGateway.previewArticle(Number(teacherId), article.articleId)
+  } catch (error) {
+    previewDialog.open = false
+    reportError(error)
+  } finally {
+    previewDialog.loading = false
+  }
+}
+
+function startRename(copy) {
+  renaming.copyId = copy.copyId
+  renaming.title = copy.title
+  renaming.logicalPath = copy.localLogicalPath
+}
+
+function cancelRename() {
+  renaming.copyId = null
+  renaming.title = ''
+  renaming.logicalPath = ''
+}
+
+async function saveRename() {
+  busy.value = true
+  try {
+    await coursewareGateway.renameCopy(renaming.copyId, {
+      title: renaming.title,
+      logicalPath: renaming.logicalPath
+    })
+    showToast('已更新名称与路径', 'success')
+    cancelRename()
+    await loadCopies()
+  } catch (error) {
+    reportError(error)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function openUpdate(copyId) {
+  updateDialog.open = true
+  updateDialog.loading = true
+  updateDialog.copyId = copyId
+  updateDialog.sourceTitle = copies.value.find(item => item.copyId === copyId)?.title || '更新详情'
+  try {
+    updateDialog.detail = await coursewareGateway.getUpdateDetail(copyId)
+    updateDialog.sourceTitle = updateDialog.detail.sourceTitle || updateDialog.sourceTitle
+  } catch (error) {
+    updateDialog.open = false
+    reportError(error)
+  } finally {
+    updateDialog.loading = false
+  }
+}
+
+async function applyUpdate(mode) {
+  busy.value = true
+  try {
+    const result = await coursewareGateway.applyUpdate(updateDialog.copyId, {
+      mode,
+      expectedSourceHash: updateDialog.detail.sourceHash
+    })
+    showToast(mode === 'overwrite'
+      ? `已用来源覆盖${result.backupHash ? '（原草稿已备份）' : ''}`
+      : '已忽略该来源版本', 'success')
+    updateDialog.open = false
+    await Promise.all([loadCopies(), loadDigest()])
+  } catch (error) {
+    reportError(error)
+  } finally {
+    busy.value = false
   }
 }
 
@@ -357,7 +583,7 @@ function acquireWholeSubject() {
 
 onMounted(async () => {
   if (!blogStore.blogData.length) await blogStore.loadArticleData()
-  await Promise.all([loadShares(), loadResources(), loadCopies()])
+  await Promise.all([loadShares(), loadResources(), loadCopies(), loadNotifications(), loadDigest()])
 })
 </script>
 
@@ -429,4 +655,53 @@ onMounted(async () => {
 .sharing__link:disabled { color: #c7d2fe; cursor: not-allowed; }
 .sharing__tag { font-size: 12px; color: #6b7280; font-style: normal; }
 .sharing__tag.is-new { color: #b45309; background: #fef3c7; border-radius: 6px; padding: 1px 6px; }
+
+.sharing__notify {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  border-radius: 10px;
+}
+.sharing__notify-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #4b5563; }
+.sharing__notify-list strong { margin-right: 6px; }
+.sharing__digest { display: flex; flex-direction: column; gap: 14px; font-size: 13px; }
+.sharing__digest h3 { margin: 0 0 6px; font-size: 13px; color: #374151; }
+.sharing__digest ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sharing__dialog {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 60;
+}
+.sharing__dialog-body {
+  background: #fff;
+  border-radius: 14px;
+  padding: 20px;
+  width: min(820px, 100%);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+}
+.sharing__preview {
+  margin: 0;
+  padding: 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 46vh;
+  overflow: auto;
+}
 </style>

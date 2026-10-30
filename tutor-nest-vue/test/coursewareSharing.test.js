@@ -127,6 +127,64 @@ test('分享整科时省略 articleIds，单篇时带上', async () => {
   )
 })
 
+test('预览走 text 接口，改名走 PATCH', async () => {
+  await withFetch(
+    (url) => (url.includes('/csrf')
+      ? jsonResponse(200, { token: 'test-token' })
+      : url.includes('/preview')
+        ? new Response('# 正文', { status: 200 })
+        : jsonResponse(200, { copyId: 5, localArticleId: 1000, title: '新标题', localLogicalPath: 'x/y.md' })),
+    async (calls) => {
+      const markdown = await coursewareGateway.previewArticle(7, 3)
+      assert.equal(markdown, '# 正文')
+      assert.match(calls[0].url, /\/resources\/articles\/7\/3\/preview$/)
+
+      const renamed = await coursewareGateway.renameCopy(5, { title: '新标题', logicalPath: 'x/y.md' })
+      assert.equal(renamed.title, '新标题')
+      const patch = calls.find(call => call.options.method === 'PATCH')
+      assert.deepEqual(JSON.parse(patch.options.body), { title: '新标题', logicalPath: 'x/y.md' })
+    }
+  )
+})
+
+test('提醒与更新接口', async () => {
+  await withFetch(
+    (url) => {
+      if (url.includes('/csrf')) return jsonResponse(200, { token: 'test-token' })
+      if (url.includes('/notifications/read')) return jsonResponse(200, { updated: 3, unreadCount: 0 })
+      if (url.includes('/notifications')) {
+        return jsonResponse(200, {
+          items: [{ id: 9, kind: 'source_updated', title: '来源课件有更新', body: 'x', read: false }],
+          unreadCount: 1
+        })
+      }
+      return jsonResponse(200, {
+        updatedCount: 1,
+        addedCount: 0,
+        removedCount: 0,
+        updated: [{ copyId: 5, sourceArticleId: 3, title: '原电池' }],
+        added: [],
+        removed: []
+      })
+    },
+    async (calls) => {
+      const notifications = await coursewareGateway.listNotifications(true)
+      assert.equal(notifications.unreadCount, 1)
+      assert.equal(notifications.items[0].kind, 'source_updated')
+      assert.match(calls[0].url, /unreadOnly=true$/)
+
+      const read = await coursewareGateway.markNotificationsRead([])
+      assert.equal(read.unreadCount, 0)
+      const post = calls.find(call => call.options.method === 'POST')
+      assert.deepEqual(JSON.parse(post.options.body), {})
+
+      const digest = await coursewareGateway.getUpdates()
+      assert.equal(digest.updatedCount, 1)
+      assert.equal(digest.updated[0].copyId, 5)
+    }
+  )
+})
+
 test('共享树与我的获取关系走对应路径', async () => {
   await withFetch(
     (url) => (url.includes('/resources/tree')

@@ -65,8 +65,22 @@ export function normalizeCopyResult(row) {
   }
 }
 
-export function normalizeCopySummary(row) {
-  const copyId = toId(row?.copyId)
+export function normalizeNotification(row) {
+  const id = toId(row?.id)
+  if (!id) return null
+  return {
+    id,
+    kind: String(row?.kind || ''),
+    title: String(row?.title || ''),
+    body: String(row?.body || ''),
+    copyId: toId(row?.copyId),
+    articleId: toId(row?.articleId),
+    createdAt: String(row?.createdAt || ''),
+    read: Boolean(row?.read)
+  }
+}
+
+export function normalizeCopySummary(row) {  const copyId = toId(row?.copyId)
   if (!copyId) return null
   return {
     copyId,
