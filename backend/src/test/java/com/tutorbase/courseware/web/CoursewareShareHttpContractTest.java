@@ -216,6 +216,152 @@ class CoursewareShareHttpContractTest {
                 .andExpect(jsonPath("$.code").value("courseware_validation_failed"));
     }
 
+    @Test
+    void previewFollowsAllowPreviewFlag() throws Exception {
+        Cookie alpha = login(csrf(null), "alpha", "Alpha-password-2026");
+        String alphaCsrf = csrf(alpha).csrfToken();
+        publishRelease(alpha, alphaCsrf).andExpect(status().isCreated());
+        shareSubject(alpha, alphaCsrf, true, false).andExpect(status().isOk());
+
+        Cookie beta = login(csrf(null), "beta", "Beta-password-2026");
+        mockMvc.perform(get("/api/v1/admin/courseware/resources/articles/{teacherId}/{articleId}/preview",
+                        alphaTeacherId, 3)
+                        .cookie(beta))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(org.hamcrest.Matchers.containsString("【题干1】题一")));
+
+        shareSubject(alpha, alphaCsrf, false, false).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/admin/courseware/resources/articles/{teacherId}/{articleId}/preview",
+                        alphaTeacherId, 3)
+                        .cookie(beta))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("courseware_source_forbidden"));
+    }
+
+    @Test
+    void renameAndConflictStrategyOnAcquire() throws Exception {
+        Cookie alpha = login(csrf(null), "alpha", "Alpha-password-2026");
+        String alphaCsrf = csrf(alpha).csrfToken();
+        publishRelease(alpha, alphaCsrf).andExpect(status().isCreated());
+        shareSubject(alpha, alphaCsrf, true, true).andExpect(status().isOk());
+
+        Cookie beta = login(csrf(null), "beta", "Beta-password-2026");
+        String betaCsrf = csrf(beta).csrfToken();
+        mockMvc.perform(post("/api/v1/admin/courseware/copies")
+                        .cookie(beta)
+                        .header("X-CSRF-TOKEN", betaCsrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "sourceTeacherId", alphaTeacherId,
+                                "subject", "高中化学",
+                                "articleIds", List.of(3)))))
+                .andExpect(status().isOk());
+
+        long copyId = jdbc.queryForObject(
+                "SELECT id FROM public.course_copy WHERE source_article_id = 3", Long.class);
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .patch("/api/v1/admin/courseware/copies/{copyId}", copyId)
+                        .cookie(beta)
+                        .header("X-CSRF-TOKEN", betaCsrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "title", "我的原电池",
+                                "logicalPath", "高中化学/理论课讲义/3-2 电解池.md"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("我的原电池"))
+                .andExpect(jsonPath("$.localLogicalPath").value("高中化学/理论课讲义/3-2 电解池.md"));
+
+        // 与本地已存在的路径同名：默认 409
+        mockMvc.perform(post("/api/v1/admin/courseware/copies")
+                        .cookie(beta)
+                        .header("X-CSRF-TOKEN", betaCsrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "sourceTeacherId", alphaTeacherId,
+                                "subject", "高中化学",
+                                "articleIds", List.of(9)))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("courseware_target_exists"));
+
+        // rename 策略：自动加后缀
+        mockMvc.perform(post("/api/v1/admin/courseware/copies")
+                        .cookie(beta)
+                        .header("X-CSRF-TOKEN", betaCsrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "sourceTeacherId", alphaTeacherId,
+                                "subject", "高中化学",
+                                "articleIds", List.of(9),
+                                "conflictStrategy", "rename"))))
+                .andExpect(status().isOk());
+        assertThat(jdbc.queryForObject(
+                "SELECT local_logical_path FROM public.course_copy WHERE source_article_id = 9",
+                String.class)).contains("（2）.md");
+    }
+
+    @Test
+    void notificationsCoverAcquireUpdateAndRevoke() throws Exception {
+        Cookie alpha = login(csrf(null), "alpha", "Alpha-password-2026");
+        String alphaCsrf = csrf(alpha).csrfToken();
+        publishRelease(alpha, alphaCsrf).andExpect(status().isCreated());
+        shareSubject(alpha, alphaCsrf, true, true).andExpect(status().isOk());
+
+        Cookie beta = login(csrf(null), "beta", "Beta-password-2026");
+        String betaCsrf = csrf(beta).csrfToken();
+        mockMvc.perform(post("/api/v1/admin/courseware/copies")
+                        .cookie(beta)
+                        .header("X-CSRF-TOKEN", betaCsrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "sourceTeacherId", alphaTeacherId, "subject", "高中化学"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/admin/courseware/notifications").cookie(alpha))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.unreadCount").value(1))
+                .andExpect(jsonPath("$.items[0].kind").value("share_acquired"));
+
+        mockMvc.perform(post("/api/v1/admin/courseware/notifications/read")
+                        .cookie(alpha)
+                        .header("X-CSRF-TOKEN", alphaCsrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.unreadCount").value(0));
+
+        mockMvc.perform(post("/api/v1/admin/courseware/releases")
+                        .cookie(alpha)
+                        .header("X-CSRF-TOKEN", alphaCsrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "subject", "高中化学",
+                                "articles", List.of(
+                                        article(3L, "3-1 原电池", "【题干1】改版\n\n【@1】\n"),
+                                        article(9L, "3-2 电解池", "【题干1】题二\n\n【@1】\n"))))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/admin/courseware/notifications")
+                        .param("unreadOnly", "true")
+                        .cookie(beta))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.unreadCount").value(1))
+                .andExpect(jsonPath("$.items[0].kind").value("source_updated"));
+
+        long shareId = jdbc.queryForObject(
+                "SELECT id FROM public.course_share WHERE owner_teacher_account_id = ?",
+                Long.class, alphaTeacherId);
+        mockMvc.perform(delete("/api/v1/admin/courseware/shares/{shareId}", shareId)
+                        .cookie(alpha)
+                        .header("X-CSRF-TOKEN", csrf(alpha).csrfToken()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/admin/courseware/notifications").cookie(beta))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.unreadCount").value(3))
+                .andExpect(jsonPath("$.items[0].kind").value("share_revoked"));
+    }
+
     private ResultActions shareSubject(Cookie cookie, String csrfToken, boolean allowPreview, boolean allowCopy)
             throws Exception {
         return mockMvc.perform(post("/api/v1/admin/courseware/shares")

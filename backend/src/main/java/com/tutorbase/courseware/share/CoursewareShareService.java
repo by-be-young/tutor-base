@@ -22,9 +22,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class CoursewareShareService {
 
     private final JdbcClient jdbc;
+    private final com.tutorbase.courseware.notification.CoursewareNotificationService notifications;
 
-    CoursewareShareService(JdbcClient jdbc) {
+    CoursewareShareService(JdbcClient jdbc,
+            com.tutorbase.courseware.notification.CoursewareNotificationService notifications) {
         this.jdbc = jdbc;
+        this.notifications = notifications;
     }
 
     /**
@@ -110,6 +113,15 @@ public class CoursewareShareService {
         if (updated == 0) {
             throw new CoursewareFailures.NotFound("分享不存在或已撤回：" + shareId);
         }
+        String subject = jdbc.sql("""
+                SELECT subject FROM public.course_share
+                WHERE id = :shareId AND owner_teacher_account_id = :teacherId
+                """)
+                .param("shareId", shareId)
+                .param("teacherId", teacherId)
+                .query(String.class)
+                .single();
+        notifications.notifyRevokedShare(teacherId, subject);
         log(teacherId, "revoke_share", "{\"shareId\":" + shareId + "}");
     }
 

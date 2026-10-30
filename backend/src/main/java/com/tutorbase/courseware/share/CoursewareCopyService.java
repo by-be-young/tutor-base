@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.tutorbase.courseware.CoursewareFailures;
+import com.tutorbase.courseware.notification.CoursewareNotificationService;
 import com.tutorbase.courseware.storage.CoursewareStorage;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -27,11 +28,14 @@ public class CoursewareCopyService {
     private final JdbcClient jdbc;
     private final CoursewareStorage storage;
     private final CoursewareShareService shares;
+    private final CoursewareNotificationService notifications;
 
-    CoursewareCopyService(JdbcClient jdbc, CoursewareStorage storage, CoursewareShareService shares) {
+    CoursewareCopyService(JdbcClient jdbc, CoursewareStorage storage, CoursewareShareService shares,
+            CoursewareNotificationService notifications) {
         this.jdbc = jdbc;
         this.storage = storage;
         this.shares = shares;
+        this.notifications = notifications;
     }
 
     /**
@@ -42,6 +46,19 @@ public class CoursewareCopyService {
     @Transactional
     public List<AcquireResult> acquire(
             long teacherId, long sourceTeacherId, String subject, List<Long> articleIds, String targetRootPath) {
+        return acquire(teacherId, sourceTeacherId, subject, articleIds, targetRootPath, "fail");
+    }
+
+    /**
+     * 获取整科（{@code articleIds} 为空）或指定单篇。
+     *
+     * @param targetRootPath   可选：把复制结果放到自己目录树的指定前缀下
+     * @param conflictStrategy 同名路径策略：{@code fail} 直接 409，{@code rename} 自动加后缀
+     */
+    @Transactional
+    public List<AcquireResult> acquire(
+            long teacherId, long sourceTeacherId, String subject, List<Long> articleIds,
+            String targetRootPath, String conflictStrategy) {
         Map<Long, Boolean> policy = shares.sharePolicy(sourceTeacherId, subject);
         if (policy.isEmpty()) {
             throw new CoursewareFailures.SourceForbidden("来源未分享该科目，无法获取：" + subject);
@@ -98,8 +115,12 @@ public class CoursewareCopyService {
             long localArticleId = nextLocalId++;
             String localPath = localPath(targetRootPath, article.logicalPath());
             if (localPathTaken(teacherId, localPath)) {
-                throw new CoursewareFailures.TargetExists(
-                        "目标路径已存在，请改名或换目录：" + localPath);
+                if ("rename".equals(conflictStrategy)) {
+                    localPath = uniquePath(teacherId, localPath);
+                } else {
+                    throw new CoursewareFailures.TargetExists(
+                            "目标路径已存在，请改名或换目录：" + localPath);
+                }
             }
             saveDraft(teacherId, localArticleId, new String(markdown, StandardCharsets.UTF_8));
             long copyId = jdbc.sql("""
@@ -126,6 +147,11 @@ public class CoursewareCopyService {
             log(teacherId, localArticleId, "copy", "{\"copyId\":" + copyId + ",\"sourceTeacher\":" + sourceTeacherId
                     + ",\"sourceArticle\":" + article.articleId() + "}");
             results.add(new AcquireResult(copyId, localArticleId, article.title(), sourceVersion, false));
+        }
+        long fresh = results.stream().filter(item -> !item.alreadyExists()).count();
+        if (fresh > 0) {
+            notifications.notifyAccount(sourceTeacherId, "share_acquired", "有人获取了你的课件",
+                    subject + " 的 " + fresh + " 篇课件被其他老师获取", teacherId, null, null);
         }
         return results;
     }
@@ -182,6 +208,93 @@ public class CoursewareCopyService {
                 .param("articleId", articleId)
                 .param("markdown", markdown)
                 .update();
+    }
+
+    /** 预览来源正文：需要来源该科目仍分享且 {@code allow_preview=true}。 */
+    @Transactional(readOnly = true)
+    public Preview preview(long requesterId, long sourceTeacherId, long articleId) {
+        if (requesterId == sourceTeacherId) {
+            throw new CoursewareFailures.Forbidden("只能预览其他老师的共享课件");
+        }
+        PreviewRow row = jdbc.sql("""
+                SELECT ca.subject, ca.title, ca.logical_path, ca.content_hash
+                FROM public.course_release_head AS h
+                JOIN public.course_article AS ca
+                  ON ca.release_id = h.release_id AND ca.teacher_account_id = h.teacher_account_id
+                WHERE h.teacher_account_id = :teacherId AND ca.article_id = :articleId
+                """)
+                .param("teacherId", sourceTeacherId)
+                .param("articleId", articleId)
+                .query((rs, rowNum) -> new PreviewRow(rs.getString("subject"), rs.getString("title"),
+                        rs.getString("logical_path"), rs.getString("content_hash")))
+                .optional()
+                .orElseThrow(() -> new CoursewareFailures.NotFound("来源课件不存在：" + articleId));
+
+        boolean allowed = jdbc.sql("""
+                SELECT allow_preview FROM public.course_share
+                WHERE owner_teacher_account_id = :teacherId AND subject = :subject
+                  AND revoked_at IS NULL
+                ORDER BY allow_preview DESC
+                LIMIT 1
+                """)
+                .param("teacherId", sourceTeacherId)
+                .param("subject", row.subject())
+                .query(Boolean.class)
+                .optional()
+                .orElse(false);
+        if (!allowed) {
+            throw new CoursewareFailures.SourceForbidden("来源未开放预览：" + row.subject());
+        }
+
+        byte[] markdown = storage.getBlob(sourceTeacherId, row.contentHash());
+        if (markdown == null) {
+            throw new CoursewareFailures.NotFound("来源正文缺失：" + articleId);
+        }
+        return new Preview(articleId, new String(markdown, StandardCharsets.UTF_8));
+    }
+
+    /** 改标题或逻辑路径（不影响 article_id 与来源追踪）。 */
+    @Transactional
+    public CopySummary rename(long teacherId, long copyId, String title, String logicalPath) {
+        CopySummary current = myCopies(teacherId).stream()
+                .filter(copy -> copy.copyId() == copyId)
+                .findFirst()
+                .orElseThrow(() -> new CoursewareFailures.NotFound("获取记录不存在：" + copyId));
+        String newTitle = title == null || title.isBlank() ? current.title() : title.strip();
+        String newPath = logicalPath == null || logicalPath.isBlank()
+                ? current.localLogicalPath() : logicalPath.strip().replace('\\', '/');
+        if (!newPath.equals(current.localLogicalPath()) && localPathTaken(teacherId, newPath)) {
+            throw new CoursewareFailures.TargetExists("目标路径已存在：" + newPath);
+        }
+        jdbc.sql("""
+                UPDATE public.course_copy
+                SET local_title = :title, local_logical_path = :path
+                WHERE id = :copyId AND owner_account_id = :teacherId
+                """)
+                .param("title", newTitle)
+                .param("path", newPath)
+                .param("copyId", copyId)
+                .param("teacherId", teacherId)
+                .update();
+        log(teacherId, current.localArticleId(), "rename",
+                "{\"copyId\":" + copyId + ",\"path\":\"" + newPath.replace("\\", "\\\\").replace("\"", "\\\"") + "\"}");
+        return myCopies(teacherId).stream()
+                .filter(copy -> copy.copyId() == copyId)
+                .findFirst()
+                .orElseThrow(() -> new CoursewareFailures.NotFound("获取记录不存在：" + copyId));
+    }
+
+    private String uniquePath(long teacherId, String path) {
+        int dot = path.lastIndexOf('.');
+        String base = dot < 0 ? path : path.substring(0, dot);
+        String extension = dot < 0 ? "" : path.substring(dot);
+        for (int index = 2; index < 100; index++) {
+            String candidate = base + "（" + index + "）" + extension;
+            if (!localPathTaken(teacherId, candidate)) {
+                return candidate;
+            }
+        }
+        throw new CoursewareFailures.TargetExists("同名课件过多，请手动改名：" + path);
     }
 
     private boolean localPathTaken(long teacherId, String localPath) {
@@ -271,6 +384,13 @@ public class CoursewareCopyService {
                 .param("action", action)
                 .param("detail", detailJson)
                 .update();
+    }
+
+    /** 预览结果。 */
+    public record Preview(long articleId, String markdown) {
+    }
+
+    private record PreviewRow(String subject, String title, String logicalPath, String contentHash) {
     }
 
     /** 一次获取的结果。 */
