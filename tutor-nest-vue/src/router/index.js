@@ -59,6 +59,12 @@ const routes = [
         meta: { adminTitle: '课件' }
       },
       {
+        path: 'sharing',
+        name: 'AdminSharing',
+        component: () => import('@/views/admin/AdminSharingView.vue'),
+        meta: { adminTitle: '共享' }
+      },
+      {
         path: 'applications',
         name: 'AdminTeacherApplications',
         component: () => import('@/views/admin/AdminTeacherApplicationsView.vue'),
