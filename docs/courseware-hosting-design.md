@@ -919,6 +919,23 @@ ALTER TABLE public.courseware_catalog
 | 成本 | 正文与图片去重后，42 篇约几十 MB；按老师数量线性增长，2 GB/人 配额足够 |
 | 清理 | 导出包 7 天过期；`backups/` 保留 30 天；孤儿 blob 月度 GC |
 
+### 13.1 存储开关与上线顺序
+
+后端以 `tutor.courseware.source` 控制是否对外供数：
+
+| 取值 | 行为 | 适用 |
+| --- | --- | --- |
+| `static` | `/courseware/manifests` 返回空清单、正文返回 404、发布接口 400；前端自动回退 `data/articles.json` 与静态 md | 当前生产默认；尚未准备持久卷/对象存储时 |
+| `storage` | 清单与正文走 `course_release` + blob，发布接口可写 | 配置了可写目录或对象存储后 |
+
+生产容器是 `read_only: true`，因此切到 `storage` 前必须：
+
+1. 给 backend 容器挂一个可写持久卷并设置 `TUTOR_COURSEWARE_ROOT`（例如 `/srv/tutor/courseware:/app/var/courseware`）；
+2. 在能读到该卷的进程里跑一次 `TUTOR_COURSEWARE_SEED_ENABLED=true` 导入存量 42 篇（默认跳过已有科目）；
+3. 再设置 `TUTOR_COURSEWARE_SOURCE=storage` 并重启，前端随即切到托管清单。
+
+直接切 `storage` 而没有卷时，正文会 404（前端回退静态），不影响可用性但会多一次请求与一条告警日志。
+
 ---
 
 ## 14. 风险与取舍

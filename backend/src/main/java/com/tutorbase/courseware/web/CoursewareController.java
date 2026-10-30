@@ -37,10 +37,13 @@ public class CoursewareController {
 
     private final CoursewareQuery queries;
     private final CoursewarePublisher publisher;
+    private final com.tutorbase.courseware.CoursewareProperties properties;
 
-    CoursewareController(CoursewareQuery queries, CoursewarePublisher publisher) {
+    CoursewareController(CoursewareQuery queries, CoursewarePublisher publisher,
+            com.tutorbase.courseware.CoursewareProperties properties) {
         this.queries = queries;
         this.publisher = publisher;
+        this.properties = properties;
     }
 
     @GetMapping("/courseware/manifests")
@@ -76,6 +79,10 @@ public class CoursewareController {
             @Valid @RequestBody ReleaseRequest request) {
         if (principal == null || !"administrator".equals(principal.role())) {
             throw new CoursewareFailures.Forbidden("只有管理员可以发布课件");
+        }
+        if (!"storage".equals(properties.source())) {
+            throw new CoursewareFailures.Validation(List.of(
+                    "当前部署为静态模式（tutor.courseware.source=static），无法发布托管课件"));
         }
         CoursewarePublisher.Published published = publisher.publish(
                 principal.accountId(), request.subject(), request.expectVersion(),

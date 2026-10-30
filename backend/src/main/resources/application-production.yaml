@@ -13,4 +13,5 @@ tutor:
     cookie-secure: true
   courseware:
     root: ${TUTOR_COURSEWARE_ROOT:./var/courseware}
-    source: ${TUTOR_COURSEWARE_SOURCE:storage}
+    # 生产默认保持静态目录，直到配置了可写的持久卷/对象存储；切到 storage 才对外暴露托管清单
+    source: ${TUTOR_COURSEWARE_SOURCE:static}
