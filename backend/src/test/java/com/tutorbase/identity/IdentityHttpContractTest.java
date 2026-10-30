@@ -89,9 +89,11 @@ class IdentityHttpContractTest {
         insertAccount(2, "young", "administrator", "active", "Admin-password-2026");
         insertAccount(5, "Alice", "learner", "pending_activation", null);
         jdbc.update("""
-                UPDATE public.student
-                SET claimed_by = 2, claimed_at = now()
-                WHERE id IN (2, 5)
+                UPDATE public.student AS s
+                SET claimed_by = a.id, claimed_at = now()
+                FROM public.account AS a
+                WHERE a.username_normalized = 'young'
+                  AND s.id IN (2, 5)
                 """);
         jdbc.update("UPDATE public.account SET is_super_admin = true WHERE username_normalized = 'young'");
         jdbc.update("""
