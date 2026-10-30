@@ -19,7 +19,8 @@ BEGIN
                 'public.task_claims, public.card_collection, '
                 'public.card_sets, public.card_definitions, '
                 'public.courseware_catalog, public.admin_subject_claim, '
-                'public.admin_courseware_claim, public.admin_courseware_exclusion',
+                'public.admin_courseware_claim, public.admin_courseware_exclusion, '
+                'public.teacher_registration_application',
                 role_name);
             EXECUTE format(
                 'REVOKE ALL PRIVILEGES ON SEQUENCE %s FROM %I',
@@ -28,7 +29,7 @@ BEGIN
                 'public.article_answer_keys_id_seq, public.article_question_submissions_id_seq, '
                 'public.wrong_questions_id_seq, public.task_claims_id_seq, public.card_collection_id_seq, '
                 'public.admin_subject_claim_id_seq, public.admin_courseware_claim_id_seq, '
-                'public.admin_courseware_exclusion_id_seq',
+                'public.admin_courseware_exclusion_id_seq, public.teacher_registration_application_id_seq',
                 role_name);
         END IF;
     END LOOP;

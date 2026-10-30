@@ -131,10 +131,12 @@ final class IdentityController {
                              @NotBlank @Size(min = 6, max = 128) String password) {
     }
 
-    record SessionResponse(long accountId, Long learnerId, String username, List<String> roles) {
+    record SessionResponse(long accountId, Long learnerId, String username, List<String> roles,
+            boolean superAdmin) {
         static SessionResponse from(AccountPrincipal principal) {
             return new SessionResponse(principal.accountId(), principal.learnerId(),
-                    principal.username(), List.of(principal.role().toUpperCase(java.util.Locale.ROOT)));
+                    principal.username(), List.of(principal.role().toUpperCase(java.util.Locale.ROOT)),
+                    principal.superAdmin());
         }
     }
 }

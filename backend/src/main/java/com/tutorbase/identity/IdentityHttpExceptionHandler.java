@@ -12,7 +12,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
         IdentityController.class,
         AdminAccountActivationController.class,
         AdminLearnerPasswordController.class,
-        AdminLearnerImpersonationController.class
+        AdminLearnerImpersonationController.class,
+        TeacherApplicationController.class
 })
 final class IdentityHttpExceptionHandler {
     @ExceptionHandler(IdentityRateLimiter.RateLimited.class)
@@ -57,5 +58,53 @@ final class IdentityHttpExceptionHandler {
             HttpServletRequest request) {
         return ApiProblem.create(HttpStatus.CONFLICT, "state_conflict", "账户状态不允许该操作",
                 "当前账户状态不允许执行此操作。", request);
+    }
+
+    @ExceptionHandler(TeacherApplicationService.UsernameConflict.class)
+    ProblemDetail teacherUsernameConflict(
+            TeacherApplicationService.UsernameConflict exception,
+            HttpServletRequest request) {
+        return ApiProblem.create(HttpStatus.CONFLICT, "username_conflict", "用户名已被占用",
+                "该用户名已有账户或待审核申请，请更换后重试。", request);
+    }
+
+    @ExceptionHandler(TeacherApplicationService.ApplicationNotFound.class)
+    ProblemDetail teacherApplicationNotFound(
+            TeacherApplicationService.ApplicationNotFound exception,
+            HttpServletRequest request) {
+        return ApiProblem.create(HttpStatus.NOT_FOUND, "resource_not_found", "申请不存在",
+                "请求的教师注册申请不存在。", request);
+    }
+
+    @ExceptionHandler(TeacherApplicationService.ApplicationStateConflict.class)
+    ProblemDetail teacherApplicationStateConflict(
+            TeacherApplicationService.ApplicationStateConflict exception,
+            HttpServletRequest request) {
+        return ApiProblem.create(HttpStatus.CONFLICT, "state_conflict", "申请已处理",
+                "该申请已通过或已驳回，不能重复审核。", request);
+    }
+
+    @ExceptionHandler(TeacherApplicationService.InvalidRejectionReason.class)
+    ProblemDetail invalidRejectionReason(
+            TeacherApplicationService.InvalidRejectionReason exception,
+            HttpServletRequest request) {
+        return ApiProblem.create(HttpStatus.BAD_REQUEST, "validation_failed", "驳回理由不能为空",
+                "驳回申请时必须填写理由。", request);
+    }
+
+    @ExceptionHandler(TeacherApplicationService.InvalidApplicationStatus.class)
+    ProblemDetail invalidApplicationStatus(
+            TeacherApplicationService.InvalidApplicationStatus exception,
+            HttpServletRequest request) {
+        return ApiProblem.create(HttpStatus.BAD_REQUEST, "validation_failed", "status 参数无效",
+                "status 必须是 pending、approved、rejected 或 all。", request);
+    }
+
+    @ExceptionHandler(TeacherApplicationService.SuperAdministratorRequired.class)
+    ProblemDetail superAdministratorRequired(
+            TeacherApplicationService.SuperAdministratorRequired exception,
+            HttpServletRequest request) {
+        return ApiProblem.create(HttpStatus.FORBIDDEN, "forbidden", "需要超级管理员权限",
+                "只有超级管理员可以查看和审核教师注册申请。", request);
     }
 }

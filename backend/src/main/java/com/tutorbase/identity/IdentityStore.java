@@ -21,7 +21,7 @@ final class IdentityStore {
 
     Optional<AccountRow> accountByUsername(String username) {
         return jdbc.sql("""
-                SELECT id, learner_id, username, password_hash, status, role
+                SELECT id, learner_id, username, password_hash, status, role, is_super_admin
                 FROM public.account WHERE username_normalized = :username
                 """).param("username", username).query(IdentityStore::account).optional();
     }
@@ -29,14 +29,14 @@ final class IdentityStore {
     // 仅查询学习者账户：管理员的 learner 行（role = 'administrator'）不可被免密进入
     Optional<AccountRow> accountByLearnerId(long learnerId) {
         return jdbc.sql("""
-                SELECT id, learner_id, username, password_hash, status, role
+                SELECT id, learner_id, username, password_hash, status, role, is_super_admin
                 FROM public.account WHERE learner_id = :learnerId AND role = 'learner'
                 """).param("learnerId", learnerId).query(IdentityStore::account).optional();
     }
 
     Optional<SessionRow> session(byte[] tokenHash, Instant now) {
         return jdbc.sql("""
-                SELECT s.id, s.account_id, a.learner_id, a.username, a.role
+                SELECT s.id, s.account_id, a.learner_id, a.username, a.role, a.is_super_admin
                 FROM public.account_session s
                 LEFT JOIN public.account a ON a.id = s.account_id
                 WHERE s.token_hash = :hash AND s.revoked_at IS NULL AND s.expires_at > :now
@@ -93,8 +93,9 @@ final class IdentityStore {
     void prepareBootstrapAdministrator(String username) {
         jdbc.sql("LOCK TABLE public.account IN SHARE ROW EXCLUSIVE MODE").update();
         jdbc.sql("""
-                INSERT INTO public.account (username, username_normalized, role)
-                SELECT :username, :username, 'administrator'
+                INSERT INTO public.account (username, username_normalized, role, is_super_admin)
+                SELECT :username, :username, 'administrator',
+                       CASE WHEN :username = 'young' THEN true ELSE false END
                 WHERE NOT EXISTS (
                     SELECT 1 FROM public.account WHERE role = 'administrator'
                 )
@@ -216,7 +217,8 @@ final class IdentityStore {
 
     private static AccountRow account(ResultSet rs, int rowNumber) throws SQLException {
         return new AccountRow(rs.getLong("id"), rs.getObject("learner_id", Long.class), rs.getString("username"),
-                rs.getString("password_hash"), rs.getString("status"), rs.getString("role"));
+                rs.getString("password_hash"), rs.getString("status"), rs.getString("role"),
+                rs.getBoolean("is_super_admin"));
     }
 
     private static SessionRow session(ResultSet rs, int rowNumber) throws SQLException {
@@ -226,14 +228,15 @@ final class IdentityStore {
         }
         return new SessionRow(rs.getLong("id"), new AccountPrincipal(accountId,
                 rs.getObject("learner_id", Long.class),
-                rs.getString("username"), rs.getString("role")));
+                rs.getString("username"), rs.getString("role"), rs.getBoolean("is_super_admin")));
     }
 
     private static OffsetDateTime dbTime(Instant value) {
         return OffsetDateTime.ofInstant(value, ZoneOffset.UTC);
     }
 
-    record AccountRow(long id, Long learnerId, String username, String passwordHash, String status, String role) {
+    record AccountRow(long id, Long learnerId, String username, String passwordHash, String status, String role,
+            boolean superAdmin) {
     }
 
     record LockedAccountRow(long id, String passwordHash, String status) {

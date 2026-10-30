@@ -46,7 +46,8 @@ class FlywayMigrationTest {
             "courseware_catalog",
             "admin_subject_claim",
             "admin_courseware_claim",
-            "admin_courseware_exclusion");
+            "admin_courseware_exclusion",
+            "teacher_registration_application");
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
@@ -68,7 +69,7 @@ class FlywayMigrationTest {
                     .count();
         }
         assertThat(result.migrationsExecuted).isEqualTo((int) expectedMigrations);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("16");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("17");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
         try (Connection connection = POSTGRES.createConnection("")) {
@@ -115,6 +116,17 @@ class FlywayMigrationTest {
             assertThat(readQuestionIdDataType(connection, "article_question_submissions")).isEqualTo("text");
             assertThat(hasConstraint(connection, "account_activation_state_check")).isTrue();
             assertThat(hasConstraint(connection, "account_activation_expiry_check")).isTrue();
+            assertThat(hasColumn(connection, "account", "is_super_admin")).isTrue();
+            assertThat(isColumnNullable(connection, "account", "is_super_admin")).isFalse();
+            assertThat(hasConstraint(connection, "account_super_admin_role_check")).isTrue();
+            assertThat(hasConstraint(connection, "teacher_registration_application_status_check")).isTrue();
+            assertThat(hasConstraint(connection, "teacher_registration_application_state_check")).isTrue();
+            assertThat(hasConstraint(connection, "teacher_registration_application_reason_length_check")).isTrue();
+            assertThat(readCount(connection, """
+                    SELECT count(*) FROM pg_indexes
+                    WHERE schemaname = 'public'
+                      AND indexname = 'teacher_registration_application_pending_username'
+                    """)).isEqualTo(1);
             assertThat(hasConstraint(connection, "daily_check_in_student_date_unique")).isTrue();
             assertThat(hasConstraint(connection, "daily_check_in_student_id_fkey")).isTrue();
             assertThat(hasConstraint(connection, "daily_check_in_points_awarded_check")).isTrue();
@@ -153,6 +165,8 @@ class FlywayMigrationTest {
                     Path.of("..", "database", "operations", "revoke_browser_table_access.sql")));
             execute(connection, Files.readString(
                     Path.of("..", "database", "audit", "browser_table_access_checks.sql")));
+            execute(connection, Files.readString(
+                    Path.of("..", "database", "audit", "teacher_registration_checks.sql")));
             // reconciliation 必须可重复执行，且不会破坏 Flyway 已经建好的结构/种子数据。
             String gachaReconciliation = Files.readString(Path.of(
                     "..", "database", "reconciliation", "2026-10-20_gacha_card_pool.sql"));
@@ -174,6 +188,13 @@ class FlywayMigrationTest {
                     "..", "database", "reconciliation", "2026-10-30_test_learners.sql"));
             execute(connection, testLearnersReconciliation);
             execute(connection, testLearnersReconciliation);
+            String teacherReviewReconciliation = Files.readString(Path.of(
+                    "..", "database", "reconciliation", "2026-10-31_teacher_registration_review.sql"));
+            execute(connection, teacherReviewReconciliation);
+            execute(connection, teacherReviewReconciliation);
+            assertThat(hasColumn(connection, "account", "is_super_admin")).isTrue();
+            assertThat(hasConstraint(connection, "account_super_admin_role_check")).isTrue();
+            assertThat(hasConstraint(connection, "teacher_registration_application_state_check")).isTrue();
             assertThat(hasColumn(connection, "student", "claimed_by")).isTrue();
             assertThat(hasColumn(connection, "student", "claimed_at")).isTrue();
             assertThat(hasColumn(connection, "student", "is_test")).isTrue();
@@ -203,10 +224,10 @@ class FlywayMigrationTest {
                           'article_answer_keys', 'article_question_submissions', 'wrong_questions',
                           'achievement_claims', 'task_assignments', 'card_sets', 'card_definitions',
                           'courseware_catalog', 'admin_subject_claim', 'admin_courseware_claim',
-                          'admin_courseware_exclusion'
+                          'admin_courseware_exclusion', 'teacher_registration_application'
                       ])
                       AND table_class.relrowsecurity
-                    """)).isEqualTo(19);
+                    """)).isEqualTo(20);
 
             assertDatabaseRejectsInvalidStates(connection);
             assertWrongQuestionsFollowStudentLifecycle(connection);
@@ -218,8 +239,8 @@ class FlywayMigrationTest {
 
     @Test
     void givenV11SchemaAppliedManuallyWhenFlywayReplaysV11ThenMigrationIsIdempotent() throws Exception {
-        // 生产事故回归：先手工执行 reconciliation（schema 已含 V11/V12/V15/V16），但历史表停在 V10；
-        // 新镜像启动时 Flyway 会再次执行 V11、V12、V14、V15、V16，必须成功记账而不是因对象已存在而失败。
+        // 生产事故回归：先手工执行 reconciliation（schema 已含 V11/V12/V15/V16/V17），但历史表停在 V10；
+        // 新镜像启动时 Flyway 会再次执行 V11、V12、V14、V15、V16、V17，必须成功记账而不是因对象已存在而失败。
         try (PostgreSQLContainer driftDatabase = new PostgreSQLContainer("postgres:17-alpine")) {
             driftDatabase.start();
             Flyway.configure()
@@ -229,7 +250,7 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            // 复刻生产状态：V11/V12/V15/V16 的对象已手工建好，历史表仍停在 V10。
+            // 复刻生产状态：V11/V12/V15/V16/V17 的对象已手工建好，历史表仍停在 V10。
             try (Connection connection = driftDatabase.createConnection("")) {
                 execute(connection, Files.readString(Path.of(
                         "..", "database", "reconciliation", "2026-10-27_learner_claiming.sql")));
@@ -237,6 +258,8 @@ class FlywayMigrationTest {
                         "..", "database", "reconciliation", "2026-10-29_courseware_claiming.sql")));
                 execute(connection, Files.readString(Path.of(
                         "..", "database", "reconciliation", "2026-10-30_courseware_exclusion.sql")));
+                execute(connection, Files.readString(Path.of(
+                        "..", "database", "reconciliation", "2026-10-31_teacher_registration_review.sql")));
                 assertThat(readCount(connection,
                         "SELECT count(*) FROM public.flyway_schema_history WHERE version = '11'")).isZero();
                 assertThat(readCount(connection,
@@ -251,7 +274,7 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(5);
+            assertThat(result.migrationsExecuted).isEqualTo(6);
             try (Connection connection = driftDatabase.createConnection("")) {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.flyway_schema_history
@@ -273,6 +296,13 @@ class FlywayMigrationTest {
                         SELECT count(*) FROM public.flyway_schema_history
                         WHERE version = '16' AND success
                         """)).isEqualTo(1);
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.flyway_schema_history
+                        WHERE version = '17' AND success
+                        """)).isEqualTo(1);
+                assertThat(hasColumn(connection, "account", "is_super_admin")).isTrue();
+                assertThat(hasConstraint(connection, "account_super_admin_role_check")).isTrue();
+                assertThat(hasConstraint(connection, "teacher_registration_application_state_check")).isTrue();
                 assertThat(hasColumn(connection, "student", "claimed_by")).isTrue();
                 assertThat(hasColumn(connection, "student", "claimed_at")).isTrue();
                 assertThat(hasColumn(connection, "student", "is_test")).isTrue();
@@ -333,7 +363,7 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(3);
+            assertThat(result.migrationsExecuted).isEqualTo(4);
             try (Connection connection = preV16Database.createConnection("")) {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.student
@@ -460,6 +490,30 @@ class FlywayMigrationTest {
                 INSERT INTO public.article_question_submissions
                     (blog_id, student_id, question_id, review_status)
                 VALUES (1, 100, 'reviewed-without-result', 'reviewed')
+                """);
+        assertSqlState(connection, "23502", """
+                INSERT INTO public.teacher_registration_application
+                    (username, username_normalized)
+                VALUES ('no-hash', 'no-hash')
+                """);
+        assertSqlState(connection, "23514", """
+                INSERT INTO public.teacher_registration_application
+                    (username, username_normalized, password_hash, status)
+                VALUES ('approved-no-account', 'approved-no-account', 'hash', 'approved')
+                """);
+        execute(connection, """
+                INSERT INTO public.teacher_registration_application
+                    (username, username_normalized, password_hash)
+                VALUES ('pending-duplicate', 'pending-duplicate', 'hash')
+                """);
+        assertSqlState(connection, "23505", """
+                INSERT INTO public.teacher_registration_application
+                    (username, username_normalized, password_hash)
+                VALUES ('PENDING-DUPLICATE', 'pending-duplicate', 'hash')
+                """);
+        execute(connection, """
+                DELETE FROM public.teacher_registration_application
+                WHERE username_normalized = 'pending-duplicate'
                 """);
     }
 

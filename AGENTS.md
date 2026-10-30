@@ -19,7 +19,10 @@
 2. `backend/api/openapi.yaml`：已实现的 HTTP interface。
 3. `docs/api-standards.md`：跨 endpoint 约定和目标目录。
 4. `docs/backend-completion-matrix.md`：迁移覆盖率与验收状态。
-5. 对应的 Java、前端 gateway/store、migration 和测试。
+5. `docs/软件需求规格说明书.md`：能力域需求、非功能需求与验收门槛；行为或边界变化必须同步。
+6. `docs/用户故事.md`：用户故事与 Given/When/Then 验收标准；交互变化必须同步。
+7. `docs/业务对象清单.md`：业务对象、不变量与表/接口映射；表结构或对象语义变化必须同步。
+8. 对应的 Java、前端 gateway/store、migration 和测试。
 
 ## 验证层级
 

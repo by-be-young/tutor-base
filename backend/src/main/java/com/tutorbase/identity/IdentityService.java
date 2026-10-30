@@ -182,7 +182,8 @@ class IdentityService {
     }
 
     private static AccountPrincipal principal(IdentityStore.AccountRow account) {
-        return new AccountPrincipal(account.id(), account.learnerId(), account.username(), account.role());
+        return new AccountPrincipal(account.id(), account.learnerId(), account.username(), account.role(),
+                account.superAdmin());
     }
 
     private static String normalize(String value) {

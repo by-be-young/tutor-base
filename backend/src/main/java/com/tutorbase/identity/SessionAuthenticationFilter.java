@@ -34,9 +34,13 @@ public final class SessionAuthenticationFilter extends OncePerRequestFilter {
             AccountPrincipal principal = session.principal();
             if (principal != null) {
                 String authority = "ROLE_" + principal.role().toUpperCase(java.util.Locale.ROOT);
+                List<SimpleGrantedAuthority> authorities = principal.superAdmin()
+                        ? List.of(
+                                new SimpleGrantedAuthority(authority),
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"))
+                        : List.of(new SimpleGrantedAuthority(authority));
                 SecurityContextHolder.getContext().setAuthentication(
-                        UsernamePasswordAuthenticationToken.authenticated(
-                                principal, null, List.of(new SimpleGrantedAuthority(authority))));
+                        UsernamePasswordAuthenticationToken.authenticated(principal, null, authorities));
             }
         });
         chain.doFilter(request, response);

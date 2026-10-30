@@ -229,6 +229,11 @@ PowerShell 需要为测试选择器加引号：
 - `POST /api/v1/sessions`：用户名和密码登录，并轮换会话 ID。
 - `GET /api/v1/session`：查询当前账户的安全投影。
 - `DELETE /api/v1/session`：撤销当前服务端会话并清除 Cookie。
+- `POST /api/v1/accounts`：注册学习者账户并直接建立会话。
+- `POST /api/v1/teacher-applications`：提交教师注册申请；只存密码哈希，不建账户/会话。
+- `GET /api/v1/admin/teacher-applications`：超级管理员查看教师申请（`pending`/`approved`/`rejected`/`all`）。
+- `POST /api/v1/admin/teacher-applications/{applicationId}/approve`：超级管理员通过申请，同事务创建管理员账户。
+- `POST /api/v1/admin/teacher-applications/{applicationId}/reject`：超级管理员驳回申请，必须填写理由。
 - `PUT /api/v1/admin/learners/{learnerId}/password`：管理员直接设置或重置学生密码，并撤销该学生的旧会话。
 - `POST /api/v1/account-activations/complete`：使用一次性激活码设置初始密码。
 - `POST /api/v1/admin/account-activations`：管理员为待激活账户发行新激活码。
@@ -290,6 +295,7 @@ PostgreSQL 结构只通过 Flyway 管理：
 - `V14__grant_courseware_runtime_privileges.sql`：为已存在的运行时角色补齐 V12 表/序列权限与 RLS policy，避免升级后管理端接口因权限缺失返回 503。
 - `V15__add_courseware_exclusion.sql`：新增课件排除表；学科认领覆盖下可单独释放某篇课件，重新认领恢复，释放学科时清理该科排除。
 - `V16__add_test_learners.sql`：为 `student` 增加测试学员/特殊测试学员标记、唯一特殊测试约束，并回填既有学员（除 pyt、Mel. 外全部测试，test 为特殊测试）。
+- `V17__teacher_registration_review.sql`：为 `account` 增加 `is_super_admin` 标记并把 `young` 置为超级管理员；新增 `teacher_registration_application`、待审核用户名部分唯一索引、审核状态约束与运行角色授权。
 
 ### Supabase 出现 `relation "account" already exists`
 

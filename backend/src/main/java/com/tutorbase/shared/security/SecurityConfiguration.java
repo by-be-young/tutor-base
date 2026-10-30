@@ -49,10 +49,13 @@ public class SecurityConfiguration {
                                 "/api/v1/csrf",
                                 "/api/v1/sessions",
                                 "/api/v1/accounts",
+                                "/api/v1/teacher-applications",
                                 "/api/v1/account-activations/complete",
                                 "/actuator/health/liveness",
                                 "/actuator/health/readiness")
                         .permitAll()
+                        .requestMatchers("/api/v1/admin/teacher-applications",
+                                "/api/v1/admin/teacher-applications/**").hasRole("SUPER_ADMIN")
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMINISTRATOR")
                         .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions

@@ -121,9 +121,26 @@
                 </button>
               </div>
 
-              <p class="auth__pane-title">{{ mode === 'login' ? '欢迎回来' : '创建你的学习空间' }}</p>
+              <p class="auth__pane-title">{{ mode === 'login' ? '欢迎回来' : (teacherRegistration ? '申请教师账号' : '创建你的学习空间') }}</p>
 
-              <form class="auth__form" novalidate @submit.prevent="mode === 'login' ? handleLogin() : handleRegister()">
+              <div v-if="teacherSubmitted" class="auth__pending" role="status">
+                <span class="auth__pending-icon"><i class="fas fa-hourglass-half" aria-hidden="true"></i></span>
+                <h3>申请已提交</h3>
+                <p>账号 <strong>{{ teacherSubmittedUsername }}</strong> 正在等待超级管理员审核。审核通过后，你会成为管理员，可直接用原密码登录管理台。</p>
+                <button type="button" class="btn btn--primary btn--block" @click="backToLogin">
+                  返回登录
+                </button>
+              </div>
+
+              <form v-else class="auth__form" novalidate @submit.prevent="mode === 'login' ? handleLogin() : handleRegister()">
+                <label v-if="mode === 'register'" class="auth__teacher">
+                  <input v-model="teacherRegistration" type="checkbox" />
+                  <span class="auth__teacher-copy">
+                    <strong>我是教师</strong>
+                    <small>勾选后提交管理员账号申请，需超级管理员审核；审核通过前不能登录。</small>
+                  </span>
+                </label>
+
                 <label class="field">
                   <span class="field-label">用户名</span>
                   <div class="input-wrap">
@@ -164,12 +181,14 @@
 
                 <button type="submit" class="btn btn--primary btn--lg btn--block auth__submit" :disabled="submitting">
                   <span v-if="submitting" class="spinner" aria-hidden="true"></span>
-                  {{ submitting ? '请稍候…' : (mode === 'login' ? '登录' : '注册') }}
+                  {{ submitting ? '请稍候…' : (mode === 'login' ? '登录' : (teacherRegistration ? '提交审核申请' : '注册')) }}
                 </button>
 
                 <p class="auth__hint">
                   <template v-if="mode === 'login'">还没有账号？<button type="button" class="auth__link"
                       @click="switchMode('register')">立即注册</button></template>
+                  <template v-else-if="teacherRegistration">教师账号需审核，通过后将自动成为管理员；已有账号？<button
+                      type="button" class="auth__link" @click="switchMode('login')">直接登录</button></template>
                   <template v-else>密码长度 6～128 个字符；已有账号？<button type="button" class="auth__link"
                       @click="switchMode('login')">直接登录</button></template>
                 </p>
@@ -479,6 +498,9 @@ const mode = ref('login')
 const error = ref('')
 const showPassword = ref(false)
 const submitting = ref(false)
+const teacherRegistration = ref(false)
+const teacherSubmitted = ref(false)
+const teacherSubmittedUsername = ref('')
 
 const authRef = ref(null)
 const usernameInput = ref(null)
@@ -750,6 +772,14 @@ async function handleRegister() {
   }
   submitting.value = true
   try {
+    if (teacherRegistration.value) {
+      const application = await authStore.submitTeacherApplication(trimmed, password.value)
+      teacherSubmittedUsername.value = application?.username || trimmed
+      teacherSubmitted.value = true
+      password.value = ''
+      confirmPassword.value = ''
+      return
+    }
     await authStore.register(trimmed, password.value)
     password.value = ''
     confirmPassword.value = ''
@@ -765,7 +795,9 @@ async function handleRegister() {
     }
   } catch (err) {
     error.value = err.code === 'username_conflict'
-      ? '该用户名已被注册，请换一个'
+      ? (teacherRegistration.value
+        ? '该用户名已有账号或已有待审核申请，请换一个'
+        : '该用户名已被注册，请换一个')
       : authErrorMessage(err, '注册失败，请重试')
   } finally {
     submitting.value = false
@@ -789,7 +821,14 @@ async function focusInput() {
 function switchMode(next) {
   mode.value = next
   error.value = ''
+  teacherSubmitted.value = false
+  teacherRegistration.value = false
   if (next === 'register') confirmPassword.value = ''
+}
+
+function backToLogin() {
+  teacherSubmitted.value = false
+  switchMode('login')
 }
 
 function focusAuth(nextMode = 'login') {
@@ -1324,6 +1363,86 @@ defineExpose({
 
 .auth__form .input {
   height: 50px;
+}
+
+.auth__teacher {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--paper-2);
+  cursor: pointer;
+}
+
+.auth__teacher input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--cobalt);
+  flex-shrink: 0;
+}
+
+.auth__teacher-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.45;
+}
+
+.auth__teacher-copy strong {
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+
+.auth__teacher-copy small {
+  font-size: 0.72rem;
+  color: var(--text-3);
+}
+
+.auth__pending {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 22px 18px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-lg);
+  background: var(--paper-0);
+  box-shadow: 4px 4px 0 var(--ink);
+  text-align: center;
+}
+
+.auth__pending-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--butter);
+  color: var(--ink);
+  font-size: 1.1rem;
+}
+
+.auth__pending h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+.auth__pending p {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+
+.auth__pending .btn {
+  margin-top: 6px;
 }
 
 .auth__error {

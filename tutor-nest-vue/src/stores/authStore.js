@@ -13,6 +13,8 @@ export const useAuthStore = defineStore('auth', () => {
   const username = computed(() => currentUser.value?.username || '')
   const roles = computed(() => currentUser.value?.roles || [])
   const isAdministrator = computed(() => roles.value.includes('ADMINISTRATOR'))
+  const isSuperAdministrator = computed(() =>
+    isAdministrator.value && currentUser.value?.superAdmin === true)
 
   function getPermissionIds() {
     return permissionIds.value
@@ -45,7 +47,8 @@ export const useAuthStore = defineStore('auth', () => {
       learnerId: session.learnerId ?? null,
       id: session.learnerId ?? null,
       username: session.username,
-      roles: normalizedRoles
+      roles: normalizedRoles,
+      superAdmin: session.superAdmin === true
     }
   }
 
@@ -73,6 +76,14 @@ export const useAuthStore = defineStore('auth', () => {
     const username = usernameValue?.trim()
     if (!username || !password) throw new Error('请输入用户名和密码')
     return applySession(await identityGateway.register(username, password))
+  }
+
+  async function submitTeacherApplication(usernameValue, password) {
+    await ensureInitialized()
+    const username = usernameValue?.trim()
+    if (!username || !password) throw new Error('请输入用户名和密码')
+    // 只提交申请，不写入登录态；超级管理员审核通过后才能登录。
+    return identityGateway.submitTeacherApplication(username, password)
   }
 
   async function logout() {
@@ -114,9 +125,11 @@ export const useAuthStore = defineStore('auth', () => {
     username,
     roles,
     isAdministrator,
+    isSuperAdministrator,
     getPermissionIds,
     login,
     register,
+    submitTeacherApplication,
     logout,
     impersonateLearner,
     restoreSession,

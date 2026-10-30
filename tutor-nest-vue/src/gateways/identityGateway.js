@@ -32,6 +32,14 @@ export const identityGateway = {
     return session
   },
 
+  async submitTeacherApplication(username, password) {
+    // 教师注册只提交申请，不建立会话；审核通过后才可登录管理台。
+    return backendClient.request('/teacher-applications', {
+      method: 'POST',
+      body: { username, password }
+    })
+  },
+
   async changePassword(currentPassword, newPassword) {
     return backendClient.request('/password', {
       method: 'PUT',

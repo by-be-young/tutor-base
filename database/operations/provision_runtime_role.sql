@@ -80,13 +80,14 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.courseware_catalog TO tutor
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.admin_subject_claim TO tutor_base_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.admin_courseware_claim TO tutor_base_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.admin_courseware_exclusion TO tutor_base_runtime;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.teacher_registration_application TO tutor_base_runtime;
 GRANT USAGE ON SEQUENCE public.student_id_seq, public.account_id_seq,
     public.account_activation_id_seq, public.account_session_id_seq,
     public.daily_check_in_id_seq, public.task_claims_id_seq, public.card_collection_id_seq,
     public.article_answer_keys_id_seq, public.article_question_submissions_id_seq,
     public.wrong_questions_id_seq, public.achievement_claims_id_seq, public.task_assignments_id_seq,
     public.admin_subject_claim_id_seq, public.admin_courseware_claim_id_seq,
-    public.admin_courseware_exclusion_id_seq
+    public.admin_courseware_exclusion_id_seq, public.teacher_registration_application_id_seq
     TO tutor_base_runtime;
 
 -- The application login is not a table owner and must pass these policies.
@@ -110,6 +111,7 @@ ALTER TABLE public.courseware_catalog ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_subject_claim ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_courseware_claim ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_courseware_exclusion ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.teacher_registration_application ENABLE ROW LEVEL SECURITY;
 
 DO $policies$
 BEGIN
@@ -281,6 +283,12 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.admin_courseware_exclusion'::regclass
                    AND polname = 'tutor_base_runtime_admin_courseware_exclusion_all') THEN
         CREATE POLICY tutor_base_runtime_admin_courseware_exclusion_all ON public.admin_courseware_exclusion
+            FOR ALL TO tutor_base_runtime USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.teacher_registration_application'::regclass
+                   AND polname = 'tutor_base_runtime_teacher_registration_application_all') THEN
+        CREATE POLICY tutor_base_runtime_teacher_registration_application_all
+            ON public.teacher_registration_application
             FOR ALL TO tutor_base_runtime USING (true) WITH CHECK (true);
     END IF;
 END

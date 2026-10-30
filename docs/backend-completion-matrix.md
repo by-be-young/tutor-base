@@ -2,11 +2,12 @@
 
 本文以用户旅程追踪“浏览器直连 Supabase”到“Java 后端唯一可信入口”的迁移状态。状态只有 `已接管`、`进行中`、`未接管`；仅有表或 controller 不算完成，必须同时具备服务端授权、事务、OpenAPI 和自动化测试。
 
-## 当前基线（2026-10-29）
+## 当前基线（2026-10-31）
 
 | 业务能力 | 当前数据路径 | 后端状态 | 完成所需验证 |
 | --- | --- | --- | --- |
-| 身份、会话、注册、改密 | Java `/api/v1` | 已接管 | Identity HTTP contract、管理员重置、会话撤销 |
+| 身份、会话、注册、改密 | Java `/api/v1` | 已接管 | Identity HTTP contract、管理员重置、会话撤销；`POST /accounts` 已补 OpenAPI |
+| 教师注册审核 | Java `/api/v1/teacher-applications`、`/admin/teacher-applications` | 已接管 | V17 migration、申请/通过/驳回 contract、超级管理员越权 403、同事务建号、密码哈希复用 |
 | 学习者管理与内容授权 | Java `/api/v1/admin/learners` | 已接管 | 管理员/越权 contract、原子替换授权、范围外授权保留 |
 | 多管理员学员认领 | Java `/api/v1/admin/learners` | 已接管 | V11 migration、FOR UPDATE 认领/释放、409 冲突 contract、删除学员级联 |
 | 多管理员课件认领 | Java `/api/v1/admin/courseware-claims` | 已接管 | V12/V15 migration、目录同步、学科多对多认领、单篇认领与学科覆盖下单独释放（排除）、业务接口按“我的课件”收敛 |

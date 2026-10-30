@@ -7,14 +7,14 @@ WITH application_table(table_name) AS (
            ('task_claims'), ('card_collection'),
            ('card_sets'), ('card_definitions'),
            ('courseware_catalog'), ('admin_subject_claim'), ('admin_courseware_claim'),
-           ('admin_courseware_exclusion')
+           ('admin_courseware_exclusion'), ('teacher_registration_application')
 ), application_sequence(sequence_name) AS (
     VALUES ('student_id_seq'), ('account_id_seq'), ('account_activation_id_seq'),
            ('account_session_id_seq'), ('daily_check_in_id_seq'),
            ('article_answer_keys_id_seq'), ('article_question_submissions_id_seq'),
            ('wrong_questions_id_seq'), ('task_claims_id_seq'), ('card_collection_id_seq'),
            ('admin_subject_claim_id_seq'), ('admin_courseware_claim_id_seq'),
-           ('admin_courseware_exclusion_id_seq')
+           ('admin_courseware_exclusion_id_seq'), ('teacher_registration_application_id_seq')
 ), browser_role(role_name) AS (
     VALUES ('anon'), ('authenticated')
 ), privileges(privilege_type) AS (

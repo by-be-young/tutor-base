@@ -59,6 +59,12 @@ const routes = [
         meta: { adminTitle: '课件' }
       },
       {
+        path: 'applications',
+        name: 'AdminTeacherApplications',
+        component: () => import('@/views/admin/AdminTeacherApplicationsView.vue'),
+        meta: { adminTitle: '注册审核', requiredSuperAdmin: true }
+      },
+      {
         path: 'me',
         name: 'AdminProfile',
         component: () => import('@/views/admin/AdminProfileView.vue'),
@@ -156,6 +162,10 @@ router.beforeEach(async (to) => {
     || (to.name === 'ArticleDetail' && ['answer', 'review'].includes(to.query.mode))
   if (requiresAdministrator && !authStore.isAdministrator) {
     return { name: 'Home' }
+  }
+  // 注册审核仅超级管理员可见；普通管理员误入时回到工作台。
+  if (to.meta.requiredSuperAdmin && !authStore.isSuperAdministrator) {
+    return { name: 'AdminDashboard' }
   }
   // 管理员不进入学员端页面（首页 / 学科 / 任务 / 错题），统一回管理工作台。
   if (authStore.isAdministrator && ADMIN_REDIRECT_PATHS.has(to.path)) {

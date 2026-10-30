@@ -79,6 +79,7 @@ class IdentityHttpContractTest {
                 .addFilters(traceIdFilter)
                 .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity())
                 .build();
+        jdbc.update("DELETE FROM public.teacher_registration_application");
         jdbc.update("DELETE FROM public.account_activation");
         jdbc.update("DELETE FROM public.account_session");
         jdbc.update("DELETE FROM public.account");
@@ -87,6 +88,12 @@ class IdentityHttpContractTest {
         jdbc.update("INSERT INTO public.student (id, username, permissions) VALUES (5, 'Alice', '{9,3}')");
         insertAccount(2, "young", "administrator", "active", "Admin-password-2026");
         insertAccount(5, "Alice", "learner", "pending_activation", null);
+        jdbc.update("UPDATE public.account SET is_super_admin = true WHERE username_normalized = 'young'");
+        jdbc.update("""
+                INSERT INTO public.account
+                    (username, username_normalized, password_hash, status, role, activated_at)
+                VALUES ('admin2', 'admin2', ?, 'active', 'administrator', now())
+                """, passwords.encode("Admin2-password-2026"));
     }
 
     @Test
@@ -112,6 +119,7 @@ class IdentityHttpContractTest {
                 .andExpect(jsonPath("$.learnerId").value(2))
                 .andExpect(jsonPath("$.username").value("young"))
                 .andExpect(jsonPath("$.roles[0]").value("ADMINISTRATOR"))
+                .andExpect(jsonPath("$.superAdmin").value(true))
                 .andReturn();
 
         Cookie authenticatedCookie = requireCookie(login);
@@ -637,6 +645,181 @@ class IdentityHttpContractTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.code").value("invalid_credentials"))
                 .andReturn().getResponse().getContentAsString();
+    }
+
+    @Test
+    void givenTeacherApplicationWhenSubmittedThenItWaitsWithoutCreatingAnAccount() throws Exception {
+        BrowserSession anonymous = csrf(null);
+        String password = "Teacher-password-2026";
+
+        MvcResult submitted = mockMvc.perform(post("/api/v1/teacher-applications")
+                        .cookie(anonymous.cookie())
+                        .header("X-CSRF-TOKEN", anonymous.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"Ms.Lin\",\"password\":\"" + password + "\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(jsonPath("$.id").isNumber())
+                .andExpect(jsonPath("$.username").value("Ms.Lin"))
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.approvedAccountId").value(org.hamcrest.Matchers.nullValue()))
+                .andReturn();
+
+        assertThat(submitted.getResponse().getCookie("TUTOR_SESSION")).isNull();
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM public.account WHERE username_normalized = 'ms.lin'
+                """, Long.class)).isZero();
+        String storedHash = jdbc.queryForObject("""
+                SELECT password_hash FROM public.teacher_registration_application
+                WHERE username_normalized = 'ms.lin'
+                """, String.class);
+        assertThat(storedHash).startsWith("$argon2").isNotEqualTo(password);
+
+        BrowserSession attempt = csrf(null);
+        mockMvc.perform(post("/api/v1/sessions")
+                        .cookie(attempt.cookie())
+                        .header("X-CSRF-TOKEN", attempt.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"Ms.Lin\",\"password\":\"" + password + "\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("invalid_credentials"));
+    }
+
+    @Test
+    void givenPendingTeacherApplicationWhenApprovedThenOnlySuperAdministratorCanReviewAndAccountBecomesAdministrator()
+            throws Exception {
+        BrowserSession anonymous = csrf(null);
+        MvcResult submitted = mockMvc.perform(post("/api/v1/teacher-applications")
+                        .cookie(anonymous.cookie())
+                        .header("X-CSRF-TOKEN", anonymous.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"Ms.Lin\",\"password\":\"Teacher-password-2026\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        long applicationId = json(submitted).get("id").asLong();
+
+        BrowserSession regularAdminBrowser = csrf(null);
+        Cookie regularAdmin = login(regularAdminBrowser, "admin2", "Admin2-password-2026");
+        mockMvc.perform(get("/api/v1/admin/teacher-applications").cookie(regularAdmin))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("forbidden"));
+
+        BrowserSession superAdminBrowser = csrf(null);
+        Cookie superAdmin = login(superAdminBrowser, "young", "Admin-password-2026");
+        BrowserSession superAdminSession = csrf(superAdmin);
+        mockMvc.perform(get("/api/v1/admin/teacher-applications")
+                        .cookie(superAdmin))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(jsonPath("$.pendingCount").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(applicationId))
+                .andExpect(jsonPath("$.items[0].username").value("Ms.Lin"));
+
+        mockMvc.perform(get("/api/v1/admin/teacher-applications").param("status", "bogus").cookie(superAdmin))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_failed"));
+
+        mockMvc.perform(post("/api/v1/admin/teacher-applications/" + applicationId + "/approve")
+                        .cookie(superAdmin)
+                        .header("X-CSRF-TOKEN", superAdminSession.csrfToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.applicationId").value(applicationId))
+                .andExpect(jsonPath("$.username").value("Ms.Lin"))
+                .andExpect(jsonPath("$.role").value("ADMINISTRATOR"))
+                .andExpect(jsonPath("$.accountId").isNumber());
+
+        long approvedAccountId = jdbc.queryForObject("""
+                SELECT id FROM public.account WHERE username_normalized = 'ms.lin'
+                """, Long.class);
+        assertThat(jdbc.queryForObject("""
+                SELECT role FROM public.account WHERE id = ?
+                """, String.class, approvedAccountId)).isEqualTo("administrator");
+        assertThat(jdbc.queryForObject("""
+                SELECT status FROM public.account WHERE id = ?
+                """, String.class, approvedAccountId)).isEqualTo("active");
+        assertThat(jdbc.queryForObject("""
+                SELECT is_super_admin FROM public.account WHERE id = ?
+                """, Boolean.class, approvedAccountId)).isFalse();
+        assertThat(jdbc.queryForObject("""
+                SELECT approved_account_id FROM public.teacher_registration_application WHERE id = ?
+                """, Long.class, applicationId)).isEqualTo(approvedAccountId);
+
+        BrowserSession applicantBrowser = csrf(null);
+        Cookie applicant = login(applicantBrowser, "Ms.Lin", "Teacher-password-2026");
+        mockMvc.perform(get("/api/v1/session").cookie(applicant))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roles[0]").value("ADMINISTRATOR"))
+                .andExpect(jsonPath("$.superAdmin").value(false));
+        mockMvc.perform(get("/api/v1/admin/learners").cookie(applicant))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/admin/teacher-applications").cookie(applicant))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/v1/admin/teacher-applications/" + applicationId + "/approve")
+                        .cookie(superAdmin)
+                        .header("X-CSRF-TOKEN", superAdminSession.csrfToken()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("state_conflict"));
+    }
+
+    @Test
+    void givenTeacherApplicationWhenRejectedThenNoAccountCanReapplyAndDecisionIsFinal() throws Exception {
+        BrowserSession anonymous = csrf(null);
+        MvcResult submitted = mockMvc.perform(post("/api/v1/teacher-applications")
+                        .cookie(anonymous.cookie())
+                        .header("X-CSRF-TOKEN", anonymous.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"Mr.Wu\",\"password\":\"Teacher-wu-password\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        long applicationId = json(submitted).get("id").asLong();
+
+        BrowserSession superAdminBrowser = csrf(null);
+        Cookie superAdmin = login(superAdminBrowser, "young", "Admin-password-2026");
+        BrowserSession superAdminSession = csrf(superAdmin);
+
+        mockMvc.perform(post("/api/v1/admin/teacher-applications/" + applicationId + "/reject")
+                        .cookie(superAdmin)
+                        .header("X-CSRF-TOKEN", superAdminSession.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"   \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_failed"));
+
+        mockMvc.perform(post("/api/v1/admin/teacher-applications/" + applicationId + "/reject")
+                        .cookie(superAdmin)
+                        .header("X-CSRF-TOKEN", superAdminSession.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"请补充真实姓名\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REJECTED"))
+                .andExpect(jsonPath("$.rejectionReason").value("请补充真实姓名"));
+
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM public.account WHERE username_normalized = 'mr.wu'
+                """, Long.class)).isZero();
+        BrowserSession rejectedLogin = csrf(null);
+        mockMvc.perform(post("/api/v1/sessions")
+                        .cookie(rejectedLogin.cookie())
+                        .header("X-CSRF-TOKEN", rejectedLogin.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"Mr.Wu\",\"password\":\"Teacher-wu-password\"}"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/v1/admin/teacher-applications/" + applicationId + "/approve")
+                        .cookie(superAdmin)
+                        .header("X-CSRF-TOKEN", superAdminSession.csrfToken()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("state_conflict"));
+
+        BrowserSession reapply = csrf(null);
+        mockMvc.perform(post("/api/v1/teacher-applications")
+                        .cookie(reapply.cookie())
+                        .header("X-CSRF-TOKEN", reapply.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"Mr.Wu\",\"password\":\"Teacher-wu-password-2\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDING"));
     }
 
     private BrowserSession csrf(Cookie existingCookie) throws Exception {

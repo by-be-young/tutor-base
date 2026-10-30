@@ -33,7 +33,7 @@
               <span class="avatar admin-user__avatar">{{ userInitial }}</span>
               <span class="admin-user__meta">
                 <span class="admin-user__name">{{ authStore.username }}</span>
-                <span class="admin-user__role">管理员</span>
+                <span class="admin-user__role">{{ roleLabel }}</span>
               </span>
               <i class="fas fa-chevron-down admin-user__caret" aria-hidden="true"></i>
             </button>
@@ -44,7 +44,7 @@
                   <span class="avatar avatar--lg">{{ userInitial }}</span>
                   <div>
                     <p class="admin-menu__name">{{ authStore.username }}</p>
-                    <p class="admin-menu__sub">管理员 · NEST 管理台</p>
+                    <p class="admin-menu__sub">{{ roleLabel }} · NEST 管理台</p>
                   </div>
                 </div>
                 <router-link to="/settings/password" class="admin-menu__item" role="menuitem"
@@ -67,7 +67,7 @@
     <!-- 页面标题：沿用学员端 page-head 的位置与字号 -->
     <div class="admin-pagehead">
       <h1 class="admin-pagehead__title">{{ pageTitle }}</h1>
-      <p class="admin-pagehead__sub">学员管理与我的课件</p>
+      <p class="admin-pagehead__sub">学员管理、批阅、课件与注册审核</p>
     </div>
 
     <div class="admin-content">
@@ -113,13 +113,21 @@ const scrolled = ref(false)
 const userMenuOpen = ref(false)
 const userMenuRef = ref(null)
 
-const navItems = [
-  { to: '/admin', label: '工作台', icon: 'fas fa-chart-line', exact: true },
-  { to: '/admin/learners', label: '学员', icon: 'fas fa-users' },
-  { to: '/admin/reviews', label: '批阅', icon: 'fas fa-pen-nib' },
-  { to: '/admin/content', label: '课件', icon: 'fas fa-book-open' },
-  { to: '/admin/me', label: '我的', icon: 'fas fa-user-gear' }
-]
+const navItems = computed(() => {
+  const items = [
+    { to: '/admin', label: '工作台', icon: 'fas fa-chart-line', exact: true },
+    { to: '/admin/learners', label: '学员', icon: 'fas fa-users' },
+    { to: '/admin/reviews', label: '批阅', icon: 'fas fa-pen-nib' },
+    { to: '/admin/content', label: '课件', icon: 'fas fa-book-open' }
+  ]
+  if (authStore.isSuperAdministrator) {
+    items.push({ to: '/admin/applications', label: '审核', icon: 'fas fa-user-check' })
+  }
+  items.push({ to: '/admin/me', label: '我的', icon: 'fas fa-user-gear' })
+  return items
+})
+
+const roleLabel = computed(() => authStore.isSuperAdministrator ? '超级管理员' : '管理员')
 
 const pageTitle = computed(() => route.meta.adminTitle || '工作台')
 const userInitial = computed(() => (authStore.username || 'A').slice(0, 1).toUpperCase())
