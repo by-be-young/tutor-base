@@ -1,0 +1,45 @@
+package com.tutorbase.courseware;
+
+import java.util.List;
+
+/** 课件托管领域的失败类型；HTTP 映射见 {@code web.CoursewareHttpExceptionHandler}。 */
+public final class CoursewareFailures {
+
+    private CoursewareFailures() {
+    }
+
+    /** 发布校验失败：逐条说明原因。 */
+    public static final class Validation extends RuntimeException {
+        private final List<String> errors;
+
+        public Validation(List<String> errors) {
+            super("课件发布校验失败");
+            this.errors = List.copyOf(errors);
+        }
+
+        public List<String> errors() {
+            return errors;
+        }
+    }
+
+    /** 老师或课件不存在。 */
+    public static final class NotFound extends RuntimeException {
+        public NotFound(String message) {
+            super(message);
+        }
+    }
+
+    /** 未授权：未关联该老师，或未被授权该课件。 */
+    public static final class Forbidden extends RuntimeException {
+        public Forbidden(String message) {
+            super(message);
+        }
+    }
+
+    /** 发布版本冲突：expectVersion 与当前指针不一致。 */
+    public static final class VersionConflict extends RuntimeException {
+        public VersionConflict(String message) {
+            super(message);
+        }
+    }
+}

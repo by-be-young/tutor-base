@@ -11,3 +11,6 @@ tutor:
     csrf-secret: ${TUTOR_CSRF_SECRET}
     cookie-name: __Host-TUTOR_SESSION
     cookie-secure: true
+  courseware:
+    root: ${TUTOR_COURSEWARE_ROOT:./var/courseware}
+    source: ${TUTOR_COURSEWARE_SOURCE:storage}

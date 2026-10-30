@@ -1,6 +1,7 @@
 # Dependencies and build output
 /node_modules/
 /backend/target/
+/backend/var/
 /tutor-nest-vue/dist/
 /backend-e2e.log
 /backend-e2e-error.log
