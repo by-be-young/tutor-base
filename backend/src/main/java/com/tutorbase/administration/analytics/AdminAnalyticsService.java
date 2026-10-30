@@ -13,6 +13,7 @@ import java.util.Map;
 
 import com.tutorbase.administration.courseware.CoursewareScope;
 import com.tutorbase.administration.learner.LearnerQuery;
+import com.tutorbase.shared.security.LearnerClaimAccess;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -71,14 +72,16 @@ class AdminAnalyticsService {
     private final JdbcClient jdbc;
     private final CoursewareScope coursewareScope;
     private final LearnerQuery learnerQuery;
+    private final LearnerClaimAccess learnerClaims;
     private final Clock clock;
     private final ZoneId zone;
 
     AdminAnalyticsService(JdbcClient jdbc, CoursewareScope coursewareScope, LearnerQuery learnerQuery,
-                          Clock clock, ZoneId zone) {
+                          LearnerClaimAccess learnerClaims, Clock clock, ZoneId zone) {
         this.jdbc = jdbc;
         this.coursewareScope = coursewareScope;
         this.learnerQuery = learnerQuery;
+        this.learnerClaims = learnerClaims;
         this.clock = clock;
         this.zone = zone;
     }
@@ -119,6 +122,13 @@ class AdminAnalyticsService {
 
     @Transactional(readOnly = true)
     LearnerProfile learnerProfile(long administratorAccountId, long learnerId) {
+        switch (learnerClaims.state(learnerId, administratorAccountId)) {
+            case LEARNER_NOT_FOUND -> throw new AnalyticsLearnerNotFound(learnerId);
+            case UNCLAIMED, CLAIMED_BY_OTHER_ADMINISTRATOR ->
+                    throw new AnalyticsLearnerNotClaimed(learnerId);
+            case CLAIMED_BY_CURRENT_ADMINISTRATOR -> {
+            }
+        }
         LearnerQuery.Learner learner = learnerQuery.findById(learnerId)
                 .orElseThrow(() -> new AnalyticsLearnerNotFound(learnerId));
         PointsRow points = points(learnerId);

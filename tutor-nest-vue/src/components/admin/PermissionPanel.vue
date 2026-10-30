@@ -104,7 +104,6 @@
 import { ref, computed, watch } from 'vue'
 import { useAdminStore } from '@/stores/adminStore'
 import { useCoursewareStore } from '@/stores/coursewareStore'
-import { openedSubjects } from '@/utils/adminSubjects'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import PermissionTreeNode from './PermissionTreeNode.vue'
 
@@ -138,6 +137,11 @@ const currentPermissions = computed(() => {
     return student?.permissions || []
 })
 
+const currentSubjects = computed(() => {
+    const student = props.students.find(item => String(item.id) === String(props.selectedStudentId))
+    return student?.subjects || []
+})
+
 const currentTone = computed(() => subjectTone(currentSubject.value))
 
 // 业务面板只处理「我的课件」：目录未加载时先给骨架屏，加载完成且为空才提示去认领。
@@ -161,21 +165,17 @@ watch(() => props.blogData, (articles) => {
     coursewareStore.ensureWorkspace(articles).catch(() => {})
 }, { immediate: true })
 
-// 只显示学员已开通（至少授权过一篇文章）且在我的课件范围内的学科。
-// 保留当前正在编辑的学科：管理员把某科最后一篇取消勾选时，目录树不会突然跳走。
+// 只显示学员已开通的科目，以及当前正在编辑的学科。
+// 科目归属来自 subjects，与是否已授权文章无关；开通但零授权的科目仍会出现在这里。
 const scopedSubjects = computed(() => {
     const subjects = props.allSubjects.filter(subject =>
         visibleArticles.value.some(blog => blog.series === subject))
-    const opened = new Set(openedSubjects({
-        subjects,
-        articles: visibleArticles.value,
-        permissions: currentPermissions.value
-    }))
+    const enrolled = new Set(currentSubjects.value)
     return subjects.filter(subject => {
         if (subject === currentSubject.value) {
             return visibleArticles.value.some(blog => blog.series === subject)
         }
-        return opened.has(subject)
+        return enrolled.has(subject)
     })
 })
 

@@ -16,6 +16,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.tutorbase.shared.security.LearnerClaimAccess;
+
 @Service
 class IdentityService {
     static final String SESSION_ATTRIBUTE = IdentityService.class.getName() + ".session";
@@ -25,13 +27,20 @@ class IdentityService {
     private final PasswordEncoder passwords;
     private final IdentityProperties properties;
     private final Clock clock;
+    private final LearnerClaimAccess learnerClaims;
     private final String dummyPasswordHash;
 
-    IdentityService(IdentityStore store, PasswordEncoder passwords, IdentityProperties properties, Clock clock) {
+    IdentityService(
+            IdentityStore store,
+            PasswordEncoder passwords,
+            IdentityProperties properties,
+            Clock clock,
+            LearnerClaimAccess learnerClaims) {
         this.store = store;
         this.passwords = passwords;
         this.properties = properties;
         this.clock = clock;
+        this.learnerClaims = learnerClaims;
         this.dummyPasswordHash = passwords.encode("not-a-real-account-password");
     }
 
@@ -126,7 +135,8 @@ class IdentityService {
     }
 
     @Transactional
-    void setLearnerPassword(long learnerId, String password) {
+    void setLearnerPassword(long learnerId, long administratorAccountId, String password) {
+        requireClaimedLearner(learnerId, administratorAccountId);
         String passwordHash = passwords.encode(password);
         switch (store.setLearnerPassword(learnerId, passwordHash, clock.instant())) {
             case CHANGED -> {
@@ -137,12 +147,22 @@ class IdentityService {
     }
 
     @Transactional
-    LoginResult impersonate(long learnerId) {
+    LoginResult impersonate(long learnerId, long administratorAccountId) {
+        requireClaimedLearner(learnerId, administratorAccountId);
         IdentityStore.AccountRow account = store.accountByLearnerId(learnerId).orElseThrow(AccountNotFound::new);
         if (!"active".equals(account.status())) {
             throw new AccountStateConflict();
         }
         return new LoginResult(createSession(account.id()), principal(account));
+    }
+
+    private void requireClaimedLearner(long learnerId, long administratorAccountId) {
+        switch (learnerClaims.state(learnerId, administratorAccountId)) {
+            case LEARNER_NOT_FOUND -> throw new AccountNotFound();
+            case UNCLAIMED, CLAIMED_BY_OTHER_ADMINISTRATOR -> throw new LearnerClaimRequired();
+            case CLAIMED_BY_CURRENT_ADMINISTRATOR -> {
+            }
+        }
     }
 
     void revoke(String token) {
@@ -214,6 +234,9 @@ class IdentityService {
     }
 
     static final class AccountStateConflict extends RuntimeException {
+    }
+
+    static final class LearnerClaimRequired extends RuntimeException {
     }
 
     static final class UsernameConflict extends RuntimeException {

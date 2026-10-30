@@ -52,6 +52,18 @@ final class IdentityHttpExceptionHandler {
                 "请求的账户不存在。", request);
     }
 
+    @ExceptionHandler(IdentityService.LearnerClaimRequired.class)
+    ProblemDetail learnerClaimRequired(
+            IdentityService.LearnerClaimRequired exception,
+            HttpServletRequest request) {
+        return ApiProblem.create(
+                HttpStatus.FORBIDDEN,
+                "learner_not_claimed",
+                "学员未认领",
+                "只能设置自己认领的学员密码或进入其账号。",
+                request);
+    }
+
     @ExceptionHandler(IdentityService.AccountStateConflict.class)
     ProblemDetail accountStateConflict(
             IdentityService.AccountStateConflict exception,

@@ -403,6 +403,7 @@ function claimLabelOf(student) {
 function subjectCountOf(student) {
   const scope = buildSubjectScope({
     subjects: allSubjects.value,
+    enrolledSubjects: student.subjects || [],
     articles: visibleArticles.value,
     permissions: student.permissions
   })

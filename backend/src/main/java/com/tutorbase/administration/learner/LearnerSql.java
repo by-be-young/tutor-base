@@ -24,6 +24,7 @@ final class LearnerSql {
             SELECT s.id,
                    s.username,
                    s.permissions,
+                   s.subjects,
                    s.is_test,
                    s.is_special_test,
                    s.claimed_by,
@@ -54,6 +55,7 @@ final class LearnerSql {
                 resultSet.getLong("id"),
                 resultSet.getString("username"),
                 readArticleIds(resultSet.getArray("permissions")),
+                readTextValues(resultSet.getArray("subjects")),
                 resultSet.getBoolean("is_test"),
                 resultSet.getBoolean("is_special_test"),
                 resultSet.getObject("claimed_by", Long.class),
@@ -64,6 +66,23 @@ final class LearnerSql {
 
     private static Instant toInstant(Timestamp timestamp) {
         return timestamp == null ? null : timestamp.toInstant();
+    }
+
+    private static List<String> readTextValues(Array values) throws SQLException {
+        if (values == null) {
+            return List.of();
+        }
+        try {
+            Object value = values.getArray();
+            if (!(value instanceof Object[] items)) {
+                throw new SQLException("Unsupported PostgreSQL array representation");
+            }
+            return Arrays.stream(items)
+                    .map(String.class::cast)
+                    .toList();
+        } finally {
+            values.free();
+        }
     }
 
     private static List<Long> readArticleIds(Array permissions) throws SQLException {

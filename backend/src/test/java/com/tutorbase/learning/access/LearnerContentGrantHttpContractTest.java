@@ -116,6 +116,7 @@ class LearnerContentGrantHttpContractTest {
                 .andExpect(jsonPath("$.username").value("Bob"))
                 .andExpect(jsonPath("$.isTest").value(true))
                 .andExpect(jsonPath("$.contentGrantArticleIds").isEmpty())
+                .andExpect(jsonPath("$.enrolledSubjects").isEmpty())
                 .andReturn();
 
         long learnerId = objectMapper.readTree(created.getResponse().getContentAsString())
@@ -135,6 +136,71 @@ class LearnerContentGrantHttpContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.learnerId").value(learnerId))
                 .andExpect(jsonPath("$.contentGrantArticleIds[0]").value(3))
+                .andExpect(jsonPath("$.contentGrantArticleIds[1]").value(9));
+    }
+
+    @Test
+    void administratorOpensSubjectWithoutGrantingArticlesAndPreservesItWhenAddingArticles() throws Exception {
+        Cookie adminCookie = login(csrf(null), "young", "Admin-password-2026");
+        BrowserSession admin = csrf(adminCookie);
+        MvcResult created = mockMvc.perform(post("/api/v1/admin/learners")
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"subject-learner\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        long learnerId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("learnerId")
+                .asLong();
+
+        // 只开通科目，不授权该科任何文章
+        mockMvc.perform(put("/api/v1/admin/learners/{learnerId}/content-grants", learnerId)
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"articleIds\":[],\"enrolledSubjects\":[\"数学\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enrolledSubjects[0]").value("数学"))
+                .andExpect(jsonPath("$.contentGrantArticleIds").isEmpty());
+
+        // 旧客户端只提交 articleIds 时保留已有科目，不清空
+        mockMvc.perform(put("/api/v1/admin/learners/{learnerId}/content-grants", learnerId)
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"articleIds\":[3]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enrolledSubjects[0]").value("数学"))
+                .andExpect(jsonPath("$.contentGrantArticleIds[0]").value(3));
+
+        // 再授权同科文章，科目保持不变
+        mockMvc.perform(put("/api/v1/admin/learners/{learnerId}/content-grants", learnerId)
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"articleIds\":[3,9],\"enrolledSubjects\":[\"数学\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enrolledSubjects[0]").value("数学"))
+                .andExpect(jsonPath("$.contentGrantArticleIds[1]").value(9));
+
+        // 不在当前管理员课件范围内的科目不能开通
+        mockMvc.perform(put("/api/v1/admin/learners/{learnerId}/content-grants", learnerId)
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"articleIds\":[],\"enrolledSubjects\":[\"英语\"]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("courseware_not_claimed"));
+
+        // 取消科目只改归属；具体文章仍由 articleIds 独立决定
+        mockMvc.perform(put("/api/v1/admin/learners/{learnerId}/content-grants", learnerId)
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"articleIds\":[3,9],\"enrolledSubjects\":[]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enrolledSubjects").isEmpty())
                 .andExpect(jsonPath("$.contentGrantArticleIds[1]").value(9));
     }
 

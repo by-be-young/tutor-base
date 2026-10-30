@@ -32,7 +32,7 @@ class AdminLearnerPasswordController {
             @PathVariable @Positive long learnerId,
             @Valid @RequestBody SetLearnerPasswordRequest request,
             @AuthenticationPrincipal AccountPrincipal administrator) {
-        identity.setLearnerPassword(learnerId, request.password());
+        identity.setLearnerPassword(learnerId, administrator.accountId(), request.password());
         LOGGER.info("Administrator account {} set password for learner {}", administrator.accountId(), learnerId);
         return ResponseEntity.noContent().build();
     }

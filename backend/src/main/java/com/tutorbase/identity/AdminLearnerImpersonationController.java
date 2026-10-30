@@ -37,7 +37,7 @@ class AdminLearnerImpersonationController {
             @PathVariable @Positive long learnerId,
             @AuthenticationPrincipal AccountPrincipal administrator,
             HttpServletResponse response) {
-        IdentityService.LoginResult result = identity.impersonate(learnerId);
+        IdentityService.LoginResult result = identity.impersonate(learnerId, administrator.accountId());
         SessionCookies.session(response, sessions, properties, result.token());
         LOGGER.info("Administrator account {} entered learner account {} ({})",
                 administrator.accountId(), learnerId, result.principal().username());

@@ -60,7 +60,8 @@ public class JdbcLearnerAdministration implements LearnerAdministration {
 
     @Override
     @Transactional
-    public void replaceContentGrants(long learnerId, long administratorAccountId, List<Long> articleIds) {
+    public void replaceContentGrants(
+            long learnerId, long administratorAccountId, List<Long> articleIds, List<String> enrolledSubjects) {
         Set<Long> visible = Set.copyOf(coursewareScope.visibleArticleIds(administratorAccountId));
         List<Long> requested = articleIds.stream()
                 .distinct()
@@ -71,21 +72,39 @@ public class JdbcLearnerAdministration implements LearnerAdministration {
                 throw new LearnerCoursewareNotClaimed(articleId);
             }
         }
-        List<Long> existing = lockContentGrants(learnerId);
+        TreeSet<String> requestedSubjects = new TreeSet<>();
+        if (enrolledSubjects != null) {
+            for (String subject : enrolledSubjects) {
+                String normalized = subject.strip();
+                if (!normalized.isEmpty()) {
+                    requestedSubjects.add(normalized);
+                }
+            }
+            for (String subject : requestedSubjects) {
+                requireVisibleSubject(administratorAccountId, subject);
+            }
+        }
+        ContentState state = lockContentState(learnerId);
         TreeSet<Long> finalArticleIds = new TreeSet<>();
-        existing.stream()
+        state.articleIds().stream()
                 .filter(articleId -> !visible.contains(articleId))
                 .forEach(finalArticleIds::add);
         finalArticleIds.addAll(requested);
-        Integer[] values = finalArticleIds.stream()
+        Integer[] articleValues = finalArticleIds.stream()
                 .map(Math::toIntExact)
                 .toArray(Integer[]::new);
+        String[] subjectValues = (enrolledSubjects == null
+                ? state.subjects()
+                : List.copyOf(requestedSubjects))
+                .toArray(String[]::new);
         int changed = jdbcTemplate.update(connection -> {
             PreparedStatement statement = connection.prepareStatement(
-                    "UPDATE public.student SET permissions = ? WHERE id = ?");
-            Array permissions = connection.createArrayOf("integer", values);
+                    "UPDATE public.student SET permissions = ?, subjects = ? WHERE id = ?");
+            Array permissions = connection.createArrayOf("integer", articleValues);
+            Array subjects = connection.createArrayOf("text", subjectValues);
             statement.setArray(1, permissions);
-            statement.setLong(2, learnerId);
+            statement.setArray(2, subjects);
+            statement.setLong(3, learnerId);
             return statement;
         });
         if (changed == 0) {
@@ -93,17 +112,54 @@ public class JdbcLearnerAdministration implements LearnerAdministration {
         }
     }
 
-    private List<Long> lockContentGrants(long learnerId) {
+    private ContentState lockContentState(long learnerId) {
         return jdbc.sql("""
-                SELECT permissions
+                SELECT permissions, subjects
                 FROM public.student
                 WHERE id = :learnerId
                 FOR UPDATE
                 """)
                 .param("learnerId", learnerId)
-                .query((resultSet, rowNumber) -> readArticleIds(resultSet.getArray("permissions")))
+                .query((resultSet, rowNumber) -> new ContentState(
+                        readArticleIds(resultSet.getArray("permissions")),
+                        readTextValues(resultSet.getArray("subjects"))))
                 .optional()
                 .orElseThrow(() -> new LearnerNotFound(learnerId));
+    }
+
+    private void requireVisibleSubject(long administratorAccountId, String subject) {
+        boolean visible = jdbc.sql("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM public.courseware_catalog AS subject_catalog
+                    WHERE subject_catalog.subject = :subject
+                      AND %s
+                )
+                """.formatted(coursewareScope.visibleArticlePredicate("subject_catalog.article_id")))
+                .param("administratorAccountId", administratorAccountId)
+                .param("subject", subject)
+                .query(Boolean.class)
+                .single();
+        if (!visible) {
+            throw new LearnerSubjectNotClaimed(subject);
+        }
+    }
+
+    private static List<String> readTextValues(Array values) throws SQLException {
+        if (values == null) {
+            return List.of();
+        }
+        try {
+            Object value = values.getArray();
+            if (!(value instanceof Object[] items)) {
+                throw new SQLException("Unsupported PostgreSQL array representation");
+            }
+            return Arrays.stream(items)
+                    .map(String.class::cast)
+                    .toList();
+        } finally {
+            values.free();
+        }
     }
 
     private static List<Long> readArticleIds(Array permissions) throws SQLException {
@@ -167,7 +223,13 @@ public class JdbcLearnerAdministration implements LearnerAdministration {
     @Transactional
     public void deleteLearner(long learnerId, long administratorAccountId) {
         ClaimState state = lockClaim(learnerId);
-        if (state.claimedByAccountId() != null && state.claimedByAccountId() != administratorAccountId) {
+        if (state.specialTest()) {
+            throw new SpecialTestLearnerProtected(learnerId);
+        }
+        if (state.claimedByAccountId() == null) {
+            throw new LearnerNotClaimed(learnerId);
+        }
+        if (state.claimedByAccountId() != administratorAccountId) {
             throw new LearnerAlreadyClaimed(learnerId);
         }
         boolean protectedAdministrator = jdbc.sql("""
@@ -196,17 +258,22 @@ public class JdbcLearnerAdministration implements LearnerAdministration {
 
     private ClaimState lockClaim(long learnerId) {
         return jdbc.sql("""
-                SELECT claimed_by
+                SELECT claimed_by, is_special_test
                 FROM public.student
                 WHERE id = :learnerId
                 FOR UPDATE
                 """)
                 .param("learnerId", learnerId)
-                .query((resultSet, rowNumber) -> new ClaimState(resultSet.getObject("claimed_by", Long.class)))
+                .query((resultSet, rowNumber) -> new ClaimState(
+                        resultSet.getObject("claimed_by", Long.class),
+                        resultSet.getBoolean("is_special_test")))
                 .optional()
                 .orElseThrow(() -> new LearnerNotFound(learnerId));
     }
 
-    private record ClaimState(Long claimedByAccountId) {
+    private record ClaimState(Long claimedByAccountId, boolean specialTest) {
+    }
+
+    private record ContentState(List<Long> articleIds, List<String> subjects) {
     }
 }

@@ -30,7 +30,7 @@
 | 页面 | 能力 |
 | --- | --- |
 | 工作台 | 我的学员/总学员、近 7 天活跃、待批阅、近 7 日提交、待认领课件、30 天提交/批阅趋势、学员动态 |
-| 学员 | **新增测试学员**（固定 `isTest=true`，不计入统计）、认领/取消认领、删除、设置初始密码/重置、按学科或单篇授权、进入学员账号、学员详情抽屉 |
+| 学员 | **新增测试学员**（固定 `isTest=true`，不计入统计）、认领/取消认领、删除、设置初始密码/重置、**先开通科目再按篇授权**、进入学员账号、学员详情抽屉；未认领/他人认领的学员不可查看详情、设密、进入或删除，特殊测试学员不可删除 |
 | 批阅 | 按学员/学科筛选；待批阅、已批阅、未提交、全部四种视图；查看作答与参考答案；正确/半对/错误三档批阅 |
 | 课件 | 同步课件目录、认领/释放学科、单篇认领/释放（排除）、我的/待认领/全部目录、参考答案与自动批阅开关 |
 | 注册审核 | **仅超级管理员（`young`）**：查看待审核/已通过/已驳回教师申请，通过后创建管理员账户，驳回需写理由 |
@@ -39,7 +39,7 @@
 ### 平台
 
 - 身份：服务端会话 Cookie、CSRF、Argon2id 密码、激活码、限流；教师注册申请只存哈希，超级管理员审核通过后才建管理员账户。
-- 授权：内容授权（文章 ID 白名单）、学员认领（一人一管理员）、课件认领（学科多对多 + 单篇 + 排除）。
+- 授权：科目归属（`student.subjects`，只表示学哪几科）与内容授权（`student.permissions`，文章 ID 白名单）分离；学员认领（一人一管理员）、课件认领（学科多对多 + 单篇 + 排除）。
 - 激励：签到（100/日，月度第 7/14 次 +100）、积分、抽卡（80/张、稀有 5%、UP 50%、ISO 周轮换）、7 类分级成就、9 项周期/限时任务、7 段成长等级（每 200 累计积分一级）。
 - 运维：`/system/status`、liveness/readiness、Flyway 迁移、运行角色最小权限与 RLS、密钥扫描。
 
@@ -57,7 +57,7 @@ flowchart LR
 
 - **前端**：Vue 3.4、Vite 5、Pinia、Vue Router（hash 模式）、Font Awesome、KaTeX（CDN）、marked。
 - **后端**：Java 21 LTS、Spring Boot 4.1、Spring Security、JdbcClient；按业务能力分包：`identity`、`learning`、`wrongbook`、`checkin`、`rewards`、`growth`、`administration`、`system`、`shared`。
-- **数据库**：PostgreSQL 17；Flyway `V1`–`V17`；应用使用受限角色 `tutor_base_runtime`（无 DDL 权限）。
+- **数据库**：PostgreSQL 17；Flyway `V1`–`V18`；应用使用受限角色 `tutor_base_runtime`（无 DDL 权限）。
 - **测试**：Node Test（前端 gateway/工具）、JUnit + MockMvc + Testcontainers PostgreSQL、Playwright 端到端。
 - **内容**：`public/articles/**/*.md` 为公开静态资源，构建前由脚本生成 `articles.json` / `id_map.json`。内容授权控制导航与学习数据，**不保证正文 URL 保密**。
 
@@ -103,7 +103,7 @@ Copy-Item .env.example .env   # 首次
 .\mvnw.cmd -B -ntp spring-boot:run
 ```
 
-Spring Boot 会读取 `backend/.env`；系统环境变量优先级更高。首次启动由 Flyway 自动执行 V1–V17。
+Spring Boot 会读取 `backend/.env`；系统环境变量优先级更高。首次启动由 Flyway 自动执行 V1–V18。
 
 ### 4. 启动前端（3000）
 
@@ -168,8 +168,9 @@ database/operations/provision_runtime_role.sql
 | 教师注册 | 勾选"我是教师"只提交 `POST /teacher-applications`，不建号、不建会话；审核通过才创建 `active` 管理员账户，驳回后可用同一用户名重新申请 |
 | 超级管理员 | `account.is_super_admin=true` 且必须是管理员；当前为 `young`；只有该标记可查看/审核教师申请，普通管理员访问返回 `403 forbidden` |
 | 内容授权 | `student.permissions` 是文章 ID 白名单；管理员替换授权只作用于"我的课件"，范围外保留 |
+| 科目归属 | `student.subjects` 表示学员已开通的科目；开通科目**初始不授权该科目下任何文章**，文章仍需逐篇授权 |
 | 我的课件 | (我认领学科的全部课件 − 我排除的课件) ∪ 我单篇认领的课件；学科认领自动覆盖未来新增课件 |
-| 学员认领 | 一名学员至多一名管理员；新增测试学员由创建者自动认领；释放幂等 |
+| 学员认领 | 一名学员至多一名管理员；新增测试学员由创建者自动认领；取消认领幂等；查看详情/设密/进入账号/删除都要求已认领 |
 | 保存作答 | 每题保存"当前答案"，覆盖式；已批阅的作答不可再提交（`409 submission_already_reviewed`） |
 | 自动批阅 | 有参考答案且 `auto_grade=true` 时，仅统一换行后完全匹配 → `correct` / `wrong`；否则 `pending` |
 | 答案可见 | 学员只在该题已批阅后看到参考答案；管理员在自己的课件内可见 |
@@ -178,7 +179,7 @@ database/operations/provision_runtime_role.sql
 | 积分 | `points` 可消费；`lifetime_points` 只增不减；等级 = `floor(lifetime/200)+1`，7 个段位 |
 | 抽卡 | 80 积分/张，1–10 张；稀有 5%，命中稀有后 50% 为当期 UP；UP 按 ISO 周轮换（周一 00:00 Asia/Shanghai） |
 | 任务/成就 | 目录由服务端决定；日/周任务按 Asia/Shanghai 刷新；限时任务需先接取；奖励领取与积分累加同一事务，唯一约束兜底 |
-| 测试学员 | **管理端“新增测试学员”入口固定创建 `is_test=true` 学员**；`is_test` 不进入管理统计；特殊测试学员全局唯一、全课件、固定 `999999999` 积分且抽卡不扣 |
+| 测试学员 | **管理端“新增测试学员”入口固定创建 `is_test=true` 学员**；`is_test` 不进入管理统计；特殊测试学员全局唯一、全课件、固定 `999999999` 积分且抽卡不扣，**不可删除** |
 | 时区 | 传输 UTC（RFC 3339）；自然日/周按 `Asia/Shanghai` |
 
 完整规则与边界见 [`docs/软件需求规格说明书.md`](docs/软件需求规格说明书.md)；对象与表映射见 [`docs/业务对象清单.md`](docs/业务对象清单.md)。
@@ -190,9 +191,9 @@ database/operations/provision_runtime_role.sql
 | 文档 | 内容 |
 | --- | --- |
 | [`docs/文档索引.md`](docs/文档索引.md) | 文档索引、阅读路线、维护规则 |
-| [`docs/软件需求规格说明书.md`](docs/软件需求规格说明书.md) | 软件需求规格：角色、12 个能力域、67 条功能需求、非功能需求、验收与追踪 |
-| [`docs/用户故事.md`](docs/用户故事.md) | 58 条用户故事与 Given/When/Then 验收标准 |
-| [`docs/业务对象清单.md`](docs/业务对象清单.md) | 44 个业务对象、状态机、表/接口/前端映射、23 条不变量 |
+| [`docs/软件需求规格说明书.md`](docs/软件需求规格说明书.md) | 软件需求规格：角色、12 个能力域、68 条功能需求、非功能需求、验收与追踪 |
+| [`docs/用户故事.md`](docs/用户故事.md) | 60 条用户故事与 Given/When/Then 验收标准 |
+| [`docs/业务对象清单.md`](docs/业务对象清单.md) | 45 个业务对象、状态机、表/接口/前端映射、25 条不变量 |
 | [`CONTEXT.md`](CONTEXT.md) | 领域词汇与"避免叫法"，术语唯一来源 |
 | [`docs/api-standards.md`](docs/api-standards.md) | 协议、错误码、分页、并发与目标接口目录 |
 | [`backend/api/openapi.yaml`](backend/api/openapi.yaml) | 机器可校验接口契约（46 个路径） |
@@ -223,7 +224,7 @@ tutor-base/
 │  └─ scripts/               文章索引同步
 ├─ backend/                  Java 模块化单体
 │  ├─ api/openapi.yaml       接口契约
-│  └─ src/main/resources/db/migration/  Flyway V1–V17
+│  └─ src/main/resources/db/migration/  Flyway V1–V18
 ├─ database/                 审计、对齐、授权脚本
 │  ├─ reconciliation/        存量库幂等对齐
 │  ├─ operations/            运行角色授权 / 浏览器权限收口

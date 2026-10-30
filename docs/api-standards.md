@@ -78,7 +78,9 @@
 | 404 | `resource_not_found` | 在授权范围内资源不存在 |
 | 409 | `state_conflict` | 当前状态不允许该操作 |
 | 409 | `username_conflict` | 注册或创建账户时用户名已被占用（不公开具体用户名） |
-| 409 | `learner_already_claimed` | 学习者已被其他管理员认领；认领、取消认领或删除前需由原认领管理员先取消认领 |
+| 409 | `learner_already_claimed` | 学习者已被其他管理员认领；认领或删除前需由原认领管理员先取消认领 |
+| 403 | `learner_not_claimed` | 当前管理员不是该学习者的认领人；查看详情、设置密码、进入账号、删除均拒绝 |
+| 409 | `special_test_learner_protected` | 目标学习者是特殊测试学员，禁止删除 |
 | 409 | `administrator_learner_protected` | 目标学习者关联管理员账户，不能通过学员管理删除 |
 | 403 | `courseware_not_claimed` | 当前管理员未认领该课件；业务写操作与敏感读取被拒绝 |
 | 412 | `version_conflict` | `If-Match` 与当前资源版本不符 |
@@ -125,7 +127,7 @@
 | GET | `/articles` | account | 管理员返回全部，学习者只返回已授权学习文章 |
 | GET | `/articles/{articleId}/study-state` | content grant | 返回参考答案可见性规则下的作答状态 |
 | GET | `/articles/study-progress` | learner | 返回当前学习者已授权文章的作答进度 |
-| PUT | `/admin/learners/{learnerId}/content-grants` | administrator | 在“我的课件”范围内原子替换授权；范围外的既有授权保留 |
+| PUT | `/admin/learners/{learnerId}/content-grants` | administrator | 在“我的课件”范围内原子替换科目归属（`enrolledSubjects`）与文章授权（`articleIds`）；范围外既有授权保留；省略 `enrolledSubjects` 时保留旧科目 |
 
 ### Learning and Review
 
@@ -198,19 +200,20 @@
 | POST | `/admin/learners` | administrator | 新增测试学员（固定 `isTest=true`）并创建待设置密码账户；由创建它的管理员自动认领 |
 | PUT | `/admin/learners/{learnerId}/claim` | administrator | 认领学习者；重复认领幂等，已被其他管理员认领返回 `409 learner_already_claimed` |
 | DELETE | `/admin/learners/{learnerId}/claim` | administrator | 取消认领；未认领时幂等返回 `204` |
-| DELETE | `/admin/learners/{learnerId}` | administrator | 删除学习者及其账户、会话和学习数据；被他人认领或关联管理员账户时返回 `409` |
-| PUT | `/admin/learners/{learnerId}/password` | administrator | 直接设置或重置学习者密码，并撤销其旧会话和未使用激活码 |
-| POST | `/admin/learners/{learnerId}/impersonate` | administrator | 免密进入学习者账户：创建新会话并轮换 Cookie；仅限 `role=learner` 且已激活的账户，不撤销管理员既有会话 |
+| DELETE | `/admin/learners/{learnerId}` | administrator | 删除学习者及其账户、会话和学习数据；未认领/他人认领返回 `403 learner_not_claimed` 或 `409 learner_already_claimed`，特殊测试学员 `409 special_test_learner_protected`，关联管理员账户 `409 administrator_learner_protected` |
+| PUT | `/admin/learners/{learnerId}/password` | administrator | 直接设置或重置自己已认领的学习者密码，并撤销其旧会话和未使用激活码；未认领 `403 learner_not_claimed` |
+| POST | `/admin/learners/{learnerId}/impersonate` | administrator | 免密进入自己已认领的学习者账户：创建新会话并轮换 Cookie；仅限 `role=learner` 且已激活的账户，未认领 `403 learner_not_claimed`，不撤销管理员既有会话 |
 | POST | `/admin/account-activations` | administrator | 兼容接口：为待激活账户生成一次性激活码；当前前端不使用 |
 | GET | `/admin/analytics/overview` | administrator | 管理台概览指标；待批阅/提交数只统计“我的课件” |
 | GET | `/admin/analytics/activity?days=` | administrator | 近 7～90 天每日提交/批阅趋势，按 Asia/Shanghai 自然日补零，只统计“我的课件” |
-| GET | `/admin/learners/{learnerId}/profile` | administrator | 学员详情：积分/累计/等级、近 30 天签到、分学科进度、最近作答、30 天动态；学习数据只含“我的课件” |
+| GET | `/admin/learners/{learnerId}/profile` | administrator | 学员详情：积分/累计/等级、近 30 天签到、分学科进度、最近作答、30 天动态；仅限已认领学员，未认领 `403 learner_not_claimed`，学习数据只含“我的课件” |
 
-- 认领是管理员之间的组织归属，不改变内容授权、批阅权限或学习者可见范围；管理员目录排除 `role=administrator` 的账户。
-- 学习者响应额外返回 `claimedByAccountId`、`claimedByUsername`、`claimedAt`、`lastActivityAt`、`isTest` 与 `isSpecialTest`；最近动态由服务端聚合作答提交、错题、签到和登录会话时间，客户端不得提交这些值。
+- 认领是管理员之间的组织归属，不改变科目归属、内容授权、批阅权限或学习者可见范围；管理员目录排除 `role=administrator` 的账户。
+- 学习者响应额外返回 `enrolledSubjects`、`claimedByAccountId`、`claimedByUsername`、`claimedAt`、`lastActivityAt`、`isTest` 与 `isSpecialTest`；最近动态由服务端聚合作答提交、错题、签到和登录会话时间，客户端不得提交这些值。
+- `enrolledSubjects` 是科目归属，`contentGrantArticleIds` 是文章授权；开通科目初始不授权任何文章，二者互不推导。
 - 测试学员保留正常登录与学习能力，但 analytics 的学员计数、活跃度、提交/批阅趋势排除测试学员；管理端切换器单独分组展示。
 - 特殊测试学员全局最多一个，拥有全部课件访问权限，`/rewards` 返回固定 999999999 积分且抽卡不减少；`/me/content-grants` 返回课件目录全量文章并带 `allArticles=true`，前端据此按静态目录全量放行。
-- 删除学习者会级联删除账户会话、激活码、作答、错题、签到、积分、卡片和任务/成就记录；管理员账户关联的学习者不可通过该接口删除。
+- 删除学习者会级联删除账户会话、激活码、作答、错题、签到、积分、卡片和任务/成就记录；必须由认领人操作，特殊测试学员与管理员账户关联的学习者不可通过该接口删除。
 - 管理员查询学习者作答进度只返回该学习者当前已授权文章；授权被收回的文章不再参与待批阅与进度统计。
 
 ### Courseware Claims

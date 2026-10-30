@@ -54,7 +54,8 @@ public class AdminLearnerController {
             @AuthenticationPrincipal AccountPrincipal administrator,
             @PathVariable @Positive long learnerId,
             @Valid @RequestBody ReplaceContentGrantsRequest request) {
-        learnerAdministration.replaceContentGrants(learnerId, administrator.accountId(), request.articleIds());
+        learnerAdministration.replaceContentGrants(
+                learnerId, administrator.accountId(), request.articleIds(), request.enrolledSubjects());
         return requireLearner(learnerId);
     }
 
@@ -127,7 +128,9 @@ public class AdminLearnerController {
 
     record ReplaceContentGrantsRequest(
             @NotNull @Size(max = 5_000)
-            List<@NotNull @Positive @Max(Integer.MAX_VALUE) Long> articleIds) {
+            List<@NotNull @Positive @Max(Integer.MAX_VALUE) Long> articleIds,
+            @Size(max = 100)
+            List<@NotBlank @Size(max = 50) String> enrolledSubjects) {
     }
 
     record LearnerResponse(
@@ -136,6 +139,7 @@ public class AdminLearnerController {
             boolean isTest,
             boolean isSpecialTest,
             List<Long> contentGrantArticleIds,
+            List<String> enrolledSubjects,
             Long claimedByAccountId,
             String claimedByUsername,
             Instant claimedAt,
@@ -148,6 +152,7 @@ public class AdminLearnerController {
                     learner.isTest(),
                     learner.isSpecialTest(),
                     learner.contentGrantArticleIds(),
+                    learner.enrolledSubjects(),
                     learner.claimedByAccountId(),
                     learner.claimedByUsername(),
                     learner.claimedAt(),

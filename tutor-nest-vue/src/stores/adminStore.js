@@ -11,6 +11,7 @@ function toStudent(learner) {
     permissions: Array.isArray(learner.contentGrantArticleIds)
       ? [...learner.contentGrantArticleIds]
       : [],
+    subjects: Array.isArray(learner.enrolledSubjects) ? [...learner.enrolledSubjects] : [],
     claimedByAccountId: learner.claimedByAccountId ?? null,
     claimedByUsername: learner.claimedByUsername ?? null,
     claimedAt: learner.claimedAt ?? null,
@@ -32,8 +33,14 @@ function learnerActionError(error, action) {
 
   if (code === 'learner_already_claimed') {
     message = '该学员已被其他管理员认领，请刷新后重试'
+  } else if (code === 'learner_not_claimed') {
+    message = '该学员尚未认领，请先认领后再操作'
   } else if (code === 'administrator_learner_protected') {
     message = '管理员学员受保护，不能删除'
+  } else if (code === 'special_test_learner_protected') {
+    message = '特殊测试学员受保护，不能删除'
+  } else if (code === 'courseware_not_claimed') {
+    message = '该科目不在你的课件范围内，请先认领学科'
   } else if (status === 404) {
     message = '未找到该学员，请刷新后重试'
   } else if (status === 401) {
@@ -92,7 +99,11 @@ export const useAdminStore = defineStore('admin', () => {
     // 认领/取消认领不改变内容授权：若该学员有尚未保存的勾选，保留本地改动和脏标记。
     const keepLocalPermissions = existing !== null && hasUnsavedChanges(existing.id)
     const student = keepLocalPermissions
-      ? { ...incoming, permissions: [...existing.permissions] }
+      ? {
+          ...incoming,
+          permissions: [...existing.permissions],
+          subjects: [...(existing.subjects || [])]
+        }
       : incoming
     const next = index === -1
       ? [...students.value, student]
@@ -212,15 +223,44 @@ export const useAdminStore = defineStore('admin', () => {
     markDirty(student.id)
   }
 
+  function toggleSubject(subject, enrolled, removeArticleIds = []) {
+    const student = currentStudent.value
+    if (!student) return
+    const normalized = typeof subject === 'string' ? subject.trim() : ''
+    if (!normalized) return
+
+    const subjects = [...(student.subjects || [])]
+    if (enrolled) {
+      if (!subjects.includes(normalized)) subjects.push(normalized)
+    } else {
+      const index = subjects.indexOf(normalized)
+      if (index > -1) subjects.splice(index, 1)
+    }
+    student.subjects = subjects
+
+    if (!enrolled && removeArticleIds.length > 0) {
+      const removeIds = new Set(removeArticleIds.map(Number).filter(Number.isFinite))
+      student.permissions = student.permissions.filter(id => !removeIds.has(Number(id)))
+    }
+    markDirty(student.id)
+  }
+
   async function savePermissions() {
     const student = currentStudent.value
     if (!student) return false
 
-    const saved = await learnerGateway.replaceContentGrants(student.id, student.permissions)
-    // 后端 LearnerResponse 的字段是 contentGrantArticleIds；取不到时保留本地已保存的列表，避免误清空
+    const saved = await learnerGateway.replaceContentGrants(
+      student.id,
+      student.permissions,
+      student.subjects || []
+    )
+    // 后端 LearnerResponse 的字段是 contentGrantArticleIds / enrolledSubjects；取不到时保留本地列表，避免误清空
     student.permissions = Array.isArray(saved.contentGrantArticleIds)
       ? [...saved.contentGrantArticleIds]
       : [...student.permissions]
+    student.subjects = Array.isArray(saved.enrolledSubjects)
+      ? [...saved.enrolledSubjects]
+      : [...(student.subjects || [])]
     // 保存响应若带认领/动态字段，一并刷新，保持列表元数据最新。
     if (saved.claimedByAccountId !== undefined) student.claimedByAccountId = saved.claimedByAccountId
     if (saved.claimedByUsername !== undefined) student.claimedByUsername = saved.claimedByUsername
@@ -247,6 +287,7 @@ export const useAdminStore = defineStore('admin', () => {
     releaseStudent,
     deleteStudent,
     updatePermissions,
+    toggleSubject,
     savePermissions
   }
 })

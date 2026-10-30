@@ -86,15 +86,20 @@
 
                         <span class="student-actions">
                             <button type="button" class="btn btn--sm"
+                                :disabled="!canManageStudent(student)"
+                                :title="manageDeniedTitle(student)"
                                 :aria-label="`查看 ${student.username} 的学习详情`"
                                 @click="viewDetail(student)">
                                 <i class="fas fa-chart-line" aria-hidden="true"></i> 查看详情
                             </button>
-                            <button type="button" class="btn btn--soft btn--sm" @click="openPasswordDialog(student)">
+                            <button type="button" class="btn btn--soft btn--sm"
+                                :disabled="!canManageStudent(student)" :title="manageDeniedTitle(student)"
+                                @click="openPasswordDialog(student)">
                                 <i class="fas fa-key" aria-hidden="true"></i> 设置/重置密码
                             </button>
                             <button type="button" class="btn btn--cyan btn--sm"
-                                :disabled="enteringStudentId === student.id" @click="enterStudentAccount(student)">
+                                :disabled="enteringStudentId === student.id || !canManageStudent(student)"
+                                :title="manageDeniedTitle(student)" @click="enterStudentAccount(student)">
                                 <i class="fas fa-right-to-bracket" aria-hidden="true"></i>
                                 {{ enteringStudentId === student.id ? '进入中…' : '进入账号' }}
                             </button>
@@ -110,8 +115,8 @@
                                 <i class="fas fa-arrow-up-from-bracket" aria-hidden="true"></i>
                                 {{ claimingStudentId === student.id ? '取消认领中…' : '取消认领' }}
                             </button>
-                            <button type="button" class="btn btn--danger btn--sm" :disabled="deleteSaving"
-                                @click="openDeleteDialog(student)">
+                            <button v-if="canDeleteStudent(student)" type="button" class="btn btn--danger btn--sm"
+                                :disabled="deleteSaving" @click="openDeleteDialog(student)">
                                 <i class="fas fa-trash-can" aria-hidden="true"></i> 删除学员
                             </button>
                         </span>
@@ -298,6 +303,21 @@ function claimLabel(student) {
     if (state === 'mine') return '我的'
     if (state === 'unclaimed') return '未认领'
     return `由 ${student.claimedByUsername || '其他管理员'} 认领`
+}
+
+function canManageStudent(student) {
+    return claimState(student, accountId.value) === 'mine'
+}
+
+function canDeleteStudent(student) {
+    return canManageStudent(student) && !isSpecialTestStudent(student)
+}
+
+function manageDeniedTitle(student) {
+    const state = claimState(student, accountId.value)
+    if (state === 'unclaimed') return '请先认领该学员，才能查看详情、设置密码或进入账号'
+    if (state === 'other') return '该学员已由其他管理员认领'
+    return ''
 }
 
 function viewDetail(student) {

@@ -265,6 +265,7 @@ class AdminLearnerHttpContractTest {
     void givenLearnerWhenDeletingThenRemovesAccountAndLearnerRow() throws Exception {
         Cookie adminCookie = login("admin", "Admin-password-2026");
         BrowserSession admin = csrf(adminCookie);
+        claimLearner(5, adminCookie, admin);
 
         mockMvc.perform(delete("/api/v1/admin/learners/5")
                         .cookie(adminCookie)
@@ -294,6 +295,7 @@ class AdminLearnerHttpContractTest {
                 passwords.encode("Root-admin-password-2026"));
         Cookie adminCookie = login("admin", "Admin-password-2026");
         BrowserSession admin = csrf(adminCookie);
+        claimLearner(7, adminCookie, admin);
 
         mockMvc.perform(delete("/api/v1/admin/learners/7")
                         .cookie(adminCookie)
@@ -376,6 +378,7 @@ class AdminLearnerHttpContractTest {
                         org.hamcrest.Matchers.matchesPattern("/api/v1/admin/learners/[0-9]+")))
                 .andExpect(jsonPath("$.username").value("Dana"))
                 .andExpect(jsonPath("$.contentGrantArticleIds").isEmpty())
+                .andExpect(jsonPath("$.enrolledSubjects").isEmpty())
                 .andExpect(jsonPath("$.isTest").value(true))
                 .andExpect(jsonPath("$.isSpecialTest").value(false))
                 .andExpect(jsonPath("$.claimedByAccountId").value(500))
@@ -416,6 +419,8 @@ class AdminLearnerHttpContractTest {
         jdbc.update("INSERT INTO public.courseware_catalog (article_id, subject) VALUES (3, '数学')");
         jdbc.update("INSERT INTO public.admin_subject_claim (admin_account_id, subject) VALUES (500, '数学')");
         Cookie adminCookie = login("admin", "Admin-password-2026");
+        BrowserSession admin = csrf(adminCookie);
+        claimLearner(2, adminCookie, admin);
 
         mockMvc.perform(get("/api/v1/admin/learners/2/study-progress").cookie(adminCookie))
                 .andExpect(status().isOk())
@@ -424,6 +429,43 @@ class AdminLearnerHttpContractTest {
                 .andExpect(jsonPath("$[0].totalQuestions").value(1))
                 .andExpect(jsonPath("$[0].submittedQuestions").value(0))
                 .andExpect(jsonPath("$[0].pendingReviews").value(0));
+    }
+
+    @Test
+    void givenUnclaimedLearnerWhenDeletingThenReturnsLearnerNotClaimedAndKeepsRow() throws Exception {
+        Cookie adminCookie = login("admin", "Admin-password-2026");
+        BrowserSession admin = csrf(adminCookie);
+
+        mockMvc.perform(delete("/api/v1/admin/learners/5")
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("learner_not_claimed"));
+
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM public.student WHERE id = 5", Long.class)).isEqualTo(1);
+    }
+
+    @Test
+    void givenSpecialTestLearnerWhenDeletingThenReturnsProtected() throws Exception {
+        jdbc.update("""
+                INSERT INTO public.student
+                    (id, username, permissions, is_test, is_special_test, claimed_by, claimed_at)
+                VALUES (?, ?, '{}'::integer[], true, true, 500, now())
+                """, 8L, "test");
+        Cookie adminCookie = login("admin", "Admin-password-2026");
+        BrowserSession admin = csrf(adminCookie);
+
+        mockMvc.perform(delete("/api/v1/admin/learners/8")
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("special_test_learner_protected"));
+
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM public.student WHERE id = 8", Long.class)).isEqualTo(1);
     }
 
     private BrowserSession csrf(Cookie existingCookie) throws Exception {
@@ -437,6 +479,13 @@ class AdminLearnerHttpContractTest {
         Cookie cookie = existingCookie == null ? requireCookie(result) : existingCookie;
         String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asText();
         return new BrowserSession(cookie, token);
+    }
+
+    private void claimLearner(long learnerId, Cookie cookie, BrowserSession session) throws Exception {
+        mockMvc.perform(put("/api/v1/admin/learners/" + learnerId + "/claim")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", session.csrfToken()))
+                .andExpect(status().isOk());
     }
 
     private Cookie login(String username, String password) throws Exception {

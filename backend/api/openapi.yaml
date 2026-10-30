@@ -890,7 +890,8 @@ paths:
       operationId: deleteLearner
       summary: 删除学习者及其账户
       description: >-
-        仅可删除未被认领或被当前管理员认领的学习者；关联管理员账户的学习者受保护。
+        仅可删除当前管理员自己认领的学习者；未认领或由其他管理员认领时返回 403。
+        关联管理员账户的学习者与特殊测试学员受保护，不能删除。
         账户会话、激活码与学习数据在同一事务中级联删除。
       security:
         - sessionCookie: []
@@ -911,11 +912,11 @@ paths:
         '401':
           $ref: '#/components/responses/Problem'
         '403':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/LearnerNotClaimed'
         '404':
           $ref: '#/components/responses/Problem'
         '409':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/LearnerProtected'
         '503':
           $ref: '#/components/responses/Problem'
   /admin/learners/{learnerId}/claim:
@@ -989,7 +990,11 @@ paths:
   /admin/learners/{learnerId}/content-grants:
     put:
       operationId: replaceLearnerContentGrants
-      summary: 完整替换一个学习者的文章授权
+      summary: 完整替换一个学习者的科目归属与文章授权
+      description: >-
+        `enrolledSubjects` 表示开通的科目，`articleIds` 表示具体文章授权；两者相互独立。
+        开通科目不会自动授权该科目下任何文章。未传 `enrolledSubjects` 时保留既有科目，
+        便于旧客户端只更新文章授权。科目必须在当前管理员“我的课件”范围内。
       security:
         - sessionCookie: []
       parameters:
@@ -1026,7 +1031,9 @@ paths:
     put:
       operationId: setLearnerPassword
       summary: 管理员直接设置或重置学习者密码
-      description: 成功后账户转为已激活，并撤销该账户的所有现有会话和未使用激活码。
+      description: >-
+        只能设置当前管理员自己认领的学习者密码；未认领或由其他管理员认领时返回 403。
+        成功后账户转为已激活，并撤销该账户的所有现有会话和未使用激活码。
       security:
         - sessionCookie: []
       parameters:
@@ -1052,7 +1059,7 @@ paths:
         '401':
           $ref: '#/components/responses/Problem'
         '403':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/LearnerNotClaimed'
         '404':
           $ref: '#/components/responses/Problem'
         '409':
@@ -1304,6 +1311,7 @@ paths:
       description: >-
         积分、累计积分、等级与签到为学习者全局数据；分学科进度、近期作答与每日提交
         只统计当前管理员“我的课件”范围，且分学科进度只含该学习者已授权的文章。
+        只能查看当前管理员自己认领的学习者；未认领或由其他管理员认领时返回 403。
       security:
         - sessionCookie: []
       parameters:
@@ -1326,7 +1334,7 @@ paths:
         '401':
           $ref: '#/components/responses/Problem'
         '403':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/LearnerNotClaimed'
         '404':
           $ref: '#/components/responses/Problem'
   /admin/learners/{learnerId}/impersonate:
@@ -1335,7 +1343,8 @@ paths:
       summary: 管理员免密进入学习者账户
       description: >-
         为该学习者创建新会话并轮换 Set-Cookie 会话 Cookie；管理员的既有会话
-        不会被撤销。仅可进入 role=learner 且已激活的账户。
+        不会被撤销。仅可进入当前管理员自己认领的、role=learner 且已激活的账户；
+        未认领或由其他管理员认领时返回 403。
       security:
         - sessionCookie: []
       parameters:
@@ -1421,7 +1430,25 @@ components:
           schema:
             $ref: '#/components/schemas/ApiProblem'
     CoursewareNotClaimed:
-      description: 当前管理员未认领该课件，无法访问或修改其数据；`code` 为 `courseware_not_claimed`。
+      description: >-
+        当前管理员未认领该课件或该学科，无法访问或修改其数据；
+        课件未认领时 `code` 为 `courseware_not_claimed`。
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ApiProblem'
+    LearnerNotClaimed:
+      description: >-
+        学习者尚未由当前管理员认领（或由其他管理员认领），不能查看详情、设置密码、
+        进入账号或删除；`code` 为 `learner_not_claimed`。
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ApiProblem'
+    LearnerProtected:
+      description: >-
+        学习者受保护，不能删除。关联管理员账户时 `code` 为 `administrator_learner_protected`；
+        特殊测试学员时 `code` 为 `special_test_learner_protected`。
       content:
         application/problem+json:
           schema:
@@ -1658,6 +1685,7 @@ components:
         - isTest
         - isSpecialTest
         - contentGrantArticleIds
+        - enrolledSubjects
       properties:
         learnerId:
           type: integer
@@ -1680,6 +1708,13 @@ components:
             type: integer
             format: int64
             minimum: 1
+        enrolledSubjects:
+          type: array
+          description: 管理员为学员开通的科目；与具体文章授权相互独立。
+          items:
+            type: string
+            minLength: 1
+            maxLength: 50
         claimedByAccountId:
           type: [integer, 'null']
           format: int64
@@ -1718,6 +1753,16 @@ components:
             format: int64
             minimum: 1
             maximum: 2147483647
+        enrolledSubjects:
+          type: array
+          maxItems: 100
+          description: >-
+            学员开通的科目。省略时保留既有科目；传入空数组表示取消全部科目。
+            开通科目不会自动授权该科目下的文章。
+          items:
+            type: string
+            minLength: 1
+            maxLength: 50
     CoursewareCatalogSyncRequest:
       type: object
       additionalProperties: false

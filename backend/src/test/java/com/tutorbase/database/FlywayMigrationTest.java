@@ -69,7 +69,7 @@ class FlywayMigrationTest {
                     .count();
         }
         assertThat(result.migrationsExecuted).isEqualTo((int) expectedMigrations);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("17");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("18");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
         try (Connection connection = POSTGRES.createConnection("")) {
@@ -192,6 +192,10 @@ class FlywayMigrationTest {
                     "..", "database", "reconciliation", "2026-10-31_teacher_registration_review.sql"));
             execute(connection, teacherReviewReconciliation);
             execute(connection, teacherReviewReconciliation);
+            String studentSubjectsReconciliation = Files.readString(Path.of(
+                    "..", "database", "reconciliation", "2026-10-31_student_subjects.sql"));
+            execute(connection, studentSubjectsReconciliation);
+            execute(connection, studentSubjectsReconciliation);
             assertThat(hasColumn(connection, "account", "is_super_admin")).isTrue();
             assertThat(hasConstraint(connection, "account_super_admin_role_check")).isTrue();
             assertThat(hasConstraint(connection, "teacher_registration_application_state_check")).isTrue();
@@ -199,6 +203,9 @@ class FlywayMigrationTest {
             assertThat(hasColumn(connection, "student", "claimed_at")).isTrue();
             assertThat(hasColumn(connection, "student", "is_test")).isTrue();
             assertThat(hasColumn(connection, "student", "is_special_test")).isTrue();
+            assertThat(hasColumn(connection, "student", "subjects")).isTrue();
+            assertThat(isColumnNullable(connection, "student", "subjects")).isFalse();
+            assertThat(hasConstraint(connection, "student_subjects_no_empty_check")).isTrue();
             assertThat(hasConstraint(connection, "student_special_test_state_check")).isTrue();
             assertThat(readCount(connection, """
                     SELECT count(*) FROM pg_indexes
@@ -239,8 +246,8 @@ class FlywayMigrationTest {
 
     @Test
     void givenV11SchemaAppliedManuallyWhenFlywayReplaysV11ThenMigrationIsIdempotent() throws Exception {
-        // 生产事故回归：先手工执行 reconciliation（schema 已含 V11/V12/V15/V16/V17），但历史表停在 V10；
-        // 新镜像启动时 Flyway 会再次执行 V11、V12、V14、V15、V16、V17，必须成功记账而不是因对象已存在而失败。
+        // 生产事故回归：先手工执行 reconciliation（schema 已含 V11/V12/V15/V16/V17/V18），但历史表停在 V10；
+        // 新镜像启动时 Flyway 会再次执行 V11、V12、V14、V15、V16、V17、V18，必须成功记账而不是因对象已存在而失败。
         try (PostgreSQLContainer driftDatabase = new PostgreSQLContainer("postgres:17-alpine")) {
             driftDatabase.start();
             Flyway.configure()
@@ -250,7 +257,7 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            // 复刻生产状态：V11/V12/V15/V16/V17 的对象已手工建好，历史表仍停在 V10。
+            // 复刻生产状态：V11/V12/V15/V16/V17/V18 的对象已手工建好，历史表仍停在 V10。
             try (Connection connection = driftDatabase.createConnection("")) {
                 execute(connection, Files.readString(Path.of(
                         "..", "database", "reconciliation", "2026-10-27_learner_claiming.sql")));
@@ -260,12 +267,16 @@ class FlywayMigrationTest {
                         "..", "database", "reconciliation", "2026-10-30_courseware_exclusion.sql")));
                 execute(connection, Files.readString(Path.of(
                         "..", "database", "reconciliation", "2026-10-31_teacher_registration_review.sql")));
+                execute(connection, Files.readString(Path.of(
+                        "..", "database", "reconciliation", "2026-10-31_student_subjects.sql")));
                 assertThat(readCount(connection,
                         "SELECT count(*) FROM public.flyway_schema_history WHERE version = '11'")).isZero();
                 assertThat(readCount(connection,
                         "SELECT count(*) FROM public.flyway_schema_history WHERE version = '12'")).isZero();
                 assertThat(readCount(connection,
                         "SELECT count(*) FROM public.flyway_schema_history WHERE version = '15'")).isZero();
+                assertThat(readCount(connection,
+                        "SELECT count(*) FROM public.flyway_schema_history WHERE version = '18'")).isZero();
             }
 
             MigrateResult result = Flyway.configure()
@@ -274,7 +285,7 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(6);
+            assertThat(result.migrationsExecuted).isEqualTo(7);
             try (Connection connection = driftDatabase.createConnection("")) {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.flyway_schema_history
@@ -300,6 +311,12 @@ class FlywayMigrationTest {
                         SELECT count(*) FROM public.flyway_schema_history
                         WHERE version = '17' AND success
                         """)).isEqualTo(1);
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.flyway_schema_history
+                        WHERE version = '18' AND success
+                        """)).isEqualTo(1);
+                assertThat(hasColumn(connection, "student", "subjects")).isTrue();
+                assertThat(hasConstraint(connection, "student_subjects_no_empty_check")).isTrue();
                 assertThat(hasColumn(connection, "account", "is_super_admin")).isTrue();
                 assertThat(hasConstraint(connection, "account_super_admin_role_check")).isTrue();
                 assertThat(hasConstraint(connection, "teacher_registration_application_state_check")).isTrue();
@@ -363,7 +380,7 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(4);
+            assertThat(result.migrationsExecuted).isEqualTo(5);
             try (Connection connection = preV16Database.createConnection("")) {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.student
@@ -380,6 +397,19 @@ class FlywayMigrationTest {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.student
                         WHERE lower(username) = 'alice' AND is_test AND NOT is_special_test
+                        """)).isEqualTo(1);
+                // V18 从既有 permissions 反推科目；catalog 外的文章不产生科目。
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.student
+                        WHERE lower(username) = 'test' AND subjects = '{数学}'::text[]
+                        """)).isEqualTo(1);
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.student
+                        WHERE lower(username) = 'alice' AND subjects = '{}'::text[]
+                        """)).isEqualTo(1);
+                assertThat(readCount(connection, """
+                        SELECT count(*) FROM public.student
+                        WHERE lower(username) = 'pyt' AND subjects = '{}'::text[]
                         """)).isEqualTo(1);
                 // 特殊测试学员的 permissions 补齐为 catalog 全部 article_id（int8 -> int4）。
                 assertThat(readCount(connection, """

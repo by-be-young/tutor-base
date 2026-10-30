@@ -29,4 +29,14 @@ final class AnalyticsHttpExceptionHandler {
                 exception.getMessage(),
                 request);
     }
+
+    @ExceptionHandler(AnalyticsLearnerNotClaimed.class)
+    ProblemDetail learnerNotClaimed(AnalyticsLearnerNotClaimed exception, HttpServletRequest request) {
+        return ApiProblem.create(
+                HttpStatus.FORBIDDEN,
+                "learner_not_claimed",
+                "学员未认领",
+                exception.getMessage(),
+                request);
+    }
 }

@@ -18,7 +18,7 @@ anon key 或数据库写权限。
 ### 开发阶段与部署门槛
 
 当前采用“模块化单体 + 分层 MVC”架构。Controller 负责 HTTP，按业务能力划分的 Service 负责授权、事务与业务规则，
-JdbcClient 直接访问 PostgreSQL；数据库结构由 Flyway V1 至 V12 管理。OpenAPI、Testcontainers HTTP contract、
+JdbcClient 直接访问 PostgreSQL；数据库结构由 Flyway V1 至 V18 管理。OpenAPI、Testcontainers HTTP contract、
 前端 gateway 测试和 Playwright E2E 均进入 CI。
 
 首次发布 V5 的门槛是：
@@ -85,7 +85,7 @@ Spring Boot 会从当前 `backend` 工作目录自动读取 `.env`。该文件�
 .\mvnw.cmd spring-boot:run
 ```
 
-首次启动会由 Flyway 自动执行 V1 至 V12；以后启动只校验历史，不会重复执行已经成功的 migration。出现
+首次启动会由 Flyway 自动执行 V1 至 V18；以后启动只校验历史，不会重复执行已经成功的 migration。出现
 `Started TutorBaseApplication` 后，后端地址为 `http://localhost:8080`。
 
 系统环境变量的优先级高于 `.env`，因此仍可以在 CI、Docker 或云服务器中直接注入变量。生产环境不要复制本地示例值；
@@ -172,7 +172,7 @@ docker stop tutor-base-postgres
 .\mvnw.cmd clean verify
 ```
 
-完整验证会启动临时 PostgreSQL 17 容器，执行 V1 至 V12，并再次调用 Flyway，确认第二次 migrate 执行数为 0。
+完整验证会启动临时 PostgreSQL 17 容器，执行 V1 至 V18，并再次调用 Flyway，确认第二次 migrate 执行数为 0。
 
 前端构建验证：
 
@@ -296,6 +296,7 @@ PostgreSQL 结构只通过 Flyway 管理：
 - `V15__add_courseware_exclusion.sql`：新增课件排除表；学科认领覆盖下可单独释放某篇课件，重新认领恢复，释放学科时清理该科排除。
 - `V16__add_test_learners.sql`：为 `student` 增加测试学员/特殊测试学员标记、唯一特殊测试约束，并回填既有学员（除 pyt、Mel. 外全部测试，test 为特殊测试）。
 - `V17__teacher_registration_review.sql`：为 `account` 增加 `is_super_admin` 标记并把 `young` 置为超级管理员；新增 `teacher_registration_application`、待审核用户名部分唯一索引、审核状态约束与运行角色授权。
+- `V18__student_subjects.sql`：为 `student` 增加 `subjects text[]` 科目归属列与非空字符串约束；按既有 `permissions × courseware_catalog` 幂等回填科目，作为科目与文章授权分离的存储基础。
 
 ### Supabase 出现 `relation "account" already exists`
 
@@ -389,7 +390,9 @@ docker run --rm -p 8080:8080 tutor-base-backend:dev
 - `PUT /api/v1/admin/learners/{learnerId}/claim`：认领学习者；已被其他管理员认领返回 `409 learner_already_claimed`。
 - `DELETE /api/v1/admin/learners/{learnerId}/claim`：取消自己的认领；未认领时幂等返回 `204`。
 - `DELETE /api/v1/admin/learners/{learnerId}`：删除学习者及其账户与学习数据；管理员账户关联学习者受保护。
-- `PUT /api/v1/admin/learners/{learnerId}/content-grants`：在“我的课件”范围内完整替换文章授权，范围外既有授权保留。
+- `PUT /api/v1/admin/learners/{learnerId}/content-grants`：在“我的课件”范围内完整替换科目归属（`enrolledSubjects`）与文章授权（`articleIds`），范围外既有授权保留；开通科目初始不授权任何文章。
+- `POST /api/v1/admin/learners/{learnerId}/impersonate`：只能进入当前管理员自己认领的已激活学习者账号；未认领或他人认领返回 `403 learner_not_claimed`。
+- `PUT /api/v1/admin/learners/{learnerId}/password`：只能设置当前管理员自己认领的学习者密码；未认领或他人认领返回 `403 learner_not_claimed`。
 - `PUT /api/v1/admin/learners/{learnerId}/password`：管理员设置或重置学习者密码。
 - `GET /api/v1/admin/learners/{learnerId}/study-progress`：只返回该学习者已授权、且属于当前管理员“我的课件”的作答与待批阅进度。
 - `POST /api/v1/admin/courseware-catalog/sync`：管理端同步静态课件目录（articleId → 学科/标题），幂等 upsert。

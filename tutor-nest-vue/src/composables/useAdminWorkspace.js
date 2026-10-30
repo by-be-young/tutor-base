@@ -59,9 +59,10 @@ export function useAdminWorkspace() {
     return Array.from(subjects).sort()
   })
 
-  // 当前学员实际在学的学科数（有任意已授权文章），用于概览上下文提示。
+  // 当前学员已开通的科目数（与是否授权文章无关），用于概览上下文提示。
   const activeSubjectCount = computed(() => activeSubjects(buildSubjectScope({
     subjects: allSubjects.value,
+    enrolledSubjects: currentStudent.value?.subjects || [],
     articles: blogData.value,
     permissions: currentPermissions.value
   })).length)

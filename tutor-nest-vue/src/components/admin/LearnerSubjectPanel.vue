@@ -8,7 +8,7 @@
                     学员科目
                 </h2>
                 <p class="text-sm text-muted">
-                    先在这里给学员设定所学科目：开通整科即包含该科目下的全部文章，保存后立即生效。个别文章可在「权限管理」里微调。
+                    先在这里给学员开通科目：开通只建立科目归属，初始不授权该科目下任何文章。保存后到「权限管理」按需选择具体文章；取消科目会一并移除该科目下已授权的文章。
                 </p>
             </div>
             <span class="chip chip--cyan subject-head__student">
@@ -59,13 +59,14 @@
                         </span>
                         <span class="subject-card__name">{{ item.subject }}</span>
                         <span class="subject-card__state">{{ item.enrolled ? '在学' : '未开通' }}</span>
-                        <span v-if="item.partial" class="subject-card__hint">仅部分文章已授权</span>
+                        <span v-if="item.enrolled && item.granted === 0" class="subject-card__hint">尚未授权文章</span>
+                        <span v-else-if="item.partial" class="subject-card__hint">仅部分文章已授权</span>
                     </button>
                 </div>
 
                 <p class="subject-tip">
                     <i aria-hidden="true" class="fas fa-circle-info"></i>
-                    点击科目卡片即可整科开通或取消；取消整科会一并移除该科目下已授权的文章。
+                    点击科目卡片即可开通或取消科目；开通后不会自动授权文章，需要到「权限管理」逐篇勾选。取消科目会一并移除该科目下已授权的文章。
                 </p>
             </template>
         </div>
@@ -90,7 +91,7 @@
 import { computed, watch } from 'vue'
 import { useAdminStore } from '@/stores/adminStore'
 import { useCoursewareStore } from '@/stores/coursewareStore'
-import { buildSubjectScope, subjectToggleIds } from '@/utils/adminSubjects'
+import { buildSubjectScope, subjectToggleChange } from '@/utils/adminSubjects'
 import EmptyState from '@/components/ui/EmptyState.vue'
 
 const props = defineProps({
@@ -119,6 +120,7 @@ const currentStudent = computed(() => props.students
     .find(item => String(item.id) === String(props.selectedStudentId)) || null)
 const currentStudentName = computed(() => currentStudent.value?.username || '未选择学员')
 const currentPermissions = computed(() => currentStudent.value?.permissions || [])
+const currentSubjects = computed(() => currentStudent.value?.subjects || [])
 
 // 学员科目也只在「我的课件」内操作：学科卡片只显示可见学科，文章范围同样收敛。
 const coursewareStatus = computed(() => {
@@ -147,26 +149,27 @@ const visibleSubjects = computed(() => props.allSubjects.filter(subject =>
 
 const scope = computed(() => buildSubjectScope({
     subjects: visibleSubjects.value,
+    enrolledSubjects: currentSubjects.value,
     articles: visibleArticles.value,
     permissions: currentPermissions.value
 }))
 
-// 整科开通即「在学」；部分文章已授权时提示可在权限管理里微调
+// 科目是否开通只看 subjects；部分文章已授权时另给提示，避免把「开通科目」误当成「授权整科文章」
 const subjectCards = computed(() => scope.value.map(item => ({
     subject: item.subject,
-    enrolled: item.granted > 0,
-    partial: item.granted > 0 && item.granted < item.total,
+    enrolled: item.enrolled,
+    partial: item.enrolled && item.granted > 0 && item.granted < item.total,
     tone: subjectTone(item.subject)
 })))
 
 function toggleSubject(subject) {
-    const { ids, checked } = subjectToggleIds({
+    const { enrolled, removeArticleIds } = subjectToggleChange({
         articles: props.blogData,
-        permissions: currentPermissions.value,
+        subjects: visibleSubjects.value,
+        enrolledSubjects: currentSubjects.value,
         subject
     })
-    if (ids.length === 0) return
-    ids.forEach(blogId => adminStore.updatePermissions(blogId, checked))
+    adminStore.toggleSubject(subject, enrolled, removeArticleIds)
     emit('permission-change')
 }
 </script>

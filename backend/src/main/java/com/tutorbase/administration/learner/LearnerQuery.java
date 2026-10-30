@@ -24,6 +24,7 @@ public interface LearnerQuery {
             long learnerId,
             String username,
             List<Long> contentGrantArticleIds,
+            List<String> enrolledSubjects,
             boolean isTest,
             boolean isSpecialTest,
             Long claimedByAccountId,
@@ -33,6 +34,7 @@ public interface LearnerQuery {
 
         public Learner {
             contentGrantArticleIds = List.copyOf(contentGrantArticleIds);
+            enrolledSubjects = List.copyOf(enrolledSubjects);
         }
     }
 

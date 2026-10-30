@@ -88,6 +88,11 @@ class IdentityHttpContractTest {
         jdbc.update("INSERT INTO public.student (id, username, permissions) VALUES (5, 'Alice', '{9,3}')");
         insertAccount(2, "young", "administrator", "active", "Admin-password-2026");
         insertAccount(5, "Alice", "learner", "pending_activation", null);
+        jdbc.update("""
+                UPDATE public.student
+                SET claimed_by = 2, claimed_at = now()
+                WHERE id IN (2, 5)
+                """);
         jdbc.update("UPDATE public.account SET is_super_admin = true WHERE username_normalized = 'young'");
         jdbc.update("""
                 INSERT INTO public.account
@@ -232,6 +237,28 @@ class IdentityHttpContractTest {
                         .content("{\"password\":\"New-password-2026\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("forbidden"));
+    }
+
+    @Test
+    void givenUnclaimedLearnerWhenSettingPasswordOrImpersonatingThenReturnsLearnerNotClaimed() throws Exception {
+        jdbc.update("UPDATE public.student SET claimed_by = NULL, claimed_at = NULL WHERE id = 5");
+        Cookie adminCookie = login(csrf(null), "young", "Admin-password-2026");
+        BrowserSession admin = csrf(adminCookie);
+
+        mockMvc.perform(put("/api/v1/admin/learners/5/password")
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"Valid-password-2026\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("learner_not_claimed"));
+
+        setActivePassword(5, "Learner-password-2026");
+        mockMvc.perform(post("/api/v1/admin/learners/5/impersonate")
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("learner_not_claimed"));
     }
 
     @Test

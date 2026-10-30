@@ -282,7 +282,8 @@ class TestLearnerHttpContractTest {
                 .andExpect(jsonPath("$.points[6].submissions").value(1))
                 .andExpect(jsonPath("$.points[6].reviews").value(0));
 
-        // profile 不排除测试学员，仍可查看其详情。
+        // profile 不排除测试学员，但必须先认领；认领后仍可查看其详情。
+        jdbc.update("UPDATE public.student SET claimed_by = 500, claimed_at = now() WHERE id = 3");
         mockMvc.perform(get("/api/v1/admin/learners/3/profile").cookie(adminCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.learnerId").value(3))

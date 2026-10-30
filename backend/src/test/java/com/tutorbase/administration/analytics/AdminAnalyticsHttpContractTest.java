@@ -359,6 +359,16 @@ class AdminAnalyticsHttpContractTest {
     }
 
     @Test
+    void givenUnclaimedLearnerWhenReadingProfileThenReturnsLearnerNotClaimed() throws Exception {
+        Cookie adminCookie = login("admin", "Admin-password-2026");
+
+        mockMvc.perform(get("/api/v1/admin/learners/5/profile").cookie(adminCookie))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("learner_not_claimed"));
+    }
+
+    @Test
     void givenMissingLearnerWhenReadingProfileThenReturnsNotFound() throws Exception {
         Cookie adminCookie = login("admin", "Admin-password-2026");
 

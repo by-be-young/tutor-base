@@ -53,6 +53,37 @@ final class LearnerHttpExceptionHandler {
                 request);
     }
 
+    @ExceptionHandler(LearnerNotClaimed.class)
+    ProblemDetail learnerNotClaimed(LearnerNotClaimed exception, HttpServletRequest request) {
+        return ApiProblem.create(
+                HttpStatus.FORBIDDEN,
+                "learner_not_claimed",
+                "学员未认领",
+                exception.getMessage(),
+                request);
+    }
+
+    @ExceptionHandler(LearnerSubjectNotClaimed.class)
+    ProblemDetail learnerSubjectNotClaimed(LearnerSubjectNotClaimed exception, HttpServletRequest request) {
+        return ApiProblem.create(
+                HttpStatus.FORBIDDEN,
+                "courseware_not_claimed",
+                "学科未认领",
+                exception.getMessage(),
+                request);
+    }
+
+    @ExceptionHandler(SpecialTestLearnerProtected.class)
+    ProblemDetail specialTestLearnerProtected(
+            SpecialTestLearnerProtected exception, HttpServletRequest request) {
+        return ApiProblem.create(
+                HttpStatus.CONFLICT,
+                "special_test_learner_protected",
+                "特殊测试学员受保护",
+                exception.getMessage(),
+                request);
+    }
+
     @ExceptionHandler(LearnerCoursewareNotClaimed.class)
     ProblemDetail learnerCoursewareNotClaimed(
             LearnerCoursewareNotClaimed exception, HttpServletRequest request) {
