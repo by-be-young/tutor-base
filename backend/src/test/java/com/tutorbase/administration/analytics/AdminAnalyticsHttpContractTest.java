@@ -61,7 +61,7 @@ class AdminAnalyticsHttpContractTest {
     private static final long CHEMISTRY_ARTICLE_TWO = 102L;
     private static final long ENGLISH_ARTICLE = 201L;
     private static final long PHYSICS_ARTICLE = 301L;
-    private static final String CHEMISTRY = "化学";
+    private static final String CHEMISTRY = "高中化学";
 
     @TestConfiguration(proxyBeanMethods = false)
     static class FixedClockConfiguration {
@@ -133,12 +133,12 @@ class AdminAnalyticsHttpContractTest {
         insertActiveAdministrator(ADMIN2_ACCOUNT_ID, "admin2", "Admin2-password-2026");
         jdbc.update("""
                 INSERT INTO public.courseware_catalog (article_id, subject, title)
-                VALUES (101, '化学', '原子结构'), (102, '化学', '元素周期表'),
-                       (201, '英语', '时态'), (301, '物理', '力学')
+                VALUES (101, '高中化学', '原子结构'), (102, '高中化学', '元素周期表'),
+                       (201, '高中英语', '时态'), (301, '物理', '力学')
                 """);
         jdbc.update("""
                 INSERT INTO public.admin_subject_claim (admin_account_id, subject)
-                VALUES (500, '化学')
+                VALUES (500, '高中化学')
                 """);
         jdbc.update("""
                 INSERT INTO public.admin_courseware_claim (admin_account_id, article_id)

@@ -666,8 +666,8 @@ const features = computed(() => [
 ])
 
 const SUBJECT_META = {
-  化学: { key: 'chem', icon: 'fa-flask', cover: 'subjects/chem-bg.png' },
-  英语: { key: 'en', icon: 'fa-language', cover: 'subjects/en-bg.png' },
+  高中化学: { key: 'chem', icon: 'fa-flask', cover: 'subjects/chem-bg.png' },
+  高中英语: { key: 'en', icon: 'fa-language', cover: 'subjects/en-bg.png' },
   初中英语: { key: 'en-junior', icon: 'fa-graduation-cap', cover: 'subjects/junior-en-bg.png' }
 }
 

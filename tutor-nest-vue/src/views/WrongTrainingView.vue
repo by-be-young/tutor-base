@@ -433,8 +433,8 @@ function safeText(text) {
 
 // 学科 → 徽章配色（Riso 印刷色）
 function subjectChipClass(subject) {
-    if (subject === '化学') return 'chip--cyan'
-    if (subject === '英语') return 'chip--pink'
+    if (subject === '高中化学') return 'chip--cyan'
+    if (subject === '高中英语') return 'chip--pink'
     if (subject === '初中英语') return 'chip--amber'
     return 'chip--violet'
 }

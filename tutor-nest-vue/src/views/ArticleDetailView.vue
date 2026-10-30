@@ -427,9 +427,9 @@ const modeChipClass = computed(() => {
 
 const subjectMeta = computed(() => {
     const series = currentArticle.value?.series || ''
-    if (series.includes('化学')) return { label: series, tone: 'cyan', icon: 'fa-flask' }
+    if (series.includes('高中化学')) return { label: series, tone: 'cyan', icon: 'fa-flask' }
     if (series.includes('初中英语')) return { label: series, tone: 'amber', icon: 'fa-language' }
-    if (series.includes('英语')) return { label: series, tone: 'violet', icon: 'fa-language' }
+    if (series.includes('高中英语')) return { label: series, tone: 'violet', icon: 'fa-language' }
     return { label: series, tone: 'violet', icon: 'fa-book' }
 })
 

@@ -1422,7 +1422,7 @@ components:
       name: subject
       in: path
       required: true
-      description: URL 编码的学科名称，例如 %E5%8C%96%E5%AD%A6（化学）。
+      description: URL 编码的学科名称，例如 %E9%AB%98%E4%B8%AD%E5%8C%96%E5%AD%A6（高中化学）。
       schema: { type: string, minLength: 1, maxLength: 100 }
     QuestionId:
       name: questionId

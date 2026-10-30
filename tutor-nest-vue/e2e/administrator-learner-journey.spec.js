@@ -77,9 +77,9 @@ test('administrator and learner complete the protected learning journey', async 
   // 管理端业务接口只处理「我的课件」：先同步课件目录并认领学科，再授权与设置答案。
   expect((await api(page, '/admin/courseware-catalog/sync', {
     method: 'POST',
-    body: { items: [{ articleId: 23, subject: '化学', title: 'e2e-article' }] }
+    body: { items: [{ articleId: 23, subject: '高中化学', title: 'e2e-article' }] }
   })).status).toBe(200)
-  expect((await api(page, '/admin/courseware-claims/subjects/%E5%8C%96%E5%AD%A6', {
+  expect((await api(page, '/admin/courseware-claims/subjects/%E9%AB%98%E4%B8%AD%E5%8C%96%E5%AD%A6', {
     method: 'PUT'
   })).status).toBe(200)
   expect((await api(page, `/admin/learners/${learnerId}/content-grants`, {

@@ -240,12 +240,12 @@ import CountUp from '@/components/ui/CountUp.vue'
  * 学科主题映射：封面统一使用站内 cards 图片（BASE_URL 兼容部署子路径），
  * 加载失败时回落到纯色块 + 图标
  * - accent      驱动文件夹卡片的印刷色标签（cyan/violet/amber → 天蓝/钴蓝/奶油黄）
- * - coverClass  驱动杂志封面的色块配色（化学=钴蓝+天蓝，英语=朱红+奶油黄，初中英语=黄绿+墨黑）
+ * - coverClass  驱动杂志封面的色块配色（高中化学=钴蓝+天蓝，高中英语=朱红+奶油黄，初中英语=黄绿+墨黑）
  */
 const CARD_BASE = `${import.meta.env.BASE_URL}`
 
 const SUBJECT_THEMES = {
-  '化学': {
+  '高中化学': {
     accent: 'cyan',
     cover: `${CARD_BASE}subjects/chem-bg.png`,
     coverClass: 'cover--cobalt',
@@ -254,7 +254,7 @@ const SUBJECT_THEMES = {
     watermark: 'CHEMISTRY',
     blurb: '从物质的量到电化学，把反应、结构与能量串成一张可展开的知识地图。'
   },
-  '英语': {
+  '高中英语': {
     accent: 'violet',
     cover: `${CARD_BASE}subjects/en-bg.png`,
     coverClass: 'cover--vermilion',
@@ -411,7 +411,7 @@ const pendingTotal = computed(() => {
  * 5. 递归排序：文件夹优先，同级按名称字母序排列
  *
  * 示例转换：
- *   输入：{ path: "化学/理论课讲义/0 物质的量", title: "0 物质的量", id: 3 }
+ *   输入：{ path: "高中化学/理论课讲义/0 物质的量", title: "0 物质的量", id: 3 }
  *   输出：{ name: "理论课讲义" → children: [{ name: "0 物质的量", isFile: true, blogId: 3 }] }
  *
  * @param {Array} articles - 待构建的博客数据数组
@@ -422,7 +422,7 @@ function buildTree(articles) {
   const root = { children: [] }
 
   articles.forEach(blog => {
-    // 分割路径并去掉系列名（路径形如 "化学/理论课讲义/文档.md"）
+    // 分割路径并去掉系列名（路径形如 "高中化学/理论课讲义/文档.md"）
     const parts = blog.path.split('/')
     const dirParts = parts.slice(1)
     const title = blog.title
