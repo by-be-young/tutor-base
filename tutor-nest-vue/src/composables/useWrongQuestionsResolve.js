@@ -4,6 +4,7 @@
 import { ref } from 'vue'
 import { useArticleStore } from '@/stores/blogStore'
 import { analyzeCourseware } from '@/utils/questionText'
+import { loadArticleMarkdown } from '@/utils/articleContent'
 
 export function useWrongQuestionsResolve() {
     const blogStore = useArticleStore()
@@ -21,15 +22,7 @@ export function useWrongQuestionsResolve() {
         const key = String(blogId)
         if (articleCache.has(key)) return articleCache.get(key)
         const blog = blogStore.blogData.find(b => Number(b.id) === Number(blogId))
-        let md = null
-        if (blog) {
-            try {
-                const res = await fetch(`${import.meta.env.BASE_URL}articles/${blog.path}`)
-                if (res.ok) md = await res.text()
-            } catch {
-                md = null
-            }
-        }
+        const md = blog ? await loadArticleMarkdown(blog) : null
         articleCache.set(key, md)
         return md
     }

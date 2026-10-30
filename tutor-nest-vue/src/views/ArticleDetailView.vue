@@ -218,6 +218,7 @@ import { useImageEmbed } from '@/composables/useImageEmbed'
 import { useDrawingInDetail } from '@/composables/useDrawing'
 import { learningGateway } from '@/gateways/learningGateway'
 import { showToast } from '@/utils/toast'
+import { loadArticleMarkdown } from '@/utils/articleContent'
 import { ANSWER_TOKEN, STEM_TOKEN, STEM_TOKEN_ONE, buildQuestionTextMap, normalizeMarkerIndentation } from '@/utils/questionText'
 import { marked } from 'marked'
 
@@ -1395,11 +1396,9 @@ async function loadContent() {
             }
         }
 
-        // 加载 Markdown 内容
-        const response = await fetch(`${import.meta.env.BASE_URL}articles/${blog.path}`)
-        if (!response.ok) throw new Error('文件加载失败')
-
-        let content = await response.text()
+        // 加载 Markdown 内容：优先托管接口，回退静态文件
+        const content = await loadArticleMarkdown(blog)
+        if (!content) throw new Error('文件加载失败')
 
         // 1. 处理图片嵌入语法
         content = processMarkdown(content)

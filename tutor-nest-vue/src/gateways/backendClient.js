@@ -59,8 +59,23 @@ async function request(path, options = {}, retryCsrf = true) {
   return parseResponse(response)
 }
 
+async function requestText(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: options.method || 'GET',
+    headers: { Accept: 'text/markdown, text/plain', ...options.headers },
+    credentials: 'include',
+    cache: 'no-store'
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new BackendGatewayError(body, response.status)
+  }
+  return response.text()
+}
+
 export const backendClient = {
   request,
+  requestText,
   clearCsrfToken() {
     csrfToken = null
   }

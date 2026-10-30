@@ -221,6 +221,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCoursewareStore } from '@/stores/coursewareStore'
 import { grantedArticles } from '@/utils/adminSubjects'
+import { loadArticleMarkdown } from '@/utils/articleContent'
 import { learningGateway } from '@/gateways/learningGateway'
 import { showToast } from '@/utils/toast'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -417,10 +418,8 @@ function extractQuestionIds(markdown) {
     return ids
 }
 
-async function fetchArticleMarkdown(path) {
-    const response = await fetch(`${import.meta.env.BASE_URL}articles/${path}`)
-    if (!response.ok) throw new Error('无法读取文章内容，请稍后重试。')
-    return response.text()
+async function fetchArticleMarkdown(blog) {
+    return loadArticleMarkdown(blog)
 }
 
 async function openArticle(blogId) {
@@ -439,7 +438,7 @@ async function openArticle(blogId) {
     snapshot.value = ''
     try {
         const [markdownResult, keysResult] = await Promise.allSettled([
-            fetchArticleMarkdown(blog.path),
+            fetchArticleMarkdown(blog),
             learningGateway.getAnswerKeys(blogId)
         ])
         if (keysResult.status === 'rejected') throw keysResult.reason

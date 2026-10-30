@@ -742,6 +742,22 @@ Content-Type: application/json
 4. 来源更新后，"我的课件"出现"有可更新资源"，汇总面板区分"更新/新增/删除/改名"，可逐条预览。
 5. 单条点开 → 差异弹窗 → 覆盖（自动备份）/ 保留 / 稍后。
 
+### 9.5 P0 前端实现状态（2026-10-30）
+
+已落地（双读，失败自动回退静态目录，保证 GitHub Pages 与后端未就绪时可用）：
+
+| 位置 | 实现 |
+| --- | --- |
+| `src/gateways/backendClient.js` | 新增 `requestText`：正文按 `text/markdown` 读取，非 2xx 抛 `BackendGatewayError` |
+| `src/gateways/coursewareGateway.js` | 新增 `fetchManifests()` 与 `fetchArticleContent(teacherId, articleId)` |
+| `src/utils/coursewareManifest.js` | `flattenManifests()`：清单 → `{id,title,series,date,path,teacherId,teacherArticleId}`，跨老师撞号退回 `articleId` |
+| `src/stores/blogStore.js` | 先取 `/courseware/manifests`，为空或失败时回退 `data/articles.json`；`source` 暴露当前来源 |
+| `src/utils/articleContent.js` | `loadArticleMarkdown(blog)`：托管接口优先，403/404/网络失败回退静态文件 |
+| `ArticleDetailView` / `useWrongQuestionsResolve` / `admin/AnswerPanel` | 正文读取改走上述共享函数（题干解析逻辑不变） |
+
+尚未落地（属 P1/P2）：学科卡片按 `student_teacher` 分组、`stem_snapshot` 优先、资源目录/获取/更新汇总、在线编辑器。
+`authStore.loadAllArticleIds()` 仍以静态索引为准（管理员与特殊测试学员的全量放行集合），随 P4 换主键一并改造。
+
 ---
 
 ## 10. 后端改造
