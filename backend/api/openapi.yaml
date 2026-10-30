@@ -1506,6 +1506,193 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
+  /admin/courseware/shares:
+    post:
+      operationId: createCoursewareShares
+      summary: 分享整科或指定单篇
+      description: >-
+        只能分享自己已发布的课件。整科分享用 `scope=subject`，单篇用 `scope=article` 并给出 `articleIds`。
+        同一 (老师, 科目, 单篇) 重复提交时刷新权限而不是新增记录。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareShareRequest'
+      responses:
+        '200':
+          description: 生效中的分享记录。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoursewareShare'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listCoursewareShares
+      summary: 我发出的分享
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: includeRevoked
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: 分享列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoursewareShare'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/shares/{shareId}:
+    delete:
+      operationId: revokeCoursewareShare
+      summary: 撤回分享
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: shareId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: 已撤回。
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/resources:
+    get:
+      operationId: listCoursewareResources
+      summary: 资源目录（其他老师已分享的科目）
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 可获取的老师科目列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoursewareSharedSubject'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/resources/tree:
+    get:
+      operationId: getCoursewareResourceTree
+      summary: 展开某位老师的共享树
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: teacherId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: subject
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 被分享的篇目（保留完整逻辑路径）。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoursewareSharedArticle'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/copies:
+    post:
+      operationId: acquireCourseware
+      summary: 获取课件（复制到自己的命名空间）
+      description: >-
+        内容寻址复制：同一份正文物理上只存一份。结果先落在未发布草稿，下次发布随版本上线；
+        重复获取同一篇返回 `alreadyExists=true` 与原有 `copyId`。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareAcquireRequest'
+      responses:
+        '200':
+          description: 获取结果。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoursewareCopyResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listCoursewareCopies
+      summary: 我的获取关系
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 获取关系列表（含是否有可用更新）。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoursewareCopySummary'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
 components:
   parameters:
     CsrfHeader:
@@ -2977,3 +3164,161 @@ components:
         publishedAt:
           type: string
           format: date-time
+    CoursewareShareRequest:
+      type: object
+      additionalProperties: false
+      required: [subject, scope, allowPreview, allowCopy]
+      properties:
+        subject:
+          type: string
+          maxLength: 60
+        scope:
+          type: string
+          enum: [subject, article]
+        articleIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: scope=article 时必填
+        allowPreview:
+          type: boolean
+        allowCopy:
+          type: boolean
+    CoursewareShare:
+      type: object
+      additionalProperties: false
+      required: [shareId, scope, subject, allowPreview, allowCopy, revoked]
+      properties:
+        shareId:
+          type: integer
+          format: int64
+        scope:
+          type: string
+          enum: [subject, article]
+        subject:
+          type: string
+        articleId:
+          type: [integer, 'null']
+          format: int64
+        allowPreview:
+          type: boolean
+        allowCopy:
+          type: boolean
+        revoked:
+          type: boolean
+    CoursewareSharedSubject:
+      type: object
+      additionalProperties: false
+      required: [teacherId, teacherName, subject, wholeSubject, articleCount, allowCopy]
+      properties:
+        teacherId:
+          type: integer
+          format: int64
+        teacherName:
+          type: string
+        subject:
+          type: string
+        wholeSubject:
+          type: boolean
+        articleCount:
+          type: integer
+          minimum: 0
+        allowCopy:
+          type: boolean
+    CoursewareSharedArticle:
+      type: object
+      additionalProperties: false
+      required: [articleId, title, series, logicalPath, contentHash, questionCount, allowCopy]
+      properties:
+        articleId:
+          type: integer
+          format: int64
+        legacyArticleId:
+          type: [integer, 'null']
+          format: int64
+        title:
+          type: string
+        series:
+          type: string
+        logicalPath:
+          type: string
+        contentHash:
+          type: string
+        questionCount:
+          type: integer
+          minimum: 0
+        allowCopy:
+          type: boolean
+    CoursewareAcquireRequest:
+      type: object
+      additionalProperties: false
+      required: [sourceTeacherId, subject]
+      properties:
+        sourceTeacherId:
+          type: integer
+          format: int64
+        subject:
+          type: string
+          maxLength: 60
+        articleIds:
+          type: array
+          description: 为空表示获取整科（需整科分享）
+          items:
+            type: integer
+            format: int64
+        targetRootPath:
+          type: string
+          maxLength: 500
+    CoursewareCopyResult:
+      type: object
+      additionalProperties: false
+      required: [copyId, localArticleId, title, sourceVersion, alreadyExists]
+      properties:
+        copyId:
+          type: integer
+          format: int64
+        localArticleId:
+          type: integer
+          format: int64
+        title:
+          type: string
+        sourceVersion:
+          type: integer
+          minimum: 1
+        alreadyExists:
+          type: boolean
+    CoursewareCopySummary:
+      type: object
+      additionalProperties: false
+      required: [copyId, localArticleId, title, sourceTeacherId, sourceTeacherName, sourceArticleId, sourceLogicalPath, localLogicalPath, baseContentHash, status, hasUpdate]
+      properties:
+        copyId:
+          type: integer
+          format: int64
+        localArticleId:
+          type: integer
+          format: int64
+        title:
+          type: string
+        sourceTeacherId:
+          type: integer
+          format: int64
+        sourceTeacherName:
+          type: string
+        sourceArticleId:
+          type: integer
+          format: int64
+        sourceLogicalPath:
+          type: string
+        localLogicalPath:
+          type: string
+        baseContentHash:
+          type: string
+        sourceContentHash:
+          type: [string, 'null']
+        status:
+          type: string
+          enum: [active, source_unavailable, source_revoked]
+        hasUpdate:
+          type: boolean

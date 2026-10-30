@@ -686,10 +686,23 @@ Content-Type: application/json
 | `COURSEWARE_QUOTA_EXCEEDED` | 超过存储配额 | 提示清理或扩容 |
 
 ### 8.5 并发与一致性
-
 - 复制：单事务；blob 已存在则复用（内容寻址天然幂等）。
 - 更新应用：`expectedSourceHash` 做乐观锁，防"A 看到旧 diff、B 已发布新版"。
 - 发布：同一老师同一科目串行化（行锁 `course_release_head`）。
+
+### 8.6 P1 已实现（2026-10-30）
+
+| 接口 | 状态 | 说明 |
+| --- | --- | --- |
+| `POST /admin/courseware/shares` | 已实现 | 整科/单篇；同 (老师,科目,单篇) 重复提交刷新权限；只能分享自己已发布的科目 |
+| `GET /admin/courseware/shares` | 已实现 | 支持 `includeRevoked` |
+| `DELETE /admin/courseware/shares/{shareId}` | 已实现 | 置 `revoked_at`，资源目录与共享树立即消失 |
+| `GET /admin/courseware/resources` | 已实现 | 只列他人生效分享；整科按当前版本篇数计 `articleCount` |
+| `GET /admin/courseware/resources/tree` | 已实现 | 保留完整 `logicalPath`，逐篇带 `allowCopy` |
+| `POST /admin/courseware/copies` | 已实现 | 内容寻址复制 → `course_draft`（未发布）+ `course_copy` 上游指针；重复获取幂等；本地同名路径 409 `courseware_target_exists` |
+| `GET /admin/courseware/copies` | 已实现 | 与来源当前 hash 比对给出 `hasUpdate` |
+
+待实现：`updates` 系列（汇总、单篇 diff、apply/dismiss）、导出导入、工作区、通知；前端资源目录与获取对话框。
 
 ---
 

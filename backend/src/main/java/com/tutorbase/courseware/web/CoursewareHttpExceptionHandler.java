@@ -24,6 +24,18 @@ class CoursewareHttpExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, "courseware_forbidden", "无权访问课件", exception.getMessage(), request);
     }
 
+    @ExceptionHandler(CoursewareFailures.SourceForbidden.class)
+    ProblemDetail sourceForbidden(CoursewareFailures.SourceForbidden exception, HttpServletRequest request) {
+        return problem(HttpStatus.FORBIDDEN, "courseware_source_forbidden", "来源未开放获取",
+                exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(CoursewareFailures.TargetExists.class)
+    ProblemDetail targetExists(CoursewareFailures.TargetExists exception, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, "courseware_target_exists", "目标路径已存在",
+                exception.getMessage(), request);
+    }
+
     @ExceptionHandler(CoursewareFailures.VersionConflict.class)
     ProblemDetail conflict(CoursewareFailures.VersionConflict exception, HttpServletRequest request) {
         return problem(HttpStatus.CONFLICT, "courseware_release_conflict", "发布版本冲突", exception.getMessage(), request);

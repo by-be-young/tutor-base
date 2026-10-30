@@ -62,7 +62,7 @@
 | 数据模型（老师命名空间、发布版本、分享/获取、快照列） | 进行中 | V21 迁移 + 幂等 reconciliation；`FlywayMigrationTest` 覆盖空库、增量与幂等 | 换主键/唯一键（V22+）与代码切换同批上线 |
 | 契约 | 进行中 | `openapi.yaml` 新增 `GET /courseware/manifests`、`GET /courseware/articles/{teacherId}/{articleId}/content`、`POST /admin/courseware/releases`；`CoursewareReleaseHttpContractTest` 覆盖发布→清单→正文、409/400/401/403 |
 | 发布与读取（P0） | 已完成 | 存储抽象与内容寻址本地实现、发布校验（题干/占位符/答案键/路径/大小/注入）、发布器（不可变 manifest + head 切换）、正文鉴权、存量种子导入 `CoursewareSeeder`、前端 `blogStore`/正文读取切 `/courseware/*` 并保留静态兜底、`tutor.courseware.source=static\|storage` 开关（生产默认 static，待持久卷就绪再切） | 生产可写卷/对象存储后切 `storage` 并重跑种子导入 |
-| 分享/获取/更新（P1） | 未开始 | — | 资源目录、`course_share`/`course_copy`、更新汇总与差异 |
+| 分享/获取/更新（P1） | 进行中 | 分享（整科/单篇，幂等刷新）、资源目录、共享树、获取（内容寻址复制 → 未发布草稿 + `course_copy` 上游指针，重复获取幂等，同名路径 409）、我的获取关系（含 `hasUpdate`）；`CoursewareShareHttpContractTest` 覆盖分享→目录→树→获取→撤回与越权 | 更新汇总/差异/应用与忽略、前端资源目录与获取对话框 |
 | 导出导入 / 编辑器 / Git（P2） | 未开始 | — | zip 导入导出、`course_draft`、workspace push |
 | 认领模型下线（P4） | 未开始 | — | 移除 `courseware-claims` 接口与前端入口 |
 
