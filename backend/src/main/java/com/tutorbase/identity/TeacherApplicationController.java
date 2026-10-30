@@ -121,7 +121,7 @@ class TeacherApplicationController {
             return new TeacherApplicationResponse(
                     application.id(),
                     application.username(),
-                    application.status(),
+                    application.status().toUpperCase(Locale.ROOT),
                     application.createdAt(),
                     application.reviewedAt(),
                     application.rejectionReason(),
