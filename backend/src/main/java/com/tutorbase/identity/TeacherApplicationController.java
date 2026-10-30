@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @Validated
 @RequestMapping("/api/v1")
-final class TeacherApplicationController {
+class TeacherApplicationController {
     private final TeacherApplicationService applications;
     private final IdentityRateLimiter rateLimiter;
 
