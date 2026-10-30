@@ -13,6 +13,10 @@ function normalizeClaims(response) {
     // 学科认领范围内被单篇释放的排除项；旧后端缺失时按空数组处理。
     excludedArticleIds: Array.isArray(response?.excludedArticleIds)
       ? response.excludedArticleIds.map(Number).filter(Number.isFinite)
+      : [],
+    // 管理员主动放弃的课件；放弃后不再计入其“待认领”。
+    abandonedArticleIds: Array.isArray(response?.abandonedArticleIds)
+      ? response.abandonedArticleIds.map(Number).filter(Number.isFinite)
       : []
   }
 }
@@ -65,6 +69,12 @@ export const coursewareGateway = {
   releaseArticle(articleId) {
     return backendClient.request(`/admin/courseware-claims/articles/${encodeURIComponent(articleId)}`, {
       method: 'DELETE'
+    })
+  },
+
+  abandonArticle(articleId) {
+    return backendClient.request(`/admin/courseware-claims/articles/${encodeURIComponent(articleId)}/abandonment`, {
+      method: 'POST'
     })
   }
 }

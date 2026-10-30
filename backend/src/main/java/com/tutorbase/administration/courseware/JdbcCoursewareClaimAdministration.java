@@ -26,6 +26,14 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
               AND catalog.subject = :subject
             """;
 
+    private static final String DELETE_ABANDONMENTS_FOR_SUBJECT = """
+            DELETE FROM public.admin_courseware_abandonment AS abandonment
+            USING public.courseware_catalog AS catalog
+            WHERE abandonment.admin_account_id = :administratorAccountId
+              AND abandonment.article_id = catalog.article_id
+              AND catalog.subject = :subject
+            """;
+
     private final JdbcClient jdbc;
 
     JdbcCoursewareClaimAdministration(JdbcClient jdbc) {
@@ -101,7 +109,16 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
                 .param("administratorAccountId", administratorAccountId)
                 .query(Long.class)
                 .list();
-        return new Claims(subjectClaims, articleClaims, excludedArticleIds);
+        List<Long> abandonedArticleIds = jdbc.sql("""
+                SELECT article_id
+                FROM public.admin_courseware_abandonment
+                WHERE admin_account_id = :administratorAccountId
+                ORDER BY article_id
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .query(Long.class)
+                .list();
+        return new Claims(subjectClaims, articleClaims, excludedArticleIds, abandonedArticleIds);
     }
 
     @Override
@@ -119,8 +136,12 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
                 .param("administratorAccountId", administratorAccountId)
                 .param("subject", normalizedSubject)
                 .update();
-        // 重新认领整个学科等于恢复该学科全部课件，清除历史单篇排除。
+        // 重新认领整个学科等于恢复该学科全部课件，清除历史单篇排除与放弃记录。
         jdbc.sql(DELETE_EXCLUSIONS_FOR_SUBJECT)
+                .param("administratorAccountId", administratorAccountId)
+                .param("subject", normalizedSubject)
+                .update();
+        jdbc.sql(DELETE_ABANDONMENTS_FOR_SUBJECT)
                 .param("administratorAccountId", administratorAccountId)
                 .param("subject", normalizedSubject)
                 .update();
@@ -162,8 +183,9 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
         if (!articleExists(articleId)) {
             throw new CoursewareNotFound("未找到课件（ID：" + articleId + "）。");
         }
-        // 再次单独认领会清除排除；学科已覆盖时无需物化单篇认领。
+        // 再次单独认领会清除排除与放弃记录；学科已覆盖时无需物化单篇认领。
         deleteExclusion(administratorAccountId, articleId);
+        deleteAbandonment(administratorAccountId, articleId);
         jdbc.sql("""
                 INSERT INTO public.admin_courseware_claim (admin_account_id, article_id)
                 SELECT :administratorAccountId, :articleId
@@ -229,6 +251,48 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
     }
 
     @Override
+    @Transactional
+    public void abandonArticle(long administratorAccountId, long articleId) {
+        if (!articleExists(articleId)) {
+            throw new CoursewareNotFound("未找到课件（ID：" + articleId + "）。");
+        }
+        // 放弃先从“我的课件”移除认领；若学科仍覆盖该篇，写排除行使其不再可见。
+        jdbc.sql("""
+                DELETE FROM public.admin_courseware_claim
+                WHERE admin_account_id = :administratorAccountId
+                  AND article_id = :articleId
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .param("articleId", articleId)
+                .update();
+        jdbc.sql("""
+                INSERT INTO public.admin_courseware_exclusion (admin_account_id, article_id)
+                SELECT :administratorAccountId, :articleId
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM public.courseware_catalog AS catalog
+                    JOIN public.admin_subject_claim AS subject_claim
+                      ON subject_claim.subject = catalog.subject
+                     AND subject_claim.admin_account_id = :administratorAccountId
+                    WHERE catalog.article_id = :articleId
+                )
+                ON CONFLICT (admin_account_id, article_id) DO NOTHING
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .param("articleId", articleId)
+                .update();
+        // 放弃记录使该课件进入“已放弃”，且不再计入该管理员的“待认领”。
+        jdbc.sql("""
+                INSERT INTO public.admin_courseware_abandonment (admin_account_id, article_id)
+                VALUES (:administratorAccountId, :articleId)
+                ON CONFLICT (admin_account_id, article_id) DO NOTHING
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .param("articleId", articleId)
+                .update();
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Catalog catalog(long administratorAccountId, CatalogScope scope) {
         List<CatalogRow> rows = jdbc.sql("""
@@ -274,6 +338,7 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
         Set<String> mySubjects = Set.copyOf(myClaims.subjectClaims());
         Set<Long> myArticles = Set.copyOf(myClaims.articleClaims());
         Set<Long> myExclusions = Set.copyOf(myClaims.excludedArticleIds());
+        Set<Long> myAbandonments = Set.copyOf(myClaims.abandonedArticleIds());
 
         Map<String, List<ClaimBy>> subjectClaimersBySubject = new LinkedHashMap<>();
         for (SubjectClaimer claimer : subjectClaimers) {
@@ -320,13 +385,15 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
             articleClaimersByArticle.getOrDefault(row.articleId(), List.of())
                     .forEach(claimer -> claimers.putIfAbsent(claimer.accountId(), claimer));
             boolean excluded = myExclusions.contains(row.articleId());
+            boolean abandoned = myAbandonments.contains(row.articleId());
             boolean coveredBySubjectClaim = mySubjects.contains(row.subject()) && !excluded;
             boolean individuallyClaimed = myArticles.contains(row.articleId());
-            boolean visible = coveredBySubjectClaim || individuallyClaimed;
+            boolean visible = (coveredBySubjectClaim || individuallyClaimed) && !abandoned;
             boolean included = switch (scope) {
                 case all -> true;
                 case mine -> visible;
-                case unclaimed -> claimers.isEmpty();
+                case unclaimed -> claimers.isEmpty() && !abandoned;
+                case abandoned -> abandoned;
             };
             if (included) {
                 items.add(new CatalogItem(
@@ -336,6 +403,7 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
                         individuallyClaimed,
                         coveredBySubjectClaim,
                         excluded,
+                        abandoned,
                         List.copyOf(claimers.values())));
             }
         }
@@ -367,6 +435,17 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
     private void deleteExclusion(long administratorAccountId, long articleId) {
         jdbc.sql("""
                 DELETE FROM public.admin_courseware_exclusion
+                WHERE admin_account_id = :administratorAccountId
+                  AND article_id = :articleId
+                """)
+                .param("administratorAccountId", administratorAccountId)
+                .param("articleId", articleId)
+                .update();
+    }
+
+    private void deleteAbandonment(long administratorAccountId, long articleId) {
+        jdbc.sql("""
+                DELETE FROM public.admin_courseware_abandonment
                 WHERE admin_account_id = :administratorAccountId
                   AND article_id = :articleId
                 """)

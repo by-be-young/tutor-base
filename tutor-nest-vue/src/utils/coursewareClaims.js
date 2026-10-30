@@ -37,16 +37,25 @@ export function isExcludedArticle(articleId, excludedArticleIds = []) {
   return (excludedArticleIds || []).some(value => toPositiveId(value) === id)
 }
 
+/** 课件是否被管理员主动放弃。 */
+export function isAbandonedArticle(articleId, abandonedArticleIds = []) {
+  const id = toPositiveId(articleId)
+  if (id === null) return false
+  return (abandonedArticleIds || []).some(value => toPositiveId(value) === id)
+}
+
 /**
  * 我的课件 ID 集合：
- * 学科认领覆盖的课件（剔除单篇释放产生的排除项）∪ 我单篇认领的课件。
+ * 学科认领覆盖的课件（剔除单篇释放产生的排除项）∪ 我单篇认领的课件；
+ * 已放弃的课件无论学科是否覆盖都不再属于“我的课件”。
  * 单篇认领优先于排除：再次单篇认领会恢复该课件。
  */
 export function computeVisibleArticleIds(
   catalogItems = [],
   subjectClaims = [],
   articleClaims = [],
-  excludedArticleIds = []
+  excludedArticleIds = [],
+  abandonedArticleIds = []
 ) {
   const claimedSubjects = new Set((subjectClaims || []).map(subject => String(subject)))
   const claimedArticleIds = new Set(
@@ -55,11 +64,16 @@ export function computeVisibleArticleIds(
   const excludedIds = new Set(
     (excludedArticleIds || []).map(toPositiveId).filter(id => id !== null)
   )
+  const abandonedIds = new Set(
+    (abandonedArticleIds || []).map(toPositiveId).filter(id => id !== null)
+  )
   const visible = new Set()
   for (const item of catalogItems || []) {
     const articleId = toPositiveId(item?.articleId)
     if (articleId === null) continue
     const coveredBySubject = claimedSubjects.has(String(item?.subject ?? ''))
+    const isAbandoned = item?.abandoned === true || abandonedIds.has(articleId)
+    if (isAbandoned) continue
     if (claimedArticleIds.has(articleId) || (coveredBySubject && !excludedIds.has(articleId))) {
       visible.add(articleId)
     }
@@ -88,9 +102,10 @@ export function computeVisibleSubjects(catalogSubjects = [], catalogItems = [], 
   return subjects
 }
 
-/** 待认领课件数：目录中 claimedBy 为空的条目数。 */
+/** 待认领课件数：目录中 claimedBy 为空且未被当前管理员放弃的条目数。 */
 export function computeUnclaimedCount(catalogItems = []) {
   return (catalogItems || []).filter(item => {
+    if (item?.abandoned === true) return false
     const claimedBy = item?.claimedBy
     return !Array.isArray(claimedBy) || claimedBy.length === 0
   }).length

@@ -7,6 +7,20 @@ function toCount(value) {
   return Number.isFinite(number) && number > 0 ? Math.round(number) : 0
 }
 
+function normalizeReviewTarget(target) {
+  if (!target) return null
+  const learnerId = Number(target.learnerId)
+  const articleId = Number(target.articleId)
+  if (!Number.isFinite(learnerId) || learnerId <= 0 || !Number.isFinite(articleId) || articleId <= 0) {
+    return null
+  }
+  return {
+    learnerId,
+    articleId,
+    questionId: typeof target.questionId === 'string' ? target.questionId : ''
+  }
+}
+
 function normalizeOverview(response) {
   const courseware = response?.courseware || {}
   return {
@@ -20,7 +34,8 @@ function normalizeOverview(response) {
       visible: toCount(courseware.visible),
       unclaimed: toCount(courseware.unclaimed),
       subjects: toCount(courseware.subjects)
-    }
+    },
+    pendingReviewTarget: normalizeReviewTarget(response?.pendingReviewTarget)
   }
 }
 

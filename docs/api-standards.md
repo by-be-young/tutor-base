@@ -204,14 +204,14 @@
 | PUT | `/admin/learners/{learnerId}/password` | administrator | 直接设置或重置自己已认领的学习者密码，并撤销其旧会话和未使用激活码；未认领 `403 learner_not_claimed` |
 | POST | `/admin/learners/{learnerId}/impersonate` | administrator | 免密进入自己已认领的学习者账户：创建新会话并轮换 Cookie；仅限 `role=learner` 且已激活的账户，未认领 `403 learner_not_claimed`，不撤销管理员既有会话 |
 | POST | `/admin/account-activations` | administrator | 兼容接口：为待激活账户生成一次性激活码；当前前端不使用 |
-| GET | `/admin/analytics/overview` | administrator | 管理台概览指标；待批阅/提交数只统计“我的课件” |
+| GET | `/admin/analytics/overview` | administrator | 管理台概览指标（不含“待认领课件”）；待批阅/提交数、趋势与 `pendingReviewTarget` 只统计“我的课件”中的非测试学员；目标为最早一条待批阅作答或 `null` |
 | GET | `/admin/analytics/activity?days=` | administrator | 近 7～90 天每日提交/批阅趋势，按 Asia/Shanghai 自然日补零，只统计“我的课件” |
 | GET | `/admin/learners/{learnerId}/profile` | administrator | 学员详情：积分/累计/等级、近 30 天签到、分学科进度、最近作答、30 天动态；仅限已认领学员，未认领 `403 learner_not_claimed`，学习数据只含“我的课件” |
 
 - 认领是管理员之间的组织归属，不改变科目归属、内容授权、批阅权限或学习者可见范围；管理员目录排除 `role=administrator` 的账户。
 - 学习者响应额外返回 `enrolledSubjects`、`claimedByAccountId`、`claimedByUsername`、`claimedAt`、`lastActivityAt`、`isTest` 与 `isSpecialTest`；最近动态由服务端聚合作答提交、错题、签到和登录会话时间，客户端不得提交这些值。
 - `enrolledSubjects` 是科目归属，`contentGrantArticleIds` 是文章授权；开通科目初始不授权任何文章，二者互不推导。
-- 测试学员保留正常登录与学习能力，但 analytics 的学员计数、活跃度、提交/批阅趋势排除测试学员；管理端切换器单独分组展示。
+- 测试学员保留正常登录与学习能力，但 analytics 的学员计数、活跃度、待批阅、提交/批阅趋势与 `pendingReviewTarget` 全部排除测试学员；管理端切换器单独分组展示。
 - 特殊测试学员全局最多一个，拥有全部课件访问权限，`/rewards` 返回固定 999999999 积分且抽卡不减少；`/me/content-grants` 返回课件目录全量文章并带 `allArticles=true`，前端据此按静态目录全量放行。
 - 删除学习者会级联删除账户会话、激活码、作答、错题、签到、积分、卡片和任务/成就记录；必须由认领人操作，特殊测试学员与管理员账户关联的学习者不可通过该接口删除。
 - 管理员查询学习者作答进度只返回该学习者当前已授权文章；授权被收回的文章不再参与待批阅与进度统计。
@@ -221,18 +221,20 @@
 | Method | Path | Auth | 语义 |
 | --- | --- | --- | --- |
 | POST | `/admin/courseware-catalog/sync` | administrator | 由前端同步静态课件目录（articleId → 学科/标题），幂等 upsert |
-| GET | `/admin/courseware-claims` | administrator | 返回当前管理员显式认领的学科、单篇课件与排除的课件 ID |
-| PUT | `/admin/courseware-claims/subjects/{subject}` | administrator | 认领学科；自动覆盖该学科当前及未来新增课件，并清理该科排除，幂等 |
+| GET | `/admin/courseware-claims` | administrator | 返回当前管理员显式认领的学科、单篇课件、排除与已放弃的课件 ID |
+| PUT | `/admin/courseware-claims/subjects/{subject}` | administrator | 认领学科；自动覆盖该学科当前及未来新增课件，并清理该科排除与放弃记录，幂等 |
 | DELETE | `/admin/courseware-claims/subjects/{subject}` | administrator | 释放学科认领；仅靠学科覆盖的课件回到待认领，单篇认领保留，并清理该科排除 |
-| PUT | `/admin/courseware-claims/articles/{articleId}` | administrator | 单篇认领/恢复：清除排除；学科未覆盖时物化单篇认领，幂等 |
+| PUT | `/admin/courseware-claims/articles/{articleId}` | administrator | 单篇认领/恢复：清除排除与放弃；学科未覆盖时物化单篇认领，幂等 |
 | DELETE | `/admin/courseware-claims/articles/{articleId}` | administrator | 释放单篇：删除单篇认领；仍被学科覆盖时写入排除，幂等 |
-| GET | `/admin/courseware-claims/catalog?scope=mine\|unclaimed\|all` | administrator | 课件认领目录，含学科汇总、认领归属与当前管理员的 `excluded` 标记 |
+| POST | `/admin/courseware-claims/articles/{articleId}/abandonment` | administrator | 放弃单篇课件，幂等 `204`；进入“已放弃”且不计入当前管理员待认领；学科覆盖时同时写排除 |
+| GET | `/admin/courseware-claims/catalog?scope=mine\|unclaimed\|abandoned\|all` | administrator | 课件认领目录，含学科汇总、认领归属与当前管理员的 `excluded`/`abandoned` 标记 |
 
-- “我的课件” = (我认领学科下的全部课件 − 我排除的课件) ∪ 我单篇认领的课件；学科认领覆盖未来新增课件，因此不物化每篇归属行。
+- “我的课件” = (我认领学科下的全部课件 − 我排除的课件 − 我放弃的课件) ∪ (我单篇认领且未放弃的课件)；学科认领覆盖未来新增课件，因此不物化每篇归属行。
 - 学科与管理员是多对多：同一学科可被多名管理员认领；单篇课件也可被多名管理员认领。
-- 未认领/被自己排除的课件在业务页隐藏，但 `catalog?scope=unclaimed` 仍返回其内容元信息（含 `excluded=true`）；读取正文仍走公开静态内容。
-- 未认领课件在业务页隐藏，但 `catalog?scope=unclaimed` 仍返回其内容元信息；读取正文仍走公开静态内容。
-- 业务范围：参考答案读写、学员作答状态、人工批阅、学习者作答进度与内容授权替换都限定在“我的课件”内；范围外课件返回 `403 courseware_not_claimed`。
+- 未认领/被自己排除/被自己放弃的课件在业务页隐藏，但 `catalog?scope=unclaimed` 仍返回其中未被放弃者的内容元信息（含 `excluded=true`）；读取正文仍走公开静态内容。
+- 放弃记录按管理员隔离；`scope=unclaimed` 扣除当前管理员已放弃的课件，其他管理员仍按其认领状态计算。
+- 重新认领单篇或整科会同时清除排除与放弃记录；仅释放学科不会撤销放弃记录。
+- 业务范围：参考答案读写、学员作答状态、人工批阅、学习者作答进度与内容授权替换都限定在“我的课件”内；未认领、他人认领、被自己排除或已放弃的课件返回 `403 courseware_not_claimed`。
 - 内容授权替换只作用于“我的课件”范围，范围外的既有授权必须保留，避免多名管理员互相覆盖。
 
 ## 7. System Status contract

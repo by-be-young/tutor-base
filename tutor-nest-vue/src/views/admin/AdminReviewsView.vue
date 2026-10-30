@@ -18,17 +18,21 @@
 
     <section class="admin-panel">
       <ReviewPanel :students="students" :selected-student-id="selectedStudentId" :blog-data="blogData"
-        :all-subjects="allSubjects" />
+        :all-subjects="allSubjects" :initial-student-id="initialStudentId"
+        :initial-article-id="initialArticleId"
+        :initial-question-id="initialQuestionId" :initial-filter="initialFilter" />
     </section>
   </div>
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAdminWorkspace } from '@/composables/useAdminWorkspace'
 import StudentSwitcher from '@/components/admin/StudentSwitcher.vue'
 import ReviewPanel from '@/components/admin/ReviewPanel.vue'
 
+const route = useRoute()
 const {
   students,
   selectedStudentId,
@@ -42,7 +46,31 @@ const {
   loadWorkspace
 } = useAdminWorkspace()
 
-onMounted(loadWorkspace)
+function positiveQueryNumber(value) {
+  const number = Number(Array.isArray(value) ? value[0] : value)
+  return Number.isFinite(number) && number > 0 ? number : null
+}
+
+const initialArticleId = computed(() => positiveQueryNumber(route.query.articleId))
+const initialStudentId = computed(() => positiveQueryNumber(route.query.studentId))
+const initialQuestionId = computed(() => {
+  const value = Array.isArray(route.query.questionId) ? route.query.questionId[0] : route.query.questionId
+  return typeof value === 'string' && value ? value : ''
+})
+const initialFilter = computed(() => {
+  const value = Array.isArray(route.query.filter) ? route.query.filter[0] : route.query.filter
+  return ['pending', 'reviewed', 'unsubmitted', 'all'].includes(value) ? value : ''
+})
+
+onMounted(async () => {
+  await loadWorkspace()
+  const requestedStudentId = positiveQueryNumber(route.query.studentId)
+  if (!requestedStudentId) return
+  const exists = students.value.some(student => Number(student.id) === requestedStudentId)
+  if (exists && Number(selectedStudentId.value) !== requestedStudentId) {
+    handleSelectStudent(requestedStudentId)
+  }
+})
 </script>
 
 <style scoped>

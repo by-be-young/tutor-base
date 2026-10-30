@@ -13,6 +13,12 @@ final class JdbcCoursewareScope implements CoursewareScope {
                 SELECT 1
                 FROM public.courseware_catalog AS scoped_catalog
                 WHERE scoped_catalog.article_id = %s
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM public.admin_courseware_abandonment AS scoped_abandonment
+                      WHERE scoped_abandonment.admin_account_id = :administratorAccountId
+                        AND scoped_abandonment.article_id = scoped_catalog.article_id
+                  )
                   AND (
                       EXISTS (
                           SELECT 1

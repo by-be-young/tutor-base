@@ -182,6 +182,24 @@ class AdminAnalyticsHttpContractTest {
     }
 
     @Test
+    void givenTestLearnerSubmissionsWhenReadingOverviewThenReviewStatsStayZero() throws Exception {
+        jdbc.update("""
+                INSERT INTO public.student (id, username, permissions, is_test, is_special_test)
+                VALUES (3, 'test', '{101}'::integer[], true, false)
+                """);
+        insertPendingSubmission(CHEMISTRY_ARTICLE_ONE, 3L, "q1", "now() - interval '1 day'");
+        Cookie adminCookie = login("admin", "Admin-password-2026");
+
+        mockMvc.perform(get("/api/v1/admin/analytics/overview").cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.learners").value(2))
+                .andExpect(jsonPath("$.pendingReviews").value(0))
+                .andExpect(jsonPath("$.submissions7d").value(0))
+                .andExpect(jsonPath("$.pendingReviewTarget")
+                        .value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
     void givenAdministratorWhenReadingOverviewThenCountsOnlyVisibleCoursewareData() throws Exception {
         insertPendingSubmission(CHEMISTRY_ARTICLE_ONE, ALICE_ID, "q1", "now() - interval '1 day'");
         insertPendingSubmission(CHEMISTRY_ARTICLE_TWO, ALICE_ID, "q1", "now() - interval '2 days'");
@@ -207,7 +225,10 @@ class AdminAnalyticsHttpContractTest {
                 .andExpect(jsonPath("$.submissions7d").value(2))
                 .andExpect(jsonPath("$.courseware.visible").value(2))
                 .andExpect(jsonPath("$.courseware.unclaimed").value(1))
-                .andExpect(jsonPath("$.courseware.subjects").value(1));
+                .andExpect(jsonPath("$.courseware.subjects").value(1))
+                .andExpect(jsonPath("$.pendingReviewTarget.learnerId").value(ALICE_ID))
+                .andExpect(jsonPath("$.pendingReviewTarget.articleId").value(CHEMISTRY_ARTICLE_TWO))
+                .andExpect(jsonPath("$.pendingReviewTarget.questionId").value("q1"));
     }
 
     @Test
@@ -223,7 +244,8 @@ class AdminAnalyticsHttpContractTest {
                 .andExpect(jsonPath("$.submissions7d").value(0))
                 .andExpect(jsonPath("$.courseware.visible").value(0))
                 .andExpect(jsonPath("$.courseware.unclaimed").value(2))
-                .andExpect(jsonPath("$.courseware.subjects").value(0));
+                .andExpect(jsonPath("$.courseware.subjects").value(0))
+                .andExpect(jsonPath("$.pendingReviewTarget").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test

@@ -6,7 +6,8 @@ import {
   formatCompactNumber,
   levelFromLifetime,
   maxValue,
-  normalizeSeries
+  normalizeSeries,
+  reviewTargetLink
 } from '../src/utils/analytics.js'
 import { levelFromPoints } from '../src/utils/level.js'
 
@@ -92,6 +93,27 @@ test('formatCompactNumber formats thousands, 万 and 亿 with one decimal', () =
   assert.equal(formatCompactNumber(120000000), '1.2亿')
   assert.equal(formatCompactNumber(-1500), '-1.5k')
   assert.equal(formatCompactNumber('bad'), '0')
+})
+
+test('reviewTargetLink jumps to the first pending question only when a valid target exists', () => {
+  assert.equal(reviewTargetLink(null), '/admin/reviews')
+  assert.equal(reviewTargetLink({ learnerId: 2 }), '/admin/reviews')
+  assert.equal(reviewTargetLink({ learnerId: 0, articleId: 101 }), '/admin/reviews')
+
+  assert.deepEqual(
+    reviewTargetLink({ learnerId: 2, articleId: 101, questionId: 'q1' }),
+    {
+      path: '/admin/reviews',
+      query: { studentId: '2', articleId: '101', filter: 'pending', questionId: 'q1' }
+    }
+  )
+  assert.deepEqual(
+    reviewTargetLink({ learnerId: '2', articleId: '101' }),
+    {
+      path: '/admin/reviews',
+      query: { studentId: '2', articleId: '101', filter: 'pending' }
+    }
+  )
 })
 
 test('levelFromLifetime follows the 200-points-per-level rule', () => {

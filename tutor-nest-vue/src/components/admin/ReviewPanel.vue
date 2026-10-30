@@ -140,7 +140,8 @@
 
                         <div v-else class="review-questions">
                             <article v-for="question in selectedArticle.questions" :key="question.questionId"
-                                class="review-card" :class="`is-tone-${currentTone}`">
+                                :id="`review-question-${question.questionId}`"
+                                class="review-card" :class="[`is-tone-${currentTone}`, { 'is-deep-linked': highlightedQuestionId === question.questionId }]">
                                 <header class="review-card__head">
                                     <span class="review-card__index">第 {{ question.index }} 题</span>
                                     <span class="tag mono">#{{ question.questionId }}</span>
@@ -189,7 +190,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCoursewareStore } from '@/stores/coursewareStore'
 import { learningGateway } from '@/gateways/learningGateway'
@@ -201,15 +202,22 @@ const props = defineProps({
     students: { type: Array, default: () => [] },
     selectedStudentId: { type: [String, Number], default: null },
     blogData: { type: Array, default: () => [] },
-    allSubjects: { type: Array, default: () => [] }
+    allSubjects: { type: Array, default: () => [] },
+    initialArticleId: { type: [String, Number], default: null },
+    initialQuestionId: { type: String, default: '' },
+    initialFilter: { type: String, default: '' },
+    initialStudentId: { type: [String, Number], default: null }
 })
 
 const router = useRouter()
 const coursewareStore = useCoursewareStore()
 
 const currentSubject = ref('')
-const activeFilter = ref('all')
+const activeFilter = ref(props.initialFilter || 'all')
 const keyword = ref('')
+const highlightedQuestionId = ref('')
+const deepLinkArticleId = ref(Number(props.initialArticleId) || null)
+const deepLinkQuestionId = ref(props.initialQuestionId || '')
 
 const pendingCountMap = ref(new Map())
 const studentSubmissionStatus = ref(new Map())
@@ -499,6 +507,32 @@ function reloadDetail() {
     if (selectedArticle.value) openArticle(selectedArticle.value.id)
 }
 
+async function openDeepLinkedArticle() {
+    if (!deepLinkArticleId.value || loadingProgress.value) return
+    if (props.initialStudentId && Number(props.selectedStudentId) !== Number(props.initialStudentId)) return
+    if (coursewareStatus.value !== 'ready') return
+    const blog = grantedArticles.value.find(item => Number(item.id) === Number(deepLinkArticleId.value))
+    if (!blog) return
+
+    currentSubject.value = blog.series
+    if (props.initialFilter) activeFilter.value = props.initialFilter
+    await openArticle(blog.id)
+
+    if (deepLinkQuestionId.value) {
+        highlightedQuestionId.value = String(deepLinkQuestionId.value)
+        await nextTick()
+        document.getElementById(`review-question-${highlightedQuestionId.value}`)
+            ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+    deepLinkArticleId.value = null
+}
+
+watch(
+    [grantedArticles, coursewareStatus, loadingProgress, () => props.selectedStudentId],
+    () => { openDeepLinkedArticle() },
+    { flush: 'post' }
+)
+
 function openOriginal() {
     if (!selectedArticle.value || !props.selectedStudentId) return
     router.push(`/blog/${selectedArticle.value.id}?mode=review&studentId=${props.selectedStudentId}&from=admin`)
@@ -768,6 +802,12 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    transition: box-shadow 0.2s var(--ease-out), border-color 0.2s var(--ease-out);
+}
+
+.review-card.is-deep-linked {
+    border-color: var(--accent, #ffb84d);
+    box-shadow: 0 0 0 2px rgba(255, 184, 77, 0.35), 0 0 24px rgba(255, 184, 77, 0.18);
 }
 
 .review-card__head {

@@ -84,7 +84,8 @@ public class AdminAnalyticsController {
             long activeLearners7d,
             long pendingReviews,
             long submissions7d,
-            CoursewareStatsResponse courseware) {
+            CoursewareStatsResponse courseware,
+            PendingReviewTargetResponse pendingReviewTarget) {
 
         static OverviewResponse from(AdminAnalyticsService.Overview overview) {
             return new OverviewResponse(
@@ -97,7 +98,18 @@ public class AdminAnalyticsController {
                     new CoursewareStatsResponse(
                             overview.courseware().visible(),
                             overview.courseware().unclaimed(),
-                            overview.courseware().subjects()));
+                            overview.courseware().subjects()),
+                    PendingReviewTargetResponse.from(overview.pendingReviewTarget()));
+        }
+    }
+
+    record PendingReviewTargetResponse(long learnerId, long articleId, String questionId) {
+
+        static PendingReviewTargetResponse from(AdminAnalyticsService.ReviewTarget target) {
+            return target == null
+                    ? null
+                    : new PendingReviewTargetResponse(
+                            target.learnerId(), target.articleId(), target.questionId());
         }
     }
 

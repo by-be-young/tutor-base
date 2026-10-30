@@ -8,6 +8,7 @@ import java.util.List;
  *
  * <p>学科认领与单篇认领相互独立：认领学科会覆盖该学科当前及未来全部课件。即使学科已被认领，
  * 仍可排除其中的单篇课件（释放该篇）；再次单篇认领或重新认领学科会恢复被排除的课件。
+ * 主动“放弃”则把课件移入当前管理员的“已放弃的课件”，不再算作其“待认领”。
  * 写操作均为幂等。
  */
 public interface CoursewareClaimAdministration {
@@ -24,21 +25,25 @@ public interface CoursewareClaimAdministration {
 
     void releaseArticle(long administratorAccountId, long articleId);
 
+    void abandonArticle(long administratorAccountId, long articleId);
+
     Catalog catalog(long administratorAccountId, CatalogScope scope);
 
     enum CatalogScope {
-        mine, unclaimed, all
+        mine, unclaimed, abandoned, all
     }
 
     record CatalogEntry(long articleId, String subject, String title) {
     }
 
-    record Claims(List<String> subjectClaims, List<Long> articleClaims, List<Long> excludedArticleIds) {
+    record Claims(List<String> subjectClaims, List<Long> articleClaims,
+                  List<Long> excludedArticleIds, List<Long> abandonedArticleIds) {
 
         public Claims {
             subjectClaims = List.copyOf(subjectClaims);
             articleClaims = List.copyOf(articleClaims);
             excludedArticleIds = List.copyOf(excludedArticleIds);
+            abandonedArticleIds = List.copyOf(abandonedArticleIds);
         }
     }
 
@@ -65,6 +70,7 @@ public interface CoursewareClaimAdministration {
             boolean individuallyClaimed,
             boolean coveredBySubjectClaim,
             boolean excluded,
+            boolean abandoned,
             List<ClaimBy> claimedBy) {
 
         public CatalogItem {

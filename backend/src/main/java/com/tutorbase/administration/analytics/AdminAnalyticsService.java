@@ -97,6 +97,7 @@ class AdminAnalyticsService {
                 .single();
         ReviewCounts reviews = visibleSubmissionCounts(administratorAccountId);
         CoursewareStats courseware = coursewareStats(administratorAccountId);
+        ReviewTarget reviewTarget = pendingReviewTarget(administratorAccountId);
         return new Overview(
                 counts.learners(),
                 counts.claimedLearners(),
@@ -104,7 +105,8 @@ class AdminAnalyticsService {
                 counts.activeLearners7d(),
                 reviews.pendingReviews(),
                 reviews.submissions7d(),
-                courseware);
+                courseware,
+                reviewTarget);
     }
 
     @Transactional(readOnly = true)
@@ -210,10 +212,38 @@ class AdminAnalyticsService {
                           FROM public.admin_courseware_claim AS courseware_claim
                           WHERE courseware_claim.article_id = catalog.article_id
                       )
+                  AND NOT EXISTS (
+                          SELECT 1
+                          FROM public.admin_courseware_abandonment AS abandonment
+                          WHERE abandonment.admin_account_id = :administratorAccountId
+                            AND abandonment.article_id = catalog.article_id
+                      )
                 """)
+                .param("administratorAccountId", administratorAccountId)
                 .query(Long.class)
                 .single();
         return new CoursewareStats(visible.visible(), unclaimed, visible.subjects());
+    }
+
+    private ReviewTarget pendingReviewTarget(long administratorAccountId) {
+        return jdbc.sql("""
+                SELECT submission.student_id, submission.blog_id, submission.question_id
+                FROM public.article_question_submissions AS submission
+                JOIN public.student AS learner
+                  ON learner.id = submission.student_id
+                 AND NOT learner.is_test
+                WHERE submission.review_status = 'pending'
+                  AND %s
+                ORDER BY submission.submitted_at, submission.id
+                LIMIT 1
+                """.formatted(coursewareScope.visibleArticlePredicate("submission.blog_id")))
+                .param("administratorAccountId", administratorAccountId)
+                .query((resultSet, rowNumber) -> new ReviewTarget(
+                        resultSet.getLong("student_id"),
+                        resultSet.getLong("blog_id"),
+                        resultSet.getString("question_id")))
+                .optional()
+                .orElse(null);
     }
 
     private Map<LocalDate, DailyCount> dailyCounts(long administratorAccountId, LocalDate start, LocalDate end) {
@@ -388,7 +418,11 @@ class AdminAnalyticsService {
             long activeLearners7d,
             long pendingReviews,
             long submissions7d,
-            CoursewareStats courseware) {
+            CoursewareStats courseware,
+            ReviewTarget pendingReviewTarget) {
+    }
+
+    record ReviewTarget(long learnerId, long articleId, String questionId) {
     }
 
     record CoursewareStats(long visible, long unclaimed, long subjects) {

@@ -23,6 +23,10 @@
                         <i aria-hidden="true" class="fas fa-hand-holding-heart"></i>
                         待认领 {{ unclaimedTotal }} 篇
                     </span>
+                    <span v-if="abandonedTotal > 0" class="chip chip--violet">
+                        <i aria-hidden="true" class="fas fa-trash-can"></i>
+                        已放弃 {{ abandonedTotal }} 篇
+                    </span>
                 </div>
                 <button type="button" class="btn btn--primary cw-refresh"
                     :disabled="coursewareStore.loading || coursewareStore.syncing" @click="refreshWorkspace">
@@ -51,7 +55,7 @@
                         <i aria-hidden="true" class="fas fa-book-bookmark"></i>
                         我的课件
                     </h2>
-                    <p class="text-sm text-muted">按学科分组；展开学科查看课件，每篇课件都可单独释放（释放后回到「待认领」，可再次认领）。</p>
+                    <p class="text-sm text-muted">按学科分组；展开学科查看课件，每篇课件都可单独释放或放弃。释放后回到「待认领」，放弃后进入「已放弃」且不再计入待认领。</p>
                 </div>
                 <button v-if="unclaimedTotal > 0" type="button" class="btn btn--soft btn--sm"
                     @click="switchTab('unclaimed')">
@@ -133,6 +137,14 @@
                                                 :class="isBusy(`article:${item.articleId}`) ? 'fa-circle-notch fa-spin' : 'fa-xmark'"></i>
                                             {{ isBusy(`article:${item.articleId}`) ? '释放中…' : '释放' }}
                                         </button>
+                                        <button type="button" class="btn btn--soft btn--sm"
+                                            title="放弃后该课件进入已放弃，不再计入待认领"
+                                            :disabled="Boolean(busyKey)" @click="abandonArticle(item)">
+                                            <i aria-hidden="true"
+                                                class="fas"
+                                                :class="isBusy(`abandon:${item.articleId}`) ? 'fa-circle-notch fa-spin' : 'fa-trash-can'"></i>
+                                            {{ isBusy(`abandon:${item.articleId}`) ? '放弃中…' : '放弃' }}
+                                        </button>
                                         <a class="btn btn--soft btn--sm" :href="readHref(item.articleId)"
                                             target="_blank" rel="noopener">
                                             <i aria-hidden="true" class="fas fa-arrow-up-right-from-square"></i>
@@ -155,7 +167,7 @@
                         <i aria-hidden="true" class="fas fa-hand-holding-heart"></i>
                         待认领
                     </h2>
-                    <p class="text-sm text-muted">认领学科后该科全部课件归你；也可以只认领单篇，或先打开阅读了解内容。</p>
+                    <p class="text-sm text-muted">认领学科后该科全部课件归你；也可以只认领单篇，或先打开阅读了解内容。不需要的课件可以「放弃课件」，放弃后归入「已放弃」，不再出现在待认领。</p>
                 </div>
             </div>
 
@@ -224,6 +236,89 @@
                                                 :class="isBusy(`article:${item.articleId}`) ? 'fa-circle-notch fa-spin' : 'fa-hand-pointer'"></i>
                                             {{ isBusy(`article:${item.articleId}`) ? '认领中…' : item.excluded ? '重新认领' : '单篇认领' }}
                                         </button>
+                                        <button type="button" class="btn btn--ghost btn--sm"
+                                            title="放弃后该课件进入已放弃，不再计入待认领"
+                                            :disabled="Boolean(busyKey)" @click="abandonArticle(item)">
+                                            <i aria-hidden="true"
+                                                class="fas"
+                                                :class="isBusy(`abandon:${item.articleId}`) ? 'fa-circle-notch fa-spin' : 'fa-trash-can'"></i>
+                                            {{ isBusy(`abandon:${item.articleId}`) ? '放弃中…' : '放弃课件' }}
+                                        </button>
+                                        <a class="btn btn--ghost btn--sm" :href="readHref(item.articleId)"
+                                            target="_blank" rel="noopener">
+                                            <i aria-hidden="true" class="fas fa-arrow-up-right-from-square"></i>
+                                            打开阅读
+                                        </a>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <!-- 已放弃 -->
+        <section v-else-if="activeTab === 'abandoned'" class="panel cw-panel" aria-label="已放弃的课件">
+            <div class="panel-head cw-panel__head">
+                <div>
+                    <h2 class="panel-title">
+                        <i aria-hidden="true" class="fas fa-trash-can"></i>
+                        已放弃的课件
+                    </h2>
+                    <p class="text-sm text-muted">这些课件你已主动放弃，不再计入「待认领」；需要时仍可重新认领。</p>
+                </div>
+            </div>
+
+            <div class="panel-body cw-body">
+                <div v-if="coursewareLoading" class="cw-skeletons" aria-hidden="true">
+                    <div class="skeleton cw-skeleton"></div>
+                    <div class="skeleton cw-skeleton"></div>
+                    <div class="skeleton cw-skeleton"></div>
+                </div>
+
+                <EmptyState v-else-if="coursewareFailed" icon="fas fa-triangle-exclamation" title="课件目录加载失败"
+                    :text="coursewareStore.error || '请稍后重试。'">
+                    <button type="button" class="btn btn--soft btn--sm" @click="refreshWorkspace">
+                        <i aria-hidden="true" class="fas fa-rotate"></i> 重新加载
+                    </button>
+                </EmptyState>
+
+                <EmptyState v-else-if="abandonedGroups.length === 0" icon="fas fa-box-open"
+                    title="还没有放弃任何课件"
+                    text="在「我的课件」或「待认领」里点击「放弃课件」，就会归入这里。" />
+
+                <div v-else class="cw-claim-grid">
+                    <article v-for="group in abandonedGroups" :key="group.subject" class="cw-claim-card"
+                        :class="[`is-tone-${subjectTone(group.subject)}`, { 'is-open': isAbandonedOpen(group.subject) }]">
+                        <header class="cw-claim-card__head">
+                            <button type="button" class="cw-claim-card__toggle"
+                                :aria-expanded="isAbandonedOpen(group.subject)"
+                                @click="toggleAbandoned(group.subject)">
+                                <span class="cw-claim-card__dot" aria-hidden="true"></span>
+                                <span class="cw-claim-card__name">{{ group.subject }}</span>
+                                <span class="tag">{{ group.items.length }} 篇已放弃</span>
+                                <i aria-hidden="true" class="fas cw-claim-card__caret"
+                                    :class="isAbandonedOpen(group.subject) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                            </button>
+                        </header>
+
+                        <div class="cw-claim-card__body">
+                            <ul v-if="isAbandonedOpen(group.subject)" class="cw-list cw-list--compact cw-claim-list">
+                                <li v-for="item in group.items" :key="item.articleId" class="cw-item">
+                                    <div class="cw-item__main">
+                                        <span class="cw-item__title">{{ articleTitle(item) }}</span>
+                                        <span class="cw-item__id mono">#{{ item.articleId }}</span>
+                                        <span class="tag cw-tag--abandoned">已放弃</span>
+                                    </div>
+                                    <div class="cw-item__actions">
+                                        <button type="button" class="btn btn--soft btn--sm"
+                                            :disabled="Boolean(busyKey)" @click="claimArticle(item)">
+                                            <i aria-hidden="true"
+                                                class="fas"
+                                                :class="isBusy(`article:${item.articleId}`) ? 'fa-circle-notch fa-spin' : 'fa-hand-pointer'"></i>
+                                            {{ isBusy(`article:${item.articleId}`) ? '认领中…' : '重新认领' }}
+                                        </button>
                                         <a class="btn btn--ghost btn--sm" :href="readHref(item.articleId)"
                                             target="_blank" rel="noopener">
                                             <i aria-hidden="true" class="fas fa-arrow-up-right-from-square"></i>
@@ -283,6 +378,7 @@ const coursewareStore = useCoursewareStore()
 const activeTab = ref('mine')
 const busyKey = ref('')
 const openUnclaimedSubjects = ref([])
+const openAbandonedSubjects = ref([])
 const openMySubjects = ref([])
 let mySubjectsInitialized = false
 
@@ -341,6 +437,16 @@ const unclaimedGroups = computed(() => {
         .sort((left, right) => left.subject.localeCompare(right.subject, 'zh-CN'))
 })
 
+const abandonedGroups = computed(() => {
+    const groups = groupItems(coursewareStore.abandonedItems)
+    return Array.from(groups.entries())
+        .map(([subject, items]) => ({
+            subject,
+            items: [...items].sort((left, right) => Number(left.articleId) - Number(right.articleId))
+        }))
+        .sort((left, right) => left.subject.localeCompare(right.subject, 'zh-CN'))
+})
+
 // 学科折叠：默认展开第一个学科，保证首屏不空；目录刷新后保留用户展开状态。
 watch(mySubjectGroups, (groups) => {
     const names = new Set(groups.map(group => group.subject))
@@ -354,10 +460,12 @@ watch(mySubjectGroups, (groups) => {
 const mySubjectCount = computed(() => mySubjectGroups.value.length)
 const myArticleCount = computed(() => mySubjectGroups.value.reduce((total, group) => total + group.items.length, 0))
 const unclaimedTotal = computed(() => coursewareStore.unclaimedItems.length)
+const abandonedTotal = computed(() => coursewareStore.abandonedItems.length)
 
 const tabs = computed(() => [
     { id: 'mine', label: '我的课件', icon: 'fas fa-book-bookmark', count: myArticleCount.value },
     { id: 'unclaimed', label: '待认领', icon: 'fas fa-hand-holding-heart', count: unclaimedTotal.value },
+    { id: 'abandoned', label: '已放弃', icon: 'fas fa-trash-can', count: abandonedTotal.value },
     { id: 'answers', label: '设置答案', icon: 'fas fa-key', count: null }
 ])
 
@@ -400,6 +508,16 @@ function toggleMySubject(subject) {
     openMySubjects.value = isMySubjectOpen(subject)
         ? openMySubjects.value.filter(item => item !== subject)
         : [...openMySubjects.value, subject]
+}
+
+function isAbandonedOpen(subject) {
+    return openAbandonedSubjects.value.includes(subject)
+}
+
+function toggleAbandoned(subject) {
+    openAbandonedSubjects.value = isAbandonedOpen(subject)
+        ? openAbandonedSubjects.value.filter(item => item !== subject)
+        : [...openAbandonedSubjects.value, subject]
 }
 
 function switchTab(tabId) {
@@ -450,6 +568,15 @@ function releaseArticle(item) {
         `article:${item.articleId}`,
         () => coursewareStore.releaseArticle(item.articleId),
         `已释放《${title}》`
+    )
+}
+
+function abandonArticle(item) {
+    const title = articleTitle(item)
+    return runAction(
+        `abandon:${item.articleId}`,
+        () => coursewareStore.abandonArticle(item.articleId),
+        `已放弃《${title}》，不再计入待认领`
     )
 }
 
@@ -805,6 +932,12 @@ onMounted(async () => {
 
 .cw-tag--released {
     background: var(--butter);
+    border-color: var(--ink);
+    color: var(--ink);
+}
+
+.cw-tag--abandoned {
+    background: #f1e4ff;
     border-color: var(--ink);
     color: var(--ink);
 }

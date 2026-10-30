@@ -22,7 +22,10 @@ export const useCoursewareStore = defineStore('courseware', () => {
   const articleClaims = ref([])
   // 学科认领范围内被单篇释放的课件：仍归学科所有，但不再算作「我的课件」。
   const excludedArticleIds = ref([])
+  // 当前管理员主动放弃的课件：进入「已放弃」，且不再计入「待认领」。
+  const abandonedArticleIds = ref([])
   const unclaimedItems = ref([])
+  const abandonedItems = ref([])
   const loading = ref(false)
   const syncing = ref(false)
   const loaded = ref(false)
@@ -37,7 +40,8 @@ export const useCoursewareStore = defineStore('courseware', () => {
     catalogItems.value,
     subjectClaims.value,
     articleClaims.value,
-    excludedArticleIds.value
+    excludedArticleIds.value,
+    abandonedArticleIds.value
   ))
 
   const visibleSubjects = computed(() => computeVisibleSubjects(
@@ -80,17 +84,20 @@ export const useCoursewareStore = defineStore('courseware', () => {
   }
 
   async function fetchClaimsAndCatalog() {
-    const [claims, catalog, unclaimed] = await Promise.all([
+    const [claims, catalog, unclaimed, abandoned] = await Promise.all([
       coursewareGateway.getClaims(),
       coursewareGateway.getCatalog('all'),
-      coursewareGateway.getCatalog('unclaimed')
+      coursewareGateway.getCatalog('unclaimed'),
+      coursewareGateway.getCatalog('abandoned')
     ])
     subjectClaims.value = claims.subjectClaims
     articleClaims.value = claims.articleClaims
     excludedArticleIds.value = claims.excludedArticleIds
+    abandonedArticleIds.value = claims.abandonedArticleIds
     subjects.value = catalog.subjects
     catalogItems.value = catalog.items
     unclaimedItems.value = unclaimed.items
+    abandonedItems.value = abandoned.items
   }
 
   /**
@@ -179,8 +186,9 @@ export const useCoursewareStore = defineStore('courseware', () => {
       if (!articleClaims.value.includes(id)) {
         articleClaims.value = [...articleClaims.value, id]
       }
-      // 单篇认领会清除该课件的排除标记。
+      // 单篇认领会清除该课件的排除与放弃标记。
       excludedArticleIds.value = excludedArticleIds.value.filter(item => Number(item) !== id)
+      abandonedArticleIds.value = abandonedArticleIds.value.filter(item => Number(item) !== id)
       await safeRefreshWorkspace()
       return result
     } catch (err) {
@@ -201,13 +209,31 @@ export const useCoursewareStore = defineStore('courseware', () => {
     }
   }
 
+  async function abandonArticle(articleId) {
+    const id = Number(articleId)
+    if (!Number.isFinite(id) || id <= 0) return null
+    try {
+      await coursewareGateway.abandonArticle(id)
+      articleClaims.value = articleClaims.value.filter(item => Number(item) !== id)
+      if (!abandonedArticleIds.value.includes(id)) {
+        abandonedArticleIds.value = [...abandonedArticleIds.value, id]
+      }
+      await safeRefreshWorkspace()
+      return true
+    } catch (err) {
+      throw coursewareActionError(err, '放弃课件')
+    }
+  }
+
   return {
     catalogItems,
     subjects,
     subjectClaims,
     articleClaims,
     excludedArticleIds,
+    abandonedArticleIds,
     unclaimedItems,
+    abandonedItems,
     loading,
     syncing,
     loaded,
@@ -223,6 +249,7 @@ export const useCoursewareStore = defineStore('courseware', () => {
     releaseSubject,
     claimArticle,
     releaseArticle,
+    abandonArticle,
     isVisible,
     isExcluded
   }

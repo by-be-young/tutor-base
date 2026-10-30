@@ -49,7 +49,8 @@ public class AdminCoursewareClaimController {
     CoursewareClaimsResponse claims(@AuthenticationPrincipal AccountPrincipal administrator) {
         CoursewareClaimAdministration.Claims claims = administration.claims(administrator.accountId());
         return new CoursewareClaimsResponse(
-                claims.subjectClaims(), claims.articleClaims(), claims.excludedArticleIds());
+                claims.subjectClaims(), claims.articleClaims(),
+                claims.excludedArticleIds(), claims.abandonedArticleIds());
     }
 
     @PutMapping("/courseware-claims/subjects/{subject}")
@@ -86,6 +87,14 @@ public class AdminCoursewareClaimController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/courseware-claims/articles/{articleId}/abandonment")
+    ResponseEntity<Void> abandonArticle(
+            @AuthenticationPrincipal AccountPrincipal administrator,
+            @PathVariable @Positive long articleId) {
+        administration.abandonArticle(administrator.accountId(), articleId);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/courseware-claims/catalog")
     CatalogResponse catalog(
             @AuthenticationPrincipal AccountPrincipal administrator,
@@ -99,9 +108,10 @@ public class AdminCoursewareClaimController {
         return switch (scope) {
             case "mine" -> CoursewareClaimAdministration.CatalogScope.mine;
             case "unclaimed" -> CoursewareClaimAdministration.CatalogScope.unclaimed;
+            case "abandoned" -> CoursewareClaimAdministration.CatalogScope.abandoned;
             case "all" -> CoursewareClaimAdministration.CatalogScope.all;
             default -> throw new InvalidCoursewareRequest(
-                    "scope 参数必须是 mine、unclaimed 或 all。");
+                    "scope 参数必须是 mine、unclaimed、abandoned 或 all。");
         };
     }
 
@@ -119,7 +129,8 @@ public class AdminCoursewareClaimController {
     }
 
     record CoursewareClaimsResponse(
-            List<String> subjectClaims, List<Long> articleClaims, List<Long> excludedArticleIds) {
+            List<String> subjectClaims, List<Long> articleClaims,
+            List<Long> excludedArticleIds, List<Long> abandonedArticleIds) {
     }
 
     record SubjectClaimResponse(String subject, java.time.Instant claimedAt) {
@@ -150,6 +161,7 @@ public class AdminCoursewareClaimController {
             boolean individuallyClaimed,
             boolean coveredBySubjectClaim,
             boolean excluded,
+            boolean abandoned,
             List<ClaimByResponse> claimedBy) {
 
         static CatalogItemResponse from(CoursewareClaimAdministration.CatalogItem item) {
@@ -160,6 +172,7 @@ public class AdminCoursewareClaimController {
                     item.individuallyClaimed(),
                     item.coveredBySubjectClaim(),
                     item.excluded(),
+                    item.abandoned(),
                     item.claimedBy().stream().map(ClaimByResponse::from).toList());
         }
     }

@@ -18,7 +18,7 @@ anon key 或数据库写权限。
 ### 开发阶段与部署门槛
 
 当前采用“模块化单体 + 分层 MVC”架构。Controller 负责 HTTP，按业务能力划分的 Service 负责授权、事务与业务规则，
-JdbcClient 直接访问 PostgreSQL；数据库结构由 Flyway V1 至 V18 管理。OpenAPI、Testcontainers HTTP contract、
+JdbcClient 直接访问 PostgreSQL；数据库结构由 Flyway V1 至 V19 管理。OpenAPI、Testcontainers HTTP contract、
 前端 gateway 测试和 Playwright E2E 均进入 CI。
 
 首次发布 V5 的门槛是：
@@ -85,7 +85,7 @@ Spring Boot 会从当前 `backend` 工作目录自动读取 `.env`。该文件�
 .\mvnw.cmd spring-boot:run
 ```
 
-首次启动会由 Flyway 自动执行 V1 至 V18；以后启动只校验历史，不会重复执行已经成功的 migration。出现
+首次启动会由 Flyway 自动执行 V1 至 V19；以后启动只校验历史，不会重复执行已经成功的 migration。出现
 `Started TutorBaseApplication` 后，后端地址为 `http://localhost:8080`。
 
 系统环境变量的优先级高于 `.env`，因此仍可以在 CI、Docker 或云服务器中直接注入变量。生产环境不要复制本地示例值；
@@ -172,7 +172,7 @@ docker stop tutor-base-postgres
 .\mvnw.cmd clean verify
 ```
 
-完整验证会启动临时 PostgreSQL 17 容器，执行 V1 至 V18，并再次调用 Flyway，确认第二次 migrate 执行数为 0。
+完整验证会启动临时 PostgreSQL 17 容器，执行 V1 至 V19，并再次调用 Flyway，确认第二次 migrate 执行数为 0。
 
 前端构建验证：
 
@@ -297,6 +297,7 @@ PostgreSQL 结构只通过 Flyway 管理：
 - `V16__add_test_learners.sql`：为 `student` 增加测试学员/特殊测试学员标记、唯一特殊测试约束，并回填既有学员（除 pyt、Mel. 外全部测试，test 为特殊测试）。
 - `V17__teacher_registration_review.sql`：为 `account` 增加 `is_super_admin` 标记并把 `young` 置为超级管理员；新增 `teacher_registration_application`、待审核用户名部分唯一索引、审核状态约束与运行角色授权。
 - `V18__student_subjects.sql`：为 `student` 增加 `subjects text[]` 科目归属列与非空字符串约束；按既有 `permissions × courseware_catalog` 幂等回填科目，作为科目与文章授权分离的存储基础。
+- `V19__admin_courseware_abandonment.sql`：新增 `admin_courseware_abandonment` 放弃记录表、主键/索引、RLS 与运行角色授权；放弃课件不再计入该管理员的待认领。
 
 ### Supabase 出现 `relation "account" already exists`
 
@@ -396,11 +397,12 @@ docker run --rm -p 8080:8080 tutor-base-backend:dev
 - `PUT /api/v1/admin/learners/{learnerId}/password`：管理员设置或重置学习者密码。
 - `GET /api/v1/admin/learners/{learnerId}/study-progress`：只返回该学习者已授权、且属于当前管理员“我的课件”的作答与待批阅进度。
 - `POST /api/v1/admin/courseware-catalog/sync`：管理端同步静态课件目录（articleId → 学科/标题），幂等 upsert。
-- `GET /api/v1/admin/courseware-claims`：查询当前管理员显式认领的学科、单篇课件与排除的课件 ID。
-- `PUT/DELETE /api/v1/admin/courseware-claims/subjects/{subject}`：认领/释放学科；认领自动覆盖该学科当前及未来课件，并在认领/释放时清理该科排除。
-- `PUT/DELETE /api/v1/admin/courseware-claims/articles/{articleId}`：单篇认领/释放；学科覆盖下释放会写入排除，重新认领恢复。
-- `GET /api/v1/admin/courseware-claims/catalog?scope=mine|unclaimed|all`：课件认领目录、归属与当前管理员的 `excluded` 标记。
-- `GET /api/v1/admin/analytics/overview`：管理台概览指标；待批阅/提交数只统计当前管理员的“我的课件”。
+- `GET /api/v1/admin/courseware-claims`：查询当前管理员显式认领的学科、单篇课件、排除与已放弃的课件 ID。
+- `PUT/DELETE /api/v1/admin/courseware-claims/subjects/{subject}`：认领/释放学科；认领自动覆盖该学科当前及未来课件，并在认领时清理该科排除与放弃记录。
+- `PUT/DELETE /api/v1/admin/courseware-claims/articles/{articleId}`：单篇认领/释放；学科覆盖下释放会写入排除，重新认领会清除排除与放弃。
+- `POST /api/v1/admin/courseware-claims/articles/{articleId}/abandonment`：放弃单篇课件（幂等 `204`）；进入“已放弃”，不再计入当前管理员待认领。
+- `GET /api/v1/admin/courseware-claims/catalog?scope=mine|unclaimed|abandoned|all`：课件认领目录、归属与当前管理员的 `excluded`/`abandoned` 标记。
+- `GET /api/v1/admin/analytics/overview`：管理台概览指标（不含“待认领课件”）；待批阅/提交数与 `pendingReviewTarget` 只统计当前管理员“我的课件”中的非测试学员。
 - `GET /api/v1/admin/analytics/activity?days=30`：近 7～90 天每日提交/批阅趋势（Asia/Shanghai 自然日补零，只统计“我的课件”）。
 - `GET /api/v1/admin/learners/{learnerId}/profile`：学员详情（积分/等级/近 30 天签到/分学科进度/最近作答/30 天动态）；学习数据只含“我的课件”。
 - 管理端参考答案、作答状态、人工批阅与内容授权都限定在“我的课件”范围，范围外返回 `403 courseware_not_claimed`。

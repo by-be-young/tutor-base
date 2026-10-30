@@ -9,6 +9,7 @@ import {
   computeVisibleArticleIds,
   computeVisibleSubjects,
   coursewareActionError,
+  isAbandonedArticle,
   isExcludedArticle
 } from '../src/utils/coursewareClaims.js'
 
@@ -84,9 +85,13 @@ test('computeVisibleSubjects keeps mine subjects and subjects with visible artic
   assert.deepEqual(computeVisibleSubjects([], CATALOG_ITEMS, visibleIds), [])
 })
 
-test('computeUnclaimedCount counts catalog items without any claimer', () => {
+test('computeUnclaimedCount counts catalog items without any claimer and not abandoned', () => {
   assert.equal(computeUnclaimedCount(CATALOG_ITEMS), 2)
   assert.equal(computeUnclaimedCount([{ articleId: 1 }, { articleId: 2, claimedBy: [] }]), 2)
+  assert.equal(computeUnclaimedCount([
+    { articleId: 1, claimedBy: [], abandoned: true },
+    { articleId: 2, claimedBy: [] }
+  ]), 1)
   assert.equal(computeUnclaimedCount([]), 0)
 })
 
@@ -116,6 +121,33 @@ test('computeVisibleArticleIds excludes subject-covered articles released indivi
   assert.deepEqual([...computeVisibleArticleIds(CATALOG_ITEMS, [], [3], [3])], [3])
   // 字符串形式的 id 容错
   assert.deepEqual([...computeVisibleArticleIds(CATALOG_ITEMS, ['化学'], [], ['1'])], [2])
+})
+
+test('computeVisibleArticleIds excludes abandoned articles even under a claimed subject', () => {
+  assert.deepEqual(
+    [...computeVisibleArticleIds(CATALOG_ITEMS, ['化学'], [], [], [1])],
+    [2]
+  )
+  assert.deepEqual(
+    [...computeVisibleArticleIds(CATALOG_ITEMS, [], [1], [], [1])],
+    []
+  )
+  assert.deepEqual(
+    [...computeVisibleArticleIds(
+      [{ articleId: 1, subject: '化学', abandoned: true, claimedBy: [] },
+       { articleId: 2, subject: '化学', claimedBy: [] }],
+      ['化学'], [], []
+    )],
+    [2]
+  )
+})
+
+test('isAbandonedArticle matches positive ids and tolerates invalid input', () => {
+  assert.equal(isAbandonedArticle(1, [1, 3]), true)
+  assert.equal(isAbandonedArticle('3', [1, 3]), true)
+  assert.equal(isAbandonedArticle(2, [1, 3]), false)
+  assert.equal(isAbandonedArticle(1, null), false)
+  assert.equal(isAbandonedArticle('abc', [1]), false)
 })
 
 test('isExcludedArticle matches positive ids and tolerates invalid input', () => {

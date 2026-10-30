@@ -6,11 +6,11 @@
       <div class="dash-head__copy">
         <span class="eyebrow">{{ todayLabel }} / 管理工作台</span>
         <h2 class="dash-head__title">{{ authStore.username }}，<span class="text-gradient">今天先看谁</span></h2>
-        <p class="dash-head__sub">学员动态、待办批阅与课件认领一屏掌握，点击任意学员即可进入管理。</p>
+        <p class="dash-head__sub">学员动态与待办批阅一屏掌握，点击“去批阅”可直接落到最早一条待批阅习题。</p>
       </div>
 
       <div class="dash-quick">
-        <router-link to="/admin/reviews" class="btn btn--primary btn--sm">
+        <router-link :to="reviewLink" class="btn btn--primary btn--sm">
           <i class="fas fa-pen-nib" aria-hidden="true"></i> 去批阅
         </router-link>
         <router-link to="/admin/content" class="btn btn--soft btn--sm">
@@ -36,7 +36,7 @@
       </div>
 
       <div v-if="overviewLoading" class="stat-grid dash-metrics" aria-hidden="true">
-        <div v-for="index in 5" :key="index" class="stat-card dash-skeleton">
+        <div v-for="index in 4" :key="index" class="stat-card dash-skeleton">
           <span class="skeleton dash-skeleton__value"></span>
           <span class="skeleton dash-skeleton__label"></span>
         </div>
@@ -190,7 +190,7 @@ import { useAdminStore } from '@/stores/adminStore'
 import { useCoursewareStore } from '@/stores/coursewareStore'
 import { useAdminWorkspace } from '@/composables/useAdminWorkspace'
 import { analyticsGateway } from '@/gateways/analyticsGateway'
-import { buildLinePath, formatCompactNumber, maxValue } from '@/utils/analytics'
+import { buildLinePath, formatCompactNumber, maxValue, reviewTargetLink } from '@/utils/analytics'
 import { claimState, formatRelativeActivity, isTestStudent, sortStudentsByRecentActivity } from '@/utils/adminStudents'
 import { activeSubjects, buildSubjectScope } from '@/utils/adminSubjects'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -259,15 +259,7 @@ async function loadActivity() {
   }
 }
 
-// 待认领课件继续使用 coursewareStore，其余指标来自 analytics overview。
-const coursewareMetric = computed(() => ({
-  key: 'courseware',
-  label: '待认领课件',
-  value: coursewareStore.unclaimedCount ?? 0,
-  hint: '来自课件认领面板',
-  tone: ''
-}))
-
+// 概览指标不含“待认领课件”；课件认领进度到「课件认领」页查看。
 const overviewMetrics = computed(() => {
   const data = overview.value || {}
   return [
@@ -298,13 +290,15 @@ const overviewMetrics = computed(() => {
       value: data.submissions7d ?? 0,
       hint: '学员提交次数',
       tone: 'stat-card--amber'
-    },
-    coursewareMetric.value
+    }
   ]
 })
 
-// 概览接口失败时仍展示本地课件指标，页面不白屏。
-const metrics = computed(() => (overviewError.value ? [coursewareMetric.value] : overviewMetrics.value))
+const metrics = computed(() => overviewMetrics.value)
+
+const reviewTarget = computed(() => overview.value?.pendingReviewTarget || null)
+
+const reviewLink = computed(() => reviewTargetLink(reviewTarget.value))
 
 function roundCoordinate(value) {
   return Math.round(value * 100) / 100

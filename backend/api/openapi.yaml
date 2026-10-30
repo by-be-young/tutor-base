@@ -1101,10 +1101,11 @@ paths:
   /admin/courseware-claims:
     get:
       operationId: getCoursewareClaims
-      summary: 获取当前管理员显式认领的学科、单篇课件与排除课件
+      summary: 获取当前管理员显式认领的学科、单篇课件、排除与已放弃课件
       description: >-
         只返回显式记录，不包含由学科认领派生覆盖的课件。excludedArticleIds 是当前管理员
-        在已认领学科下单独释放、尚未重新认领的课件。
+        在已认领学科下单独释放、尚未重新认领的课件；abandonedArticleIds 是当前管理员
+        主动放弃的课件，不计入其待认领，可在 scope=abandoned 查看。
       security:
         - sessionCookie: []
       responses:
@@ -1123,7 +1124,7 @@ paths:
       operationId: claimCoursewareSubject
       summary: 认领一个学科及其全部课件
       description: >-
-        认领学科后自动覆盖该学科当前及未来同步的全部课件，并清除该学科下此前的单篇排除，
+        认领学科后自动覆盖该学科当前及未来同步的全部课件，并清除该学科下此前的单篇排除与放弃记录，
         恢复全部课件。重复认领幂等，返回首次认领时间。
         学科必须存在于课件目录，否则返回 404 resource_not_found。
       security:
@@ -1173,7 +1174,7 @@ paths:
       operationId: claimCoursewareArticle
       summary: 单独认领一篇课件
       description: >-
-        幂等；若该篇此前在已认领学科下被单独释放，本次认领会清除排除并恢复可见；
+        幂等；若该篇此前在已认领学科下被单独释放或已被放弃，本次认领会清除排除与放弃记录并恢复可见；
         学科已覆盖时无需物化单篇认领。课件必须存在于课件目录，否则返回 404 resource_not_found。
       security:
         - sessionCookie: []
@@ -1220,15 +1221,42 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
+  /admin/courseware-claims/articles/{articleId}/abandonment:
+    post:
+      operationId: abandonCoursewareArticle
+      summary: 放弃一篇课件
+      description: >-
+        幂等 204。将课件移入当前管理员的“已放弃的课件”，不再计入其待认领；若该篇仍由
+        其已认领学科覆盖，同时写入排除记录使其从“我的课件”消失。之后可通过
+        PUT /admin/courseware-claims/articles/{articleId} 重新认领恢复。课件必须存在，否则 404。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/ArticleId'
+      responses:
+        '204':
+          description: 已放弃（或本就已经放弃）。
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
   /admin/courseware-claims/catalog:
     get:
       operationId: getCoursewareClaimCatalog
       summary: 按认领范围查询课件目录
       description: >-
         subjects 始终返回目录中的全部学科及认领摘要；items 按 scope 过滤：
-        mine 为当前管理员可见课件（学科认领覆盖且未排除，或单篇认领），
-        unclaimed 为没有任何管理员有效认领的课件（含当前管理员在学科覆盖下释放的单篇，带 excluded=true），
-        all 为全部课件并带 claimedBy 归属与 excluded 标记。排序为学科、articleId。
+        mine 为当前管理员可见课件（学科认领覆盖且未排除、未被放弃，或单篇认领），
+        unclaimed 为没有任何管理员有效认领、且未被当前管理员放弃的课件（含当前管理员在学科覆盖下释放的单篇，带 excluded=true），
+        abandoned 为当前管理员主动放弃的课件，
+        all 为全部课件并带 claimedBy 归属与 excluded/abandoned 标记。排序为学科、articleId。
       security:
         - sessionCookie: []
       parameters:
@@ -1237,7 +1265,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [mine, unclaimed, all]
+            enum: [mine, unclaimed, abandoned, all]
             default: mine
       responses:
         '200':
@@ -1259,7 +1287,8 @@ paths:
       description: >-
         学习者数量与 /admin/learners 口径一致（排除 administrator 角色的学习者行，并排除测试学员）。
         待批阅与近 7 天提交只统计当前管理员“我的课件”范围内、非测试学员的作答；
-        courseware.unclaimed 为没有任何管理员认领的课件数。
+        pendingReviewTarget 为最早一条待批阅作答（无则为 null），用于“去批阅”直达对应习题。
+        courseware.unclaimed 为没有任何管理员认领、且未被当前管理员放弃的课件数。
       security:
         - sessionCookie: []
       responses:
@@ -1800,7 +1829,7 @@ components:
     CoursewareClaims:
       type: object
       additionalProperties: false
-      required: [subjectClaims, articleClaims, excludedArticleIds]
+      required: [subjectClaims, articleClaims, excludedArticleIds, abandonedArticleIds]
       properties:
         subjectClaims:
           type: array
@@ -1815,6 +1844,13 @@ components:
         excludedArticleIds:
           type: array
           description: 当前管理员在已认领学科下单独释放（排除）的课件，按 articleId 升序。
+          items:
+            type: integer
+            format: int64
+            minimum: 1
+        abandonedArticleIds:
+          type: array
+          description: 当前管理员主动放弃的课件，按 articleId 升序；不计入其待认领。
           items:
             type: integer
             format: int64
@@ -1873,7 +1909,7 @@ components:
     CoursewareCatalogItem:
       type: object
       additionalProperties: false
-      required: [articleId, subject, title, individuallyClaimed, coveredBySubjectClaim, excluded, claimedBy]
+      required: [articleId, subject, title, individuallyClaimed, coveredBySubjectClaim, excluded, abandoned, claimedBy]
       properties:
         articleId:
           type: integer
@@ -1892,6 +1928,9 @@ components:
         excluded:
           type: boolean
           description: 当前管理员是否在学科覆盖下单独释放（排除）了该课件。
+        abandoned:
+          type: boolean
+          description: 当前管理员是否已主动放弃该课件；放弃后不再计入其待认领。
         claimedBy:
           type: array
           description: 所有对该课件有效的认领者（排除该管理员自己的排除项）。
@@ -2312,6 +2351,7 @@ components:
         - pendingReviews
         - submissions7d
         - courseware
+        - pendingReviewTarget
       properties:
         learners:
           type: integer
@@ -2337,6 +2377,27 @@ components:
           description: 当前管理员可见课件中最近 7 天的提交数量。
         courseware:
           $ref: '#/components/schemas/AdministratorCoursewareStats'
+        pendingReviewTarget:
+          oneOf:
+            - $ref: '#/components/schemas/AdministratorPendingReviewTarget'
+            - type: 'null'
+          description: 最早一条待批阅作答；没有待批阅时为 null。
+    AdministratorPendingReviewTarget:
+      type: object
+      additionalProperties: false
+      required: [learnerId, articleId, questionId]
+      properties:
+        learnerId:
+          type: integer
+          format: int64
+          minimum: 1
+        articleId:
+          type: integer
+          format: int64
+          minimum: 1
+        questionId:
+          type: string
+          minLength: 1
     AdministratorCoursewareStats:
       type: object
       additionalProperties: false

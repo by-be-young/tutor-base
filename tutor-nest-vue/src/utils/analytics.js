@@ -46,6 +46,21 @@ function normalizePadding(padding) {
   return { top: all, right: all, bottom: all, left: all }
 }
 
+/** 生成“去批阅”的直达路由；没有待批阅目标时回到批阅首页。 */
+export function reviewTargetLink(target) {
+  const learnerId = Number(target?.learnerId)
+  const articleId = Number(target?.articleId)
+  if (!Number.isFinite(learnerId) || learnerId <= 0) return '/admin/reviews'
+  if (!Number.isFinite(articleId) || articleId <= 0) return '/admin/reviews'
+  const query = {
+    studentId: String(learnerId),
+    articleId: String(articleId),
+    filter: 'pending'
+  }
+  if (target?.questionId) query.questionId = String(target.questionId)
+  return { path: '/admin/reviews', query }
+}
+
 /** 取出某个指标序列，缺失/非法/负数一律归零，保证图表不会出现 NaN。 */
 export function normalizeSeries(points, key) {
   if (!Array.isArray(points) || !key) return []
