@@ -175,7 +175,7 @@ test('administrator and learner complete the protected learning journey', async 
   expect(automaticWrongBook.body[0].correctAnswer).toBe('e2e-reference-answer')
   expect(automaticWrongBook.body[0].manual).toBe(false)
 
-  // 收尾：回到管理员会话，覆盖认领/释放/删除学员的管理界面最小路径。
+  // 收尾：回到管理员会话，覆盖认领/取消认领/删除学员的管理界面最小路径。
   expect((await api(page, '/session', { method: 'DELETE' })).status).toBe(204)
   expect((await api(page, '/sessions', {
     method: 'POST', body: { username: administrator, password: administratorPassword }
@@ -193,10 +193,10 @@ test('administrator and learner complete the protected learning journey', async 
   const managedRow = page.getByRole('listitem').filter({ hasText: learner })
   await expect(managedRow).toBeVisible()
 
-  await managedRow.getByRole('button', { name: '释放' }).click()
+  await managedRow.getByRole('button', { name: '取消认领' }).click()
   await expect(managedRow.getByRole('button', { name: '认领' })).toBeVisible()
   await managedRow.getByRole('button', { name: '认领' }).click()
-  await expect(managedRow.getByRole('button', { name: '释放' })).toBeVisible()
+  await expect(managedRow.getByRole('button', { name: '取消认领' })).toBeVisible()
 
   await managedRow.getByRole('button', { name: '删除学员' }).click()
   const deleteDialog = page.getByRole('dialog', { name: '删除学员' })
