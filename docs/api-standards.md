@@ -195,7 +195,7 @@
 | Method | Path | Auth | 语义 |
 | --- | --- | --- | --- |
 | GET | `/admin/learners` | administrator | 按学习者 ID 游标查询学习者及内容授权；账户状态在身份迁移后增加 |
-| POST | `/admin/learners` | administrator | 新增学习者并创建待设置密码账户；由创建它的管理员自动认领 |
+| POST | `/admin/learners` | administrator | 新增测试学员（固定 `isTest=true`）并创建待设置密码账户；由创建它的管理员自动认领 |
 | PUT | `/admin/learners/{learnerId}/claim` | administrator | 认领学习者；重复认领幂等，已被其他管理员认领返回 `409 learner_already_claimed` |
 | DELETE | `/admin/learners/{learnerId}/claim` | administrator | 释放自己的认领；未认领时幂等返回 `204` |
 | DELETE | `/admin/learners/{learnerId}` | administrator | 删除学习者及其账户、会话和学习数据；被他人认领或关联管理员账户时返回 `409` |

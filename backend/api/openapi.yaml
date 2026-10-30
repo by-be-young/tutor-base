@@ -858,8 +858,8 @@ paths:
           $ref: '#/components/responses/Problem'
     post:
       operationId: createLearner
-      summary: 新增学习者及其待设置密码账户
-      description: 新增学习者会同时写入待激活账户，并自动由创建它的管理员认领。
+      summary: 新增测试学员及其待设置密码账户
+      description: 管理端新增入口固定创建测试学员（`isTest=true`，不进入管理统计）；同时写入待激活账户，并自动由创建它的管理员认领。
       security:
         - sessionCookie: []
       parameters:
@@ -872,7 +872,7 @@ paths:
               $ref: '#/components/schemas/CreateLearnerRequest'
       responses:
         '201':
-          description: 学习者已创建，初始文章授权为空。
+          description: 测试学员已创建，初始文章授权为空。
           content:
             application/json:
               schema:

@@ -26,8 +26,9 @@
 
       <div class="admin-topbar__actions">
         <span class="admin-save-state" :class="{ 'is-dirty': permissionDirty }">{{ saveStateText }}</span>
-        <button type="button" class="btn btn--soft btn--sm" @click="addStudent">
-          <i aria-hidden="true" class="fas fa-user-plus"></i> 新增
+        <button type="button" class="btn btn--soft btn--sm" @click="addStudent"
+          title="通过此入口新增的学员均为测试学员，不进入管理统计">
+          <i aria-hidden="true" class="fas fa-user-plus"></i> 新增测试学员
         </button>
         <button type="button" class="btn btn--primary btn--sm admin-save-btn"
           :disabled="!permissionDirty || savingPermissions" @click="savePermissions">

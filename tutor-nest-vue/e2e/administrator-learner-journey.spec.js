@@ -69,9 +69,10 @@ test('administrator and learner complete the protected learning journey', async 
   expect(learnersResponse.status).toBe(200)
   const createdLearner = learnersResponse.body.items.find(item => item.username === learner)
   expect(createdLearner).toBeTruthy()
-  // 新建学员自动归创建者认领。
+  // 新建学员自动归创建者认领，且管理端新增入口固定创建测试学员。
   expect(createdLearner.claimedByUsername).toBeTruthy()
   expect(createdLearner.claimedByAccountId).not.toBeNull()
+  expect(createdLearner.isTest).toBe(true)
   const learnerId = createdLearner.learnerId
   // 管理端业务接口只处理「我的课件」：先同步课件目录并认领学科，再授权与设置答案。
   expect((await api(page, '/admin/courseware-catalog/sync', {

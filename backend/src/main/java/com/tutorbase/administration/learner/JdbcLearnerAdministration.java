@@ -36,8 +36,8 @@ public class JdbcLearnerAdministration implements LearnerAdministration {
         String trimmedUsername = username.strip();
         try {
             long learnerId = jdbc.sql("""
-                    INSERT INTO public.student (username, permissions, claimed_by, claimed_at)
-                    VALUES (:username, '{}'::integer[], :creatorAccountId, now())
+                    INSERT INTO public.student (username, permissions, claimed_by, claimed_at, is_test)
+                    VALUES (:username, '{}'::integer[], :creatorAccountId, now(), true)
                     RETURNING id
                     """)
                     .param("username", trimmedUsername)

@@ -114,6 +114,7 @@ class LearnerContentGrantHttpContractTest {
                 .andExpect(header().string(HttpHeaders.LOCATION,
                         org.hamcrest.Matchers.matchesPattern("/api/v1/admin/learners/[0-9]+")))
                 .andExpect(jsonPath("$.username").value("Bob"))
+                .andExpect(jsonPath("$.isTest").value(true))
                 .andExpect(jsonPath("$.contentGrantArticleIds").isEmpty())
                 .andReturn();
 

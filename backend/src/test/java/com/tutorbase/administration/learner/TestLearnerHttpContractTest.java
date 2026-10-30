@@ -134,7 +134,7 @@ class TestLearnerHttpContractTest {
     }
 
     @Test
-    void givenAdministratorWhenListingLearnersThenReturnsTestFlagsAndCreatedLearnerDefaults() throws Exception {
+    void givenAdministratorWhenCreatingLearnerThenCreatedLearnerIsTestLearner() throws Exception {
         Cookie adminCookie = login("admin", "Admin-password-2026");
         BrowserSession admin = csrf(adminCookie);
 
@@ -157,7 +157,7 @@ class TestLearnerHttpContractTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"newbie\"}"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.isTest").value(false))
+                .andExpect(jsonPath("$.isTest").value(true))
                 .andExpect(jsonPath("$.isSpecialTest").value(false));
     }
 

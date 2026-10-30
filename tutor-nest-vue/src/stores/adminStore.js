@@ -15,7 +15,7 @@ function toStudent(learner) {
     claimedByUsername: learner.claimedByUsername ?? null,
     claimedAt: learner.claimedAt ?? null,
     lastActivityAt: learner.lastActivityAt ?? null,
-    // 后端默认 false/false；新增学员的响应若缺少字段也按普通学员处理。
+    // 后端新增入口固定创建测试学员；响应缺少字段时仍按普通学员处理，避免误标。
     isTest: Boolean(learner.isTest),
     isSpecialTest: Boolean(learner.isSpecialTest)
   }

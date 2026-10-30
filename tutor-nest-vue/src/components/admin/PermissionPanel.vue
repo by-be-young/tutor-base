@@ -15,7 +15,7 @@
 
         <div class="panel-body perm-body">
             <EmptyState v-if="!selectedStudentId" icon="fas fa-user-graduate" title="尚未选择学员"
-                text="在顶部切换或新增学员后，即可配置内容授权。" />
+                text="在顶部切换或新增测试学员后，即可配置内容授权。" />
 
             <div v-else-if="coursewareStatus === 'loading'" class="perm-skeletons" aria-hidden="true">
                 <div class="skeleton perm-skeleton"></div>

@@ -144,7 +144,7 @@
             : '到「学员」页新增第一位学员，认领后即可配置内容授权与批阅。' }}
         </p>
         <router-link to="/admin/learners" class="btn btn--soft btn--sm">
-          {{ adminStore.students.length ? '去学员列表' : '去新增学员' }}
+          {{ adminStore.students.length ? '去学员列表' : '去新增测试学员' }}
         </router-link>
       </div>
 

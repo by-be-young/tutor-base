@@ -376,6 +376,8 @@ class AdminLearnerHttpContractTest {
                         org.hamcrest.Matchers.matchesPattern("/api/v1/admin/learners/[0-9]+")))
                 .andExpect(jsonPath("$.username").value("Dana"))
                 .andExpect(jsonPath("$.contentGrantArticleIds").isEmpty())
+                .andExpect(jsonPath("$.isTest").value(true))
+                .andExpect(jsonPath("$.isSpecialTest").value(false))
                 .andExpect(jsonPath("$.claimedByAccountId").value(500))
                 .andExpect(jsonPath("$.claimedByUsername").value("admin"))
                 .andExpect(jsonPath("$.claimedAt").isString())

@@ -19,7 +19,7 @@
 
         <div class="panel-body subject-body">
             <EmptyState v-if="!selectedStudentId" icon="fas fa-user-graduate" title="尚未选择学员"
-                text="在顶部切换或新增学员后，即可为他设定所学科目。" />
+                text="在顶部切换或新增测试学员后，即可为他设定所学科目。" />
 
             <div v-else-if="coursewareStatus === 'loading'" class="subject-skeletons" aria-hidden="true">
                 <div class="skeleton subject-skeleton"></div>

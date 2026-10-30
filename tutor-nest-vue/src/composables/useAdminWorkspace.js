@@ -133,13 +133,13 @@ export function useAdminWorkspace() {
 
   async function addStudent() {
     // e2e 依赖 window.prompt 的 dialog 流程，请勿改为自定义弹窗。
-    const username = prompt('请输入新学生的姓名（用户名）:')
+    const username = prompt('请输入新测试学员的姓名（用户名）:')
     if (!username || username.trim() === '') return null
 
     try {
       return await adminStore.addStudent(username.trim())
     } catch (error) {
-      showToast(error.message || '新增学生失败，请稍后重试', 'error')
+      showToast(error.message || '新增测试学员失败，请稍后重试', 'error')
       return null
     }
   }
