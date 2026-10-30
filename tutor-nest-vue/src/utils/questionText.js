@@ -16,6 +16,28 @@ const STEM_LIMIT = 400
 const QUOTE_PREFIX = /^\s{0,3}>\s?/
 /** 旧课件的「题目起始行」：引用块内的有序/无序列表项 */
 const QUESTION_LINE = /^\s{0,3}(?:>\s*)?(?:[-*+]\s+\S|\d+\s*[.、．]\s*\S)/
+/** 独行的占位符行（可带引用块前缀）：前置缩进与「>」后的空格都归零，只保留一个「> 」 */
+const MARKER_LINE = /^\s*(>\s*)?(【@\d*】|【题干\s*\d+(?:\s*-\s*\d+)?\s*】)\s*$/
+
+/**
+ * 去掉「只含占位符的行」前面的多余缩进。
+ * Markdown 里行首 4 空格或制表符是代码块，占位符会被当成纯文本，
+ * 页面于是直接打印 `<div class="question-slot">` 而不是答题卡片。
+ *
+ * @param {string} markdown 课件原文
+ * @returns {string} 归一化后的课件原文
+ */
+export function normalizeMarkerIndentation(markdown) {
+    return String(markdown ?? '')
+        .split('\n')
+        .map(line => {
+            const match = line.match(MARKER_LINE)
+            if (!match) return line
+            return `${match[1] ? '> ' : ''}${match[2]}`
+        })
+        .join('\n')
+}
+
 
 /** 去掉引用块前缀（> ），使块引用内的题干与正文题干解析结果一致 */
 export function stripQuoteMarks(text) {

@@ -5,10 +5,12 @@ import {
   analyzeCourseware,
   buildQuestionTextMap,
   cleanStemText,
+  normalizeMarkerIndentation,
   resolveQuestionOrder,
   resolveQuestionText,
   renderMarkdownTable
 } from '../src/utils/questionText.js'
+import { marked } from 'marked'
 
 test('显式题干标记按出现顺序拼接，并支持一处标记多处使用', () => {
     const markdown = [
@@ -158,4 +160,31 @@ test('题干中的表格渲染为 <table> 且转义单元格内容', () => {
 
     assert.match(html, /^<table><tr><th>元素<\/th><th>第一电离能<\/th><\/tr>/)
     assert.match(html, /<td>Cu &lt;x&gt;<\/td>/)
+})
+
+test('缩进 4 空格的独行占位符被归一化，答题卡片不会被当成代码块', () => {
+    const markdown = ['【题干1】题干', '', '    A. 选项', '', '    【@1】', '', '\t【@2】'].join('\n')
+    const lines = normalizeMarkerIndentation(markdown).split('\n')
+
+    assert.equal(lines[4], '【@1】')
+    assert.equal(lines[6], '【@2】')
+
+    const injected = normalizeMarkerIndentation(markdown)
+        .replace(/【@(\d*)】/g, (_, id) => `<div class="question-slot" data-question-id="${id}"></div>`)
+    const html = marked.parse(injected)
+    assert.match(html, /<div class="question-slot" data-question-id="1">/)
+    assert.doesNotMatch(html, /&lt;div class="question-slot"/)
+})
+
+test('引用块内的独行占位符只保留「> 」前缀', () => {
+    const markdown = ['> 【题干21】问题？', '>     ', '>     【@21】'].join('\n')
+    const lines = normalizeMarkerIndentation(markdown).split('\n')
+
+    assert.equal(lines[0], '> 【题干21】问题？')
+    assert.equal(lines[2], '> 【@21】')
+})
+
+test('正常写法的占位符与正文行不被改写', () => {
+    const markdown = ['【题干1】题干', '', '【@1】', '', '> 【题干2】引用题干', '', '> 【@2】'].join('\n')
+    assert.equal(normalizeMarkerIndentation(markdown), markdown)
 })

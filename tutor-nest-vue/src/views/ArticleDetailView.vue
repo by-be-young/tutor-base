@@ -218,7 +218,7 @@ import { useImageEmbed } from '@/composables/useImageEmbed'
 import { useDrawingInDetail } from '@/composables/useDrawing'
 import { learningGateway } from '@/gateways/learningGateway'
 import { showToast } from '@/utils/toast'
-import { ANSWER_TOKEN, STEM_TOKEN, STEM_TOKEN_ONE, buildQuestionTextMap } from '@/utils/questionText'
+import { ANSWER_TOKEN, STEM_TOKEN, STEM_TOKEN_ONE, buildQuestionTextMap, normalizeMarkerIndentation } from '@/utils/questionText'
 import { marked } from 'marked'
 
 const route = useRoute()
@@ -471,6 +471,9 @@ const questionTextMap = ref(new Map())
 
 function injectQuestionSlots(markdown) {
     questionTextMap.value = new Map()
+
+    // 缩进 4 空格或制表符的独行占位符会被 Markdown 当成代码块（卡片变成一行纯文本），先归一化
+    markdown = normalizeMarkerIndentation(markdown)
 
     // 第一遍：大题分组框。
     // 区间标记【题干N-M】与最后一个小题占位符之间没有 `---`（同一栏）时，
