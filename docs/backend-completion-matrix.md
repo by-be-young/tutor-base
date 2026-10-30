@@ -54,3 +54,16 @@
 - migration job 成功后才替换应用；readiness 与 API smoke test 失败则停止发布。
 - CD 在独立 SSH 会话中核对运行容器的 immutable image SHA，防止迁移成功但应用替换未执行时误报成功。
 - dependency 与 action 固定版本，工作流使用最小权限，生产 secret 只存在 GitHub Environment/服务器受限 env 文件。
+
+## 课件托管化（2026-11-01）
+
+| 能力 | 状态 | 已完成 | 待完成 / 验证方式 |
+| --- | --- | --- | --- |
+| 数据模型（老师命名空间、发布版本、分享/获取、快照列） | 进行中 | V21 迁移 + 幂等 reconciliation；`FlywayMigrationTest` 覆盖空库、增量与幂等 | 换主键/唯一键（V22+）与代码切换同批上线 |
+| 契约 | 进行中 | `openapi.yaml` 新增 `GET /courseware/manifests`、`GET /courseware/articles/{teacherId}/{articleId}/content`、`POST /admin/courseware/releases` | 契约测试随实现补齐 |
+| 发布与读取（P0） | 未开始 | — | 存储抽象 + 发布服务 + 正文鉴权 + 种子发布 |
+| 分享/获取/更新（P1） | 未开始 | — | 资源目录、`course_share`/`course_copy`、更新汇总与差异 |
+| 导出导入 / 编辑器 / Git（P2） | 未开始 | — | zip 导入导出、`course_draft`、workspace push |
+| 认领模型下线（P4） | 未开始 | — | 移除 `courseware-claims` 接口与前端入口 |
+
+回归要求：`npm run test:courseware`、前端 70 项单测、SFC 检查与课件校验保持通过；`mvnw verify` 中 `FlywayMigrationTest` 必须包含新增表与列的断言。

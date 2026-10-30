@@ -48,7 +48,17 @@ class FlywayMigrationTest {
             "admin_courseware_claim",
             "admin_courseware_exclusion",
             "admin_courseware_abandonment",
-            "teacher_registration_application");
+            "teacher_registration_application",
+            "student_teacher",
+            "course_release",
+            "course_release_head",
+            "course_article",
+            "course_share",
+            "course_copy",
+            "course_subscription",
+            "course_draft",
+            "course_asset_ref",
+            "course_operation_log");
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
@@ -70,7 +80,7 @@ class FlywayMigrationTest {
                     .count();
         }
         assertThat(result.migrationsExecuted).isEqualTo((int) expectedMigrations);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("19");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("21");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
         try (Connection connection = POSTGRES.createConnection("")) {
@@ -117,6 +127,14 @@ class FlywayMigrationTest {
                       )
                     """)).isEqualTo(4);
             assertThat(readQuestionIdDataType(connection, "article_question_submissions")).isEqualTo("text");
+            assertThat(hasColumn(connection, "courseware_catalog", "teacher_account_id")).isTrue();
+            assertThat(hasColumn(connection, "courseware_catalog", "legacy_article_id")).isTrue();
+            assertThat(hasColumn(connection, "wrong_questions", "stem_snapshot")).isTrue();
+            assertThat(hasConstraint(connection, "course_copy_local_unique")).isTrue();
+            assertThat(readCount(connection, """
+                    SELECT count(*) FROM pg_indexes
+                    WHERE schemaname = 'public' AND indexname = 'student_teacher_single_primary_idx'
+                    """)).isEqualTo(1);
             assertThat(hasConstraint(connection, "account_activation_state_check")).isTrue();
             assertThat(hasConstraint(connection, "account_activation_expiry_check")).isTrue();
             assertThat(hasColumn(connection, "account", "is_super_admin")).isTrue();
@@ -199,6 +217,19 @@ class FlywayMigrationTest {
                     "..", "database", "reconciliation", "2026-10-31_student_subjects.sql"));
             execute(connection, studentSubjectsReconciliation);
             execute(connection, studentSubjectsReconciliation);
+            String coursewareHostingReconciliation = Files.readString(Path.of(
+                    "..", "database", "reconciliation", "2026-11-01_courseware_hosting.sql"));
+            execute(connection, coursewareHostingReconciliation);
+            execute(connection, coursewareHostingReconciliation);
+            assertThat(hasColumn(connection, "courseware_catalog", "teacher_account_id")).isTrue();
+            assertThat(hasColumn(connection, "courseware_catalog", "legacy_article_id")).isTrue();
+            assertThat(hasColumn(connection, "article_answer_keys", "teacher_account_id")).isTrue();
+            assertThat(hasColumn(connection, "article_question_submissions", "stem_snapshot")).isTrue();
+            assertThat(hasColumn(connection, "wrong_questions", "teacher_account_id")).isTrue();
+            assertThat(hasConstraint(connection, "course_copy_local_unique")).isTrue();
+            assertThat(hasConstraint(connection, "course_copy_source_unique")).isTrue();
+            assertThat(hasConstraint(connection, "course_share_scope_type_check")).isTrue();
+            assertThat(hasConstraint(connection, "course_release_teacher_subject_version_unique")).isTrue();
             assertThat(hasColumn(connection, "account", "is_super_admin")).isTrue();
             assertThat(hasConstraint(connection, "account_super_admin_role_check")).isTrue();
             assertThat(hasConstraint(connection, "teacher_registration_application_state_check")).isTrue();
@@ -291,7 +322,7 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(8);
+            assertThat(result.migrationsExecuted).isEqualTo(10);
             try (Connection connection = driftDatabase.createConnection("")) {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.flyway_schema_history
@@ -391,7 +422,7 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(6);
+            assertThat(result.migrationsExecuted).isEqualTo(8);
             try (Connection connection = preV16Database.createConnection("")) {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.student

@@ -1404,6 +1404,108 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
+  /courseware/manifests:
+    get:
+      operationId: listCoursewareManifests
+      summary: 取当前学习者可见的全部课件清单
+      description: >-
+        按「老师 → 科目」返回已发布的课件清单。学习者只能拿到自己在 student_teacher 中
+        关联、且被授权的老师的清单；同一科目一位老师一份清单。清单内容只含元数据与内容哈希，
+        正文需再调用正文接口获取。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 清单数组，未关联任何老师时返回空数组。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareManifestCollection'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /courseware/articles/{teacherId}/{articleId}/content:
+    get:
+      operationId: getCoursewareContent
+      summary: 取一篇课件的正文 Markdown
+      description: >-
+        按老师命名空间取正文。articleId 只在老师命名空间内唯一，因此路径必须带 teacherId。
+        学习者需与该老师存在关联并被授权该课件；老师只能读取自己命名空间内的正文。
+        返回内容为课件原文（含 `【题干N】` / `【@N】` 占位符），前端沿用既有解析规则渲染。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '200':
+          description: 课件正文与版本信息。
+          headers:
+            ETag:
+              schema:
+                type: string
+          content:
+            text/markdown:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/releases:
+    post:
+      operationId: publishCoursewareRelease
+      summary: 发布一批课件为新版本
+      description: >-
+        校验（题目编号、占位符、答案键、图片引用、大小与脚本注入）通过后，写入内容寻址的正文
+        blob 与不可变 manifest，并把该老师该科目的当前版本指针切到新版本。同一老师同一科目
+        串行发布；`expectVersion` 与当前指针不一致时返回 409，避免覆盖他人改动。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareReleaseRequest'
+      responses:
+        '201':
+          description: 新版本已发布。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareReleaseCreated'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
 components:
   parameters:
     CsrfHeader:
@@ -2716,5 +2818,162 @@ components:
           type: string
           format: date-time
         weeklyResetAt:
+          type: string
+          format: date-time
+
+    CoursewareManifestCollection:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/CoursewareManifest'
+    CoursewareManifest:
+      type: object
+      additionalProperties: false
+      required: [teacherId, teacherName, subject, version, publishedAt, contentHash, etag, articles]
+      properties:
+        teacherId:
+          type: integer
+          format: int64
+        teacherName:
+          type: string
+        subject:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+        publishedAt:
+          type: string
+          format: date-time
+        contentHash:
+          type: string
+          description: 整份 manifest 的哈希，用于复制/更新比对。
+        etag:
+          type: string
+          description: 客户端缓存校验用；版本变化时随之变化。
+        articles:
+          type: array
+          maxItems: 2000
+          items:
+            $ref: '#/components/schemas/CoursewareManifestArticle'
+    CoursewareManifestArticle:
+      type: object
+      additionalProperties: false
+      required: [articleId, title, series, logicalPath, contentHash, questionCount]
+      properties:
+        articleId:
+          type: integer
+          format: int64
+          description: 老师命名空间内的课件 ID，与逻辑路径解耦。
+        legacyArticleId:
+          type: [integer, 'null']
+          format: int64
+          description: 迁移前全局 article_id，仅用于对照旧授权与旧链接。
+        title:
+          type: string
+        series:
+          type: string
+        logicalPath:
+          type: string
+          description: 逻辑路径（<科目>/<模块>/<文件名>.md），移动改名不影响 articleId。
+        contentHash:
+          type: string
+        questionCount:
+          type: integer
+          minimum: 0
+        updatedAt:
+          type: [string, 'null']
+          format: date-time
+    CoursewareReleaseRequest:
+      type: object
+      additionalProperties: false
+      required: [subject, articles]
+      properties:
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 60
+        expectVersion:
+          type: [integer, 'null']
+          minimum: 0
+          description: 当前版本号；与服务器指针不一致时返回 409。
+        articles:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/CoursewareReleaseArticleInput'
+    CoursewareReleaseArticleInput:
+      type: object
+      additionalProperties: false
+      required: [title, series, logicalPath, markdown]
+      properties:
+        articleId:
+          type: [integer, 'null']
+          format: int64
+          description: 留空表示新课件，由服务端在本老师命名空间内分配（从 1000 起）。
+        legacyArticleId:
+          type: [integer, 'null']
+          format: int64
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        series:
+          type: string
+          minLength: 1
+          maxLength: 60
+        logicalPath:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: 拒绝绝对路径、反斜杠与 `..`。
+        markdown:
+          type: string
+          minLength: 1
+          maxLength: 1048576
+        answers:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/CoursewareAnswerKeyInput'
+    CoursewareAnswerKeyInput:
+      type: object
+      additionalProperties: false
+      required: [questionId, answer]
+      properties:
+        questionId:
+          type: string
+          minLength: 1
+          maxLength: 40
+        answer:
+          type: string
+          maxLength: 4000
+        autoGrade:
+          type: boolean
+          default: false
+    CoursewareReleaseCreated:
+      type: object
+      additionalProperties: false
+      required: [teacherId, subject, version, contentHash, articleCount, publishedAt]
+      properties:
+        teacherId:
+          type: integer
+          format: int64
+        subject:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+        contentHash:
+          type: string
+        articleCount:
+          type: integer
+          minimum: 0
+        publishedAt:
           type: string
           format: date-time

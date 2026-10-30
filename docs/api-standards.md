@@ -261,3 +261,23 @@
 - request 新字段默认 optional；要变为 required，先让客户端发布并发送，再在后续版本收紧。
 - breaking change 优先在 `/api/v2` 引入；不允许仅靠前后端“同时发布”掩盖不兼容。
 - OpenAPI 示例必须通过 schema 校验；实现的 MockMvc contract test 至少覆盖成功、未认证、无权、校验失败和 Problem Details。
+
+## 9. 课件托管接口约定（2026-11-01）
+
+- 前缀：学员侧 `/courseware`，老师侧 `/admin/courseware`；路径一律带老师维度，`articleId` 只在老师命名空间内唯一。
+- 正文：`GET /courseware/articles/{teacherId}/{articleId}/content` 返回 `text/markdown` 与 `ETag`；未关联/未授权返回 403，确不存在返回 404。
+- 发布：`POST /admin/courseware/releases` 以 `expectVersion` 做乐观锁；与当前指针不一致返回 `409`。
+- 错误码（`Problem.code`）：
+
+  | code | HTTP | 含义 |
+  | --- | --- | --- |
+  | `courseware_not_found` | 404 | 老师或课件不存在 |
+  | `courseware_forbidden` | 403 | 未授权或未关联该老师 |
+  | `courseware_validation_failed` | 400 | 发布校验失败，`errors[]` 逐条说明 |
+  | `courseware_release_conflict` | 409 | `expectVersion` 过期 |
+  | `courseware_source_forbidden` | 403 | 来源未开放获取 |
+  | `courseware_source_gone` | 404 | 来源已删除/停用 |
+  | `courseware_target_exists` | 409 | 目标路径已存在（获取/导入） |
+  | `courseware_quota_exceeded` | 413 | 超出存储配额 |
+
+- 旧接口：`/admin/courseware-claims*` 已标记 `deprecated`，P4 阶段下线；期间保持只读兼容。
