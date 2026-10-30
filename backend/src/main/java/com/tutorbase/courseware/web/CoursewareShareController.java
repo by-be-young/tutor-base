@@ -5,6 +5,7 @@ import java.util.List;
 import com.tutorbase.courseware.CoursewareFailures;
 import com.tutorbase.courseware.share.CoursewareCopyService;
 import com.tutorbase.courseware.share.CoursewareShareService;
+import com.tutorbase.courseware.update.CoursewareUpdateService;
 import com.tutorbase.identity.AccountPrincipal;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -27,10 +28,13 @@ public class CoursewareShareController {
 
     private final CoursewareShareService shares;
     private final CoursewareCopyService copies;
+    private final CoursewareUpdateService updates;
 
-    CoursewareShareController(CoursewareShareService shares, CoursewareCopyService copies) {
+    CoursewareShareController(
+            CoursewareShareService shares, CoursewareCopyService copies, CoursewareUpdateService updates) {
         this.shares = shares;
         this.copies = copies;
+        this.updates = updates;
     }
 
     @PostMapping("/shares")
@@ -103,8 +107,43 @@ public class CoursewareShareController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(items);
     }
 
-    private static long teacherId(AccountPrincipal principal) {
-        if (principal == null) {
+    @GetMapping("/updates")
+    ResponseEntity<DigestResponse> updates(@AuthenticationPrincipal AccountPrincipal principal) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(DigestResponse.from(updates.digest(teacherId(principal))));
+    }
+
+    @GetMapping("/copies/{copyId}/updates")
+    ResponseEntity<UpdateDetailResponse> updateDetail(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @PathVariable long copyId) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(UpdateDetailResponse.from(updates.detail(teacherId(principal), copyId)));
+    }
+
+    @PostMapping("/copies/{copyId}/updates/apply")
+    ResponseEntity<ApplyResponse> applyUpdate(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @PathVariable long copyId,
+            @jakarta.validation.Valid @RequestBody ApplyRequest request) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(ApplyResponse.from(updates.apply(
+                        teacherId(principal), copyId, request.mode(), request.expectedSourceHash())));
+    }
+
+    @PostMapping("/copies/{copyId}/updates/dismiss")
+    ResponseEntity<ApplyResponse> dismissUpdate(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @PathVariable long copyId) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(ApplyResponse.from(updates.apply(teacherId(principal), copyId, "keep", null)));
+    }
+
+    private static long teacherId(AccountPrincipal principal) {        if (principal == null) {
             throw new CoursewareFailures.Forbidden("未登录");
         }
         return principal.accountId();
@@ -209,6 +248,65 @@ public class CoursewareShareController {
                     summary.sourceTeacherId(), summary.sourceTeacherName(), summary.sourceArticleId(),
                     summary.sourceLogicalPath(), summary.localLogicalPath(), summary.baseContentHash(),
                     summary.sourceContentHash(), summary.status(), summary.hasUpdate());
+        }
+    }
+
+    record DigestItemResponse(
+            Long copyId,
+            Long localArticleId,
+            long sourceArticleId,
+            String title,
+            String logicalPath,
+            String baseContentHash,
+            String sourceContentHash) {
+
+        static DigestItemResponse from(CoursewareUpdateService.DigestItem item) {
+            return new DigestItemResponse(item.copyId(), item.localArticleId(), item.sourceArticleId(),
+                    item.title(), item.logicalPath(), item.baseContentHash(), item.sourceContentHash());
+        }
+    }
+
+    record DigestResponse(
+            int updatedCount,
+            int addedCount,
+            int removedCount,
+            List<DigestItemResponse> updated,
+            List<DigestItemResponse> added,
+            List<DigestItemResponse> removed) {
+
+        static DigestResponse from(CoursewareUpdateService.Digest digest) {
+            return new DigestResponse(digest.updatedCount(), digest.addedCount(), digest.removedCount(),
+                    digest.updated().stream().map(DigestItemResponse::from).toList(),
+                    digest.added().stream().map(DigestItemResponse::from).toList(),
+                    digest.removed().stream().map(DigestItemResponse::from).toList());
+        }
+    }
+
+    record UpdateDetailResponse(
+            long copyId,
+            int sourceVersion,
+            String baseHash,
+            String sourceHash,
+            boolean localModified,
+            boolean answerChanged,
+            String diff,
+            String sourceTitle,
+            String sourceLogicalPath) {
+
+        static UpdateDetailResponse from(CoursewareUpdateService.UpdateDetail detail) {
+            return new UpdateDetailResponse(detail.copyId(), detail.sourceVersion(), detail.baseHash(),
+                    detail.sourceHash(), detail.localModified(), detail.answerChanged(), detail.diff(),
+                    detail.sourceTitle(), detail.sourceLogicalPath());
+        }
+    }
+
+    record ApplyRequest(@NotBlank String mode, String expectedSourceHash) {
+    }
+
+    record ApplyResponse(boolean applied, String backupHash, boolean answerKeyUpdated) {
+
+        static ApplyResponse from(CoursewareUpdateService.ApplyResult result) {
+            return new ApplyResponse(result.applied(), result.backupHash(), result.answerKeyUpdated());
         }
     }
 }

@@ -1693,6 +1693,117 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+  /admin/courseware/updates:
+    get:
+      operationId: getCoursewareUpdateDigest
+      summary: 更新汇总（有更新 / 新增 / 来源已下线）
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 更新汇总。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareUpdateDigest'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/copies/{copyId}/updates:
+    get:
+      operationId: getCoursewareCopyUpdate
+      summary: 单篇更新详情（行级 diff 与答案变更标记）
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: copyId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 更新详情。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareUpdateDetail'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/copies/{copyId}/updates/apply:
+    post:
+      operationId: applyCoursewareCopyUpdate
+      summary: 应用或忽略来源更新
+      description: >-
+        `mode=overwrite` 先用本地草稿生成备份 blob 再覆盖，答案键与正文同批推进；
+        `mode=keep` 记住当前来源 hash 不再提示。`expectedSourceHash` 不一致返回 409。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: copyId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareUpdateApplyRequest'
+      responses:
+        '200':
+          description: 处理结果。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareUpdateApplyResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/copies/{copyId}/updates/dismiss:
+    post:
+      operationId: dismissCoursewareCopyUpdate
+      summary: 忽略当前来源版本
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: copyId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 已忽略。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareUpdateApplyResult'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+
 components:
   parameters:
     CsrfHeader:
@@ -3321,4 +3432,101 @@ components:
           type: string
           enum: [active, source_unavailable, source_revoked]
         hasUpdate:
+          type: boolean
+    CoursewareUpdateItem:
+      type: object
+      additionalProperties: false
+      required: [sourceArticleId, title]
+      properties:
+        copyId:
+          type: [integer, 'null']
+          format: int64
+        localArticleId:
+          type: [integer, 'null']
+          format: int64
+        sourceArticleId:
+          type: integer
+          format: int64
+        title:
+          type: string
+        logicalPath:
+          type: [string, 'null']
+        baseContentHash:
+          type: [string, 'null']
+        sourceContentHash:
+          type: [string, 'null']
+    CoursewareUpdateDigest:
+      type: object
+      additionalProperties: false
+      required: [updatedCount, addedCount, removedCount, updated, added, removed]
+      properties:
+        updatedCount:
+          type: integer
+          minimum: 0
+        addedCount:
+          type: integer
+          minimum: 0
+        removedCount:
+          type: integer
+          minimum: 0
+        updated:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoursewareUpdateItem'
+        added:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoursewareUpdateItem'
+        removed:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoursewareUpdateItem'
+    CoursewareUpdateDetail:
+      type: object
+      additionalProperties: false
+      required: [copyId, sourceVersion, baseHash, sourceHash, localModified, answerChanged, diff]
+      properties:
+        copyId:
+          type: integer
+          format: int64
+        sourceVersion:
+          type: integer
+          minimum: 1
+        baseHash:
+          type: string
+        sourceHash:
+          type: string
+        localModified:
+          type: boolean
+        answerChanged:
+          type: boolean
+        diff:
+          type: string
+          description: 行级 diff（`-` 本地、`+` 来源），超过 400 行截断
+        sourceTitle:
+          type: string
+        sourceLogicalPath:
+          type: string
+    CoursewareUpdateApplyRequest:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [overwrite, keep]
+        expectedSourceHash:
+          type: string
+          description: 乐观锁；与来源当前 hash 不一致返回 409
+    CoursewareUpdateApplyResult:
+      type: object
+      additionalProperties: false
+      required: [applied, answerKeyUpdated]
+      properties:
+        applied:
+          type: boolean
+        backupHash:
+          type: [string, 'null']
+          description: 覆盖前本地草稿的备份 blob hash
+        answerKeyUpdated:
           type: boolean

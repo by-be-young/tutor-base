@@ -36,6 +36,12 @@ class CoursewareHttpExceptionHandler {
                 exception.getMessage(), request);
     }
 
+    @ExceptionHandler(CoursewareFailures.HashConflict.class)
+    ProblemDetail hashConflict(CoursewareFailures.HashConflict exception, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, "courseware_hash_conflict", "来源已更新",
+                exception.getMessage(), request);
+    }
+
     @ExceptionHandler(CoursewareFailures.VersionConflict.class)
     ProblemDetail conflict(CoursewareFailures.VersionConflict exception, HttpServletRequest request) {
         return problem(HttpStatus.CONFLICT, "courseware_release_conflict", "发布版本冲突", exception.getMessage(), request);
