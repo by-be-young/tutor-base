@@ -1397,7 +1397,7 @@ async function loadContent() {
         }
 
         // 加载 Markdown 内容：优先托管接口，回退静态文件
-        const content = await loadArticleMarkdown(blog)
+        let content = await loadArticleMarkdown(blog)
         if (!content) throw new Error('文件加载失败')
 
         // 1. 处理图片嵌入语法
