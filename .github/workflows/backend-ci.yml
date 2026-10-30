@@ -63,6 +63,8 @@ jobs:
       - run: npm ci
       - name: Test frontend gateways and security behavior
         run: npm run test:frontend
+      - name: Validate courseware question marks
+        run: npm run test:courseware
       - name: Validate OpenAPI contract
         run: npm run test:openapi
       - name: Build Vue frontend

@@ -37,6 +37,7 @@
 ```powershell
 npm ci
 npm run test:frontend
+npm run test:courseware
 npm run test:openapi
 npm run test:secrets
 npm run build
