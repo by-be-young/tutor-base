@@ -3,7 +3,7 @@
 // 后端返回当前账户可见的错题与正确答案；静态文章 markdown 只用于补充题干、学科和顺序号。
 import { ref } from 'vue'
 import { useArticleStore } from '@/stores/blogStore'
-import { resolveQuestionText, resolveQuestionOrder } from '@/utils/questionText'
+import { analyzeCourseware } from '@/utils/questionText'
 
 export function useWrongQuestionsResolve() {
     const blogStore = useArticleStore()
@@ -11,6 +11,7 @@ export function useWrongQuestionsResolve() {
     const resolvedMap = ref(new Map())   // 错题 id → { subject, questionText, correctAnswer, order }
     const resolvedReady = ref(false)     // 动态解析是否完成
     const articleCache = new Map()       // blogId → markdown（缓存）
+    const questionCache = new Map()      // blogId → Map(题目编号 → { stem, order })
 
     function resolvedOf(q) {
         return resolvedMap.value.get(q.id) || {}
@@ -43,6 +44,20 @@ export function useWrongQuestionsResolve() {
         return map
     }
 
+    /** 解析并缓存单篇课件的题目（题干 + 显示顺序号），与课件详情页共用同一套规则 */
+    function indexQuestions(blogId, markdown) {
+        const key = String(blogId)
+        if (questionCache.has(key)) return questionCache.get(key)
+        const index = new Map()
+        if (markdown) {
+            analyzeCourseware(markdown).questions.forEach(question => {
+                index.set(question.id, { stem: question.stem, order: question.order })
+            })
+        }
+        questionCache.set(key, index)
+        return index
+    }
+
     /** 解析指定错题列表的动态数据（不依赖 store 中的 questions） */
     async function resolveQuestions(list) {
         resolvedReady.value = false
@@ -61,11 +76,10 @@ export function useWrongQuestionsResolve() {
             if (q.source_blog_id != null) {
                 const blog = blogStore.blogData.find(b => Number(b.id) === Number(q.source_blog_id))
                 subject = blog?.series || ''
-                const md = articleCache.get(String(q.source_blog_id))
-                if (md) {
-                    questionText = resolveQuestionText(md, q.source_question_id)
-                    order = resolveQuestionOrder(md, q.source_question_id)
-                }
+                const index = indexQuestions(q.source_blog_id, articleCache.get(String(q.source_blog_id)))
+                const resolved = index.get(String(q.source_question_id))
+                questionText = resolved?.stem || ''
+                order = resolved?.order ?? null
                 const key = answerMap.get(`${q.source_blog_id}-${String(q.source_question_id)}`)
                 correctAnswer = key?.answerText || ''
                 autoGrade = Boolean(key?.autoGrade)

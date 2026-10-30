@@ -1,16 +1,33 @@
 // src/utils/questionText.js
-// 题干占位符解析工具（与 ArticleDetailView 的解析规则保持一致）
-// 占位符语法：
-//   答题占位符：【@】自动编号 / 【@N】显式编号
-//   题干占位符：【题干N】/【题干N-M】（编号前后允许空格）
+// 课件（public/articles/**/*.md）题目解析工具：把课件原文解析成「题目 → 题干」映射。
+// 规范见 tutor-nest-vue/docs/文章格式规范.md，一致性由 scripts/check-courseware.mjs 守护。
+//
+// 占位符语法（全角，编号前后允许空格）：
+//   作答占位符：【@】自动编号 / 【@N】显式编号
+//   题干占位符：【题干N】单题 / 【题干N-M】区间内每题共享的公共题干
 
 export const ANSWER_TOKEN = /【@(\d*)】/g
 export const STEM_TOKEN = /【题干\s*(\d+)(?:\s*-\s*(\d+))?\s*】/g
 export const STEM_TOKEN_ONE = /【题干\s*(\d+)(?:\s*-\s*(\d+))?\s*】/
 
-/** 清理题干片段中的 markdown 语法、标题行、分隔线与空行 */
+/** 题干片段超过该长度时截断（错题本卡片容量） */
+const STEM_LIMIT = 400
+
+const QUOTE_PREFIX = /^\s{0,3}>\s?/
+/** 旧课件的「题目起始行」：引用块内的有序/无序列表项 */
+const QUESTION_LINE = /^\s{0,3}(?:>\s*)?(?:[-*+]\s+\S|\d+\s*[.、．]\s*\S)/
+
+/** 去掉引用块前缀（> ），使块引用内的题干与正文题干解析结果一致 */
+export function stripQuoteMarks(text) {
+    return String(text ?? '')
+        .split('\n')
+        .map(line => line.replace(QUOTE_PREFIX, ''))
+        .join('\n')
+}
+
+/** 清理题干片段中的 markdown 语法、引用前缀、标题行、分隔线与空行 */
 export function cleanStemText(text) {
-    return text
+    return stripQuoteMarks(text)
         .replace(/\*\*(.+?)\*\*/g, '$1')
         .replace(/`(.+?)`/g, '$1')
         .split('\n')
@@ -38,15 +55,20 @@ export function nearestH1(markdown, pos) {
 }
 
 /**
- * 扫描文章中的全部占位符（题干标记 + 答题标记）
- * 答题占位符：
+ * 扫描课件中的全部占位符（题干标记 + 作答标记）
+ * 作答占位符：
  *   id —— 存储用编号（显式编号原样；无编号按出现顺序自动分配，跳过已用编号）
  *   order —— 显示用顺序号（从 1 开始按出现顺序递增，与实际 id 无关）
+ * 题干占位符：
+ *   ids —— 该标记覆盖的题号（【题干N】为 [N]，【题干N-M】为 N..M）
+ *
+ * @param {string} markdown 课件原文
  * @returns {Array<{type:'stem'|'answer', ids?:string[], id?:string, order?:number, index:number, end:number}>}
  */
-function scanTokens(markdown) {
+export function collectTokens(markdown) {
+    const source = String(markdown ?? '')
     const tokens = []
-    for (const m of markdown.matchAll(STEM_TOKEN)) {
+    for (const m of source.matchAll(STEM_TOKEN)) {
         const start = Number(m[1])
         const end = m[2] ? Number(m[2]) : start
         const ids = []
@@ -56,7 +78,7 @@ function scanTokens(markdown) {
     let autoCounter = 1
     let order = 0
     const used = new Set()
-    for (const m of markdown.matchAll(ANSWER_TOKEN)) {
+    for (const m of source.matchAll(ANSWER_TOKEN)) {
         order++
         let id
         if (m[1] !== '') {
@@ -74,86 +96,145 @@ function scanTokens(markdown) {
     return tokens
 }
 
+/** 按行边界与公式边界截断题干，避免把 $...$ 切成两半 */
+function truncateStem(text, limit = STEM_LIMIT) {
+    if (text.length <= limit) return text
+    const cut = text.slice(0, limit)
+    const lineCut = cut.lastIndexOf('\n')
+    let body = lineCut > limit * 0.6 ? cut.slice(0, lineCut) : cut
+    if ((body.match(/\$/g) || []).length % 2 === 1) {
+        const lastFormula = body.lastIndexOf('$')
+        if (lastFormula > limit * 0.5) body = body.slice(0, lastFormula)
+    }
+    return `${body.trimEnd()}…`
+}
+
 /**
- * 查询某道题的显示顺序号（第几个答题占位符，从 1 开始）
- * 文章中没有该题时返回 null
+ * 旧课件的紧邻题干回退：从作答占位符往前找最近的「题目起始行」，
+ * 把它到作答占位符之间的内容当作题干（保留选项行）。
+ * 遇到标题或分隔线说明题目与作答分属不同栏，不做猜测；题干过短时同样返回空串。
+ */
+function extractAdjacentQuestion(markdown, tokens, pos) {
+    let prevEnd = 0
+    for (const token of tokens) {
+        if (token.index >= pos) break
+        prevEnd = token.end
+    }
+    const lines = markdown.slice(prevEnd, pos).split('\n')
+    let last = lines.length - 1
+    while (last >= 0 && !lines[last].trim()) last--
+    if (last < 0) return ''
+
+    for (let i = last; i >= 0; i--) {
+        const trimmed = lines[i].trim()
+        if (!trimmed) continue
+        if (trimmed === '---' || /^#{1,6}\s/.test(trimmed)) return ''
+        if (QUESTION_LINE.test(lines[i])) {
+            return cleanStemText(lines.slice(i, last + 1).join('\n'))
+        }
+    }
+    return ''
+}
+
+/** 题干片段不跨过分隔线：分隔线之后是作答区，答题区里的题号标签不属于题干 */
+function cutAtSeparator(text) {
+    const index = text.search(/^---\s*$/m)
+    return index >= 0 ? text.slice(0, index) : text
+}
+
+/**
+ * 解析课件中的全部题目
  *
- * @param {string} markdown 文章原文
+ * 题干来源按优先级：
+ *   1. 显式标记【题干N】/【题干N-M】→ 全部片段按出现顺序拼接
+ *   2. 作答占位符上方紧邻的题目段落（旧课件回退）
+ *   3. 「最近一级章节标题 · 第N题」
+ *
+ * @param {string} markdown 课件原文
+ * @returns {{questions: Array<{id:string, order:number, stem:string, source:'stem'|'nearby'|'fallback'}>}}
+ */
+export function analyzeCourseware(markdown) {
+    const source = String(markdown ?? '')
+    const tokens = collectTokens(source)
+
+    const stemFragments = new Map()
+    for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i]
+        if (token.type !== 'stem') continue
+        const next = tokens[i + 1]
+        const end = next ? next.index : source.length
+        const fragment = cleanStemText(cutAtSeparator(source.slice(token.end, end)))
+        if (!fragment) continue
+        token.ids.forEach(id => {
+            if (!stemFragments.has(id)) stemFragments.set(id, [])
+            stemFragments.get(id).push(fragment)
+        })
+    }
+
+    const questions = tokens
+        .filter(token => token.type === 'answer')
+        .map(token => {
+            const fragments = stemFragments.get(token.id)
+            if (fragments && fragments.length) {
+                return {
+                    id: token.id,
+                    order: token.order,
+                    stem: truncateStem(fragments.join('\n')),
+                    source: 'stem'
+                }
+            }
+            const nearby = extractAdjacentQuestion(source, tokens, token.index)
+            if (nearby.length >= 5) {
+                return { id: token.id, order: token.order, stem: truncateStem(nearby), source: 'nearby' }
+            }
+            return {
+                id: token.id,
+                order: token.order,
+                stem: `${nearestH1(source, token.index)} · 第${token.order}题`,
+                source: 'fallback'
+            }
+        })
+
+    return { questions }
+}
+
+/**
+ * 查询某道题的显示顺序号（第几个作答占位符，从 1 开始）
+ * 课件中没有该题时返回 null
+ *
+ * @param {string} markdown 课件原文
  * @param {string|number} questionId 存储用题目编号
  * @returns {number|null}
  */
 export function resolveQuestionOrder(markdown, questionId) {
     const key = String(questionId)
-    const tokens = scanTokens(markdown)
-    const answer = tokens.find(t => t.type === 'answer' && t.id === key)
+    const answer = collectTokens(markdown).find(t => t.type === 'answer' && t.id === key)
     return answer ? answer.order : null
 }
 
 /**
- * 启发式提取：取答题占位符上方紧邻的内容作为题干
- * （上一个占位符之后、遇到最近标题或分隔线为止，保留题目与选项行）
- * 适用于未写【题干N】标记的旧文章；提取内容过短（如纯题号）时返回空
- */
-function extractNearbyText(markdown, tokens, pos) {
-    let prevEnd = 0
-    for (const t of tokens) {
-        if (t.index >= pos) break
-        prevEnd = t.end
-    }
-    const lines = markdown.slice(prevEnd, pos).split('\n')
-
-    // 从后往前扫描，遇到标题或分隔线则停止（题目内容通常紧邻占位符）
-    let startIdx = 0
-    for (let i = lines.length - 1; i >= 0; i--) {
-        if (/^#{1,6}\s/.test(lines[i]) || /^---\s*$/.test(lines[i].trim())) {
-            startIdx = i + 1
-            break
-        }
-    }
-
-    const text = cleanStemText(lines.slice(startIdx).join('\n'))
-    return text.length >= 5 ? text : ''
-}
-
-/**
- * 解析某道题的题干（错题本动态获取用）
- * 优先级：
- *   1. 写了【题干N】/【题干N-M】 → 全部片段按出现顺序拼接（截断 400 字）
- *   2. 未写标记 → 启发式提取答题占位符上方的紧邻文本
- *   3. 仍无内容 → 回退「最近一级章节标题 · 第N题」
+ * 解析某道题的题干（错题本 / 错题训练动态获取用）
  *
- * @param {string} markdown 文章原文
+ * @param {string} markdown 课件原文
  * @param {string|number} questionId 题目编号
- * @returns {string}
+ * @returns {string} 题干；课件中没有该题时返回空串
  */
 export function resolveQuestionText(markdown, questionId) {
     const key = String(questionId)
-    const tokens = scanTokens(markdown)
+    const question = analyzeCourseware(markdown).questions.find(q => q.id === key)
+    return question ? question.stem : ''
+}
 
-    const fragments = []
-    for (let i = 0; i < tokens.length; i++) {
-        const t = tokens[i]
-        if (t.type !== 'stem' || !t.ids.includes(key)) continue
-        const next = tokens[i + 1]
-        const end = next ? next.index : markdown.length
-        const fragment = cleanStemText(markdown.slice(t.end, end))
-        if (fragment) fragments.push(fragment)
-    }
-
-    if (fragments.length) {
-        const text = fragments.join('\n')
-        return text.length > 400 ? text.slice(0, 400) + '…' : text
-    }
-
-    const answer = tokens.find(t => t.type === 'answer' && t.id === key)
-    if (answer) {
-        const nearby = extractNearbyText(markdown, tokens, answer.index)
-        if (nearby) return nearby
-    }
-
-    // 回退：显示顺序号（文章中没有该题时用原编号）
-    const display = answer ? answer.order : key
-    return `${nearestH1(markdown, answer?.index ?? 0)} · 第${display}题`
+/**
+ * 构建「题目编号 → 题干」映射（课件详情页与错题本共用同一套解析结果）
+ *
+ * @param {string} markdown 课件原文
+ * @returns {Map<string, string>}
+ */
+export function buildQuestionTextMap(markdown) {
+    const map = new Map()
+    analyzeCourseware(markdown).questions.forEach(question => map.set(question.id, question.stem))
+    return map
 }
 
 // ========== Markdown 表格渲染（错题本/错题训练等简版渲染器用） ==========

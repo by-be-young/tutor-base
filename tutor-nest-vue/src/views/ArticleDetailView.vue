@@ -218,6 +218,7 @@ import { useImageEmbed } from '@/composables/useImageEmbed'
 import { useDrawingInDetail } from '@/composables/useDrawing'
 import { learningGateway } from '@/gateways/learningGateway'
 import { showToast } from '@/utils/toast'
+import { ANSWER_TOKEN, STEM_TOKEN, STEM_TOKEN_ONE, buildQuestionTextMap } from '@/utils/questionText'
 import { marked } from 'marked'
 
 const route = useRoute()
@@ -468,80 +469,10 @@ function renderMarkdown(markdown) {
 // 题目文本映射：questionId → 题目内容（供错题本自动收集使用）
 const questionTextMap = ref(new Map())
 
-// 占位符语法（仅支持全角形式，编号前后允许空格）：
-//   答题占位符：【@】自动编号 / 【@N】显式编号
-//   题干占位符：【题干N】标记第 N 题的题干片段（可多处使用，按出现顺序拼接）
-//   公共题干占位符：【题干N-M】标记第 N~M 题的公共题干（大题），区间内每题共享
-const ANSWER_TOKEN = /【@(\d*)】/g
-const STEM_TOKEN = /【题干\s*(\d+)(?:\s*-\s*(\d+))?\s*】/g
-// 单行判定用（match() 搭配全局正则会丢失捕获组，故另定义非全局版本）
-const STEM_TOKEN_ONE = /【题干\s*(\d+)(?:\s*-\s*(\d+))?\s*】/
-
-/** 清理题干片段中的 markdown 语法、标题行、分隔线与空行 */
-function cleanStemText(text) {
-    return text
-        .replace(/\*\*(.+?)\*\*/g, '$1')
-        .replace(/`(.+?)`/g, '$1')
-        .split('\n')
-        .filter(line => {
-            const t = line.trim()
-            if (!t) return false
-            if (/^#{1,6}\s/.test(t)) return false // 排除标题行
-            if (/^---\s*$/.test(t)) return false  // 排除分隔线
-            return true
-        })
-        .join('\n')
-        .trim()
-}
-
-/** 查找某个位置之前最近的一级标题（# 章节标题），找不到返回「本文」 */
-function nearestH1(markdown, pos) {
-    const lines = markdown.slice(0, pos).split('\n')
-    for (let i = lines.length - 1; i >= 0; i--) {
-        const m = lines[i]?.match(/^#\s+(.*)$/)
-        if (m) {
-            return m[1].replace(/\*\*(.+?)\*\*/g, '$1').trim() || '本文'
-        }
-    }
-    return '本文'
-}
-
 function injectQuestionSlots(markdown) {
     questionTextMap.value = new Map()
 
-    // 第一遍：按位置收集所有占位符（题干标记 + 答题标记），记录答题标记的原始位置。
-    // 题干标记支持区间：【题干N】单题 / 【题干N-M】公共题干（区间内每题共享）
-    const tokens = []
-    for (const m of markdown.matchAll(STEM_TOKEN)) {
-        const start = Number(m[1])
-        const end = m[2] ? Number(m[2]) : start
-        const ids = []
-        for (let n = start; n <= end; n++) ids.push(String(n))
-        tokens.push({ type: 'stem', ids, index: m.index, end: m.index + m[0].length })
-    }
-    for (const m of markdown.matchAll(ANSWER_TOKEN)) {
-        tokens.push({ type: 'answer', id: m[1], index: m.index, end: m.index + m[0].length })
-    }
-    tokens.sort((a, b) => a.index - b.index)
-    const answerRawIndices = tokens.filter(t => t.type === 'answer').map(t => t.index)
-
-    // 题干片段：题干标记之后、下一个占位符之前的文本。
-    // 一个「题干N」可出现在正文任何位置（如双栏分离布局），按出现顺序归属第 N 题
-    const stemFragments = new Map()   // 题号 → 片段数组
-    for (let i = 0; i < tokens.length; i++) {
-        const t = tokens[i]
-        if (t.type !== 'stem') continue
-        const next = tokens[i + 1]
-        const end = next ? next.index : markdown.length
-        const fragment = cleanStemText(markdown.slice(t.end, end))
-        if (!fragment) continue
-        t.ids.forEach(id => {
-            if (!stemFragments.has(id)) stemFragments.set(id, [])
-            stemFragments.get(id).push(fragment)
-        })
-    }
-
-    // 第二遍：大题分组框。
+    // 第一遍：大题分组框。
     // 区间标记【题干N-M】与最后一个小题占位符之间没有 `---`（同一栏）时，
     // 用一个大框包住公共题干及全部小题（纯样式作用，不影响解析）
     const lines = markdown.split('\n')
@@ -616,16 +547,14 @@ function injectQuestionSlots(markdown) {
     }
     const groupedMarkdown = groupedLines.join('\n')
 
-    // 第三遍：渲染 markdown
+    // 第二遍：渲染 markdown
     //   答题标记 → 答题卡片（构建 questionId → 显示顺序号 映射）
     //   题干标记 → 样式化题号标签（显示顺序号，如「第 1 题」「第 1-3 题」，与实际 id 无关）
     let autoCounter = 1
     const usedIndices = new Set()
     const questionIds = []
-    const answerPositions = new Map() // questionId → 答题占位符在原文中的位置
     const idOrderMap = new Map()      // questionId → 显示顺序号（从 1 按出现顺序递增）
     let slotCount = 0
-    let answerIdx = 0
     let orderCounter = 0
 
     const processed = groupedMarkdown
@@ -644,7 +573,6 @@ function injectQuestionSlots(markdown) {
             orderCounter++
             questionIds.push(questionId)
             idOrderMap.set(questionId, orderCounter)
-            answerPositions.set(questionId, answerRawIndices[answerIdx++])
             return `<div class="question-slot" data-question-id="${questionId}"></div>`
         })
         .replace(STEM_TOKEN, (_, n, m2) => {
@@ -655,18 +583,8 @@ function injectQuestionSlots(markdown) {
             return `<span class="stem-label">第 ${start}${end !== null ? '-' + end : ''} 题</span>`
         })
 
-    // 第三遍：生成错题本题目内容
-    //   有题干标记 → 拼接全部片段；无 → 回退「最近章节标题 · 第N题」
-    questionIds.forEach(questionId => {
-        const fragments = stemFragments.get(questionId)
-        let text
-        if (fragments && fragments.length > 0) {
-            text = fragments.join('\n')
-        } else {
-            text = `${nearestH1(markdown, answerPositions.get(questionId) ?? 0)} · 第${questionId}题`
-        }
-        questionTextMap.value.set(questionId, text.length > 400 ? text.slice(0, 400) + '…' : text)
-    })
+    // 题干映射与错题本 / 错题训练共用同一套解析规则（含旧课件的紧邻题目回退）
+    questionTextMap.value = buildQuestionTextMap(markdown)
 
     return { markdown: processed, questionCount: slotCount, questionIdList: questionIds }
 }
