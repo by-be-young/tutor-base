@@ -1,6 +1,13 @@
 // src/gateways/coursewareGateway.js
 // 课件目录同步与管理员认领：/admin/courseware-catalog、/admin/courseware-claims。
 import { backendClient } from './backendClient.js'
+import {
+  normalizeCopyResult,
+  normalizeCopySummary,
+  normalizeSharedArticle,
+  normalizeSharedSubject,
+  normalizeShares
+} from '../utils/coursewareSharing.js'
 
 function normalizeClaims(response) {
   return {
@@ -40,6 +47,47 @@ export const coursewareGateway = {
     return backendClient.requestText(
       `/courseware/articles/${encodeURIComponent(teacherId)}/${encodeURIComponent(articleId)}/content`
     )
+  },
+
+  /** 分享整科或指定单篇。 */
+  async createShare({ subject, scope, articleIds, allowPreview = true, allowCopy = true }) {
+    const body = { subject, scope, allowPreview, allowCopy }
+    if (Array.isArray(articleIds) && articleIds.length) body.articleIds = articleIds
+    return normalizeShares(await backendClient.request('/admin/courseware/shares', { method: 'POST', body }))
+  },
+
+  async listShares(includeRevoked = false) {
+    const parameters = new URLSearchParams({ includeRevoked: String(Boolean(includeRevoked)) })
+    return normalizeShares(await backendClient.request(`/admin/courseware/shares?${parameters}`))
+  },
+
+  revokeShare(shareId) {
+    return backendClient.request(`/admin/courseware/shares/${encodeURIComponent(shareId)}`, { method: 'DELETE' })
+  },
+
+  async listResources() {
+    const response = await backendClient.request('/admin/courseware/resources')
+    return Array.isArray(response) ? response.map(normalizeSharedSubject) : []
+  },
+
+  async listResourceTree(teacherId, subject) {
+    const parameters = new URLSearchParams({ teacherId: String(teacherId), subject })
+    const response = await backendClient.request(`/admin/courseware/resources/tree?${parameters}`)
+    return Array.isArray(response) ? response.map(normalizeSharedArticle) : []
+  },
+
+  /** 获取课件：`articleIds` 为空表示整科。 */
+  async acquire({ sourceTeacherId, subject, articleIds, targetRootPath }) {
+    const body = { sourceTeacherId, subject }
+    if (Array.isArray(articleIds) && articleIds.length) body.articleIds = articleIds
+    if (targetRootPath) body.targetRootPath = targetRootPath
+    const response = await backendClient.request('/admin/courseware/copies', { method: 'POST', body })
+    return Array.isArray(response) ? response.map(normalizeCopyResult) : []
+  },
+
+  async listCopies() {
+    const response = await backendClient.request('/admin/courseware/copies')
+    return Array.isArray(response) ? response.map(normalizeCopySummary) : []
   },
 
   /** 同步前端静态课件目录；重复调用幂等。 */
