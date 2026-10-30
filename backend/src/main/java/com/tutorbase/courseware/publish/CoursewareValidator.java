@@ -13,6 +13,9 @@ import java.util.regex.Pattern;
  *
  * <p>规则与 {@code tutor-nest-vue/docs/文章格式规范.md} 对齐；前端 {@code check-courseware}
  * 负责内容质量，这里负责「发出去之后一定能渲染、一定能判分」。
+ *
+ * <p>不含任何题目的纯讲义允许发布；一旦出现题干或作答占位符，两者必须一一对应。
+ * 题号只作为题目标识，允许缺号（存量课件删题后不重编号，避免破坏已存答案键与错题记录）。
  */
 public final class CoursewareValidator {
 
@@ -76,27 +79,11 @@ public final class CoursewareValidator {
             errors.add("正文包含外链图片，请改为站内资产 ![[文件名]]");
         }
 
-        Set<String> answerIds = new LinkedHashSet<>();
-        int autoCounter = 1;
-        for (Matcher matcher = ANSWER_TOKEN.matcher(markdown); matcher.find(); ) {
-            String raw = matcher.group(1);
-            String id;
-            if (raw.isEmpty()) {
-                while (answerIds.contains(Integer.toString(autoCounter))) {
-                    autoCounter++;
-                }
-                id = Integer.toString(autoCounter);
-                autoCounter++;
-            } else {
-                id = raw;
-            }
-            if (!answerIds.add(id)) {
+        Set<String> answerIdSet = new LinkedHashSet<>();
+        for (String id : answerIds(markdown)) {
+            if (!answerIdSet.add(id)) {
                 errors.add("作答占位符编号重复：【@" + id + "】");
             }
-        }
-        if (answerIds.isEmpty()) {
-            errors.add("课件没有任何作答占位符【@N】");
-            return errors;
         }
 
         Set<String> stemIds = new LinkedHashSet<>();
@@ -112,21 +99,14 @@ public final class CoursewareValidator {
             }
         }
 
-        for (String id : answerIds) {
+        for (String id : answerIdSet) {
             if (!stemIds.contains(id)) {
                 errors.add("第 " + id + " 题缺少题干标记【题干" + id + "】");
             }
         }
         for (String id : stemIds) {
-            if (!answerIds.contains(id)) {
+            if (!answerIdSet.contains(id)) {
                 errors.add("题干标记【题干" + id + "】没有对应的作答占位符【@" + id + "】");
-            }
-        }
-
-        int maxId = answerIds.stream().mapToInt(Integer::parseInt).max().orElse(0);
-        for (int id = 1; id <= maxId; id++) {
-            if (!answerIds.contains(Integer.toString(id))) {
-                errors.add("作答占位符编号不连续：缺少【@" + id + "】");
             }
         }
 
@@ -141,15 +121,34 @@ public final class CoursewareValidator {
             if (!answeredIds.add(answer.questionId())) {
                 errors.add("答案键重复：questionId=" + answer.questionId());
             }
-            if (!answerIds.contains(answer.questionId())) {
+            if (!answerIdSet.contains(answer.questionId())) {
                 errors.add("答案键引用了不存在的题目：" + answer.questionId());
             }
         }
-        if (answers.size() != answerIds.size()) {
-            errors.add("答案键数量（" + answers.size() + "）与题目数量（" + answerIds.size() + "）不一致");
+        if (answers.size() != answerIdSet.size()) {
+            errors.add("答案键数量（" + answers.size() + "）与题目数量（" + answerIdSet.size() + "）不一致");
         }
 
         return errors;
+    }
+
+    /** 抽取正文中的作答编号（按出现顺序，含自动编号），供发布与存量导入共用。 */
+    public static List<String> answerIds(String markdown) {
+        List<String> ids = new ArrayList<>();
+        int autoCounter = 1;
+        for (Matcher matcher = ANSWER_TOKEN.matcher(markdown == null ? "" : markdown); matcher.find(); ) {
+            String raw = matcher.group(1);
+            if (raw.isEmpty()) {
+                while (ids.contains(Integer.toString(autoCounter))) {
+                    autoCounter++;
+                }
+                ids.add(Integer.toString(autoCounter));
+                autoCounter++;
+            } else {
+                ids.add(raw);
+            }
+        }
+        return ids;
     }
 
     /** 逻辑路径规范化：统一分隔符、去掉首尾空白与多余前导斜杠。 */

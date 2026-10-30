@@ -108,6 +108,18 @@ class CoursewareValidatorTest {
     }
 
     @Test
+    void acceptsReadingOnlyArticleWithoutQuestions() {
+        String markdown = "# 前导课\n\n本讲义介绍课程安排，不含练习。\n";
+        assertThat(CoursewareValidator.validate(article(markdown, List.of()), MAX)).isEmpty();
+    }
+
+    @Test
+    void acceptsNumberingGapsLeftByRemovedQuestions() {
+        String markdown = "【题干1】题一\n\n【@1】\n\n【题干3】题三\n\n【@3】\n";
+        assertThat(CoursewareValidator.validate(article(markdown, answers("1", "3")), MAX)).isEmpty();
+    }
+
+    @Test
     void rejectsOversizedArticle() {
         String markdown = "【题干1】" + "字".repeat(50) + "\n\n【@1】\n";
         assertThat(CoursewareValidator.validate(article(markdown, answers("1")), 40))

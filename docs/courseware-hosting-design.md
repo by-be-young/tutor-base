@@ -223,9 +223,11 @@ courseware/                                  （私有桶，禁止匿名读）
 
 | 规则 | 说明 |
 | --- | --- |
-| 题目编号连续 | `【题干1..N】` 无缺号、无重号 |
-| 作答占位符齐全 | 每题必须有对应 `【@N】` |
-| 答案键完整 | 自动判分题必须有答案；答案键数量 = 题目数量 |
+| 题干与占位符配对 | 出现 `【题干N】` 就必须有 `【@N】`，反之亦然；`【题干N-M】` 覆盖 N..M |
+| 允许缺号 | 题号只作标识，存量删题后不重编号（重编号会打断答案键与错题记录） |
+| 允许纯讲义 | 完全不含题目的阅读型课件可直接发布 |
+| 作答占位符唯一 | 同一编号不得出现两次 |
+| 答案键完整 | 答案键数量 = 题目数量，且 `questionId` 必须存在于正文 |
 | 图片引用可解析 | `![[xxx.png]]` 必须在资产清单内 |
 | 禁止外链图片 | 或明确标注为外部资源，避免渲染失败 |
 | 正文大小上限 | 单篇 ≤ 1 MB，防止误传大文件 |
@@ -801,6 +803,10 @@ public interface CoursewareStorage {
 | 1 | 全库备份 + 对象存储建桶 | 备份可恢复 |
 | 2 | 指定"初始老师"（当前唯一有课件的管理员），把 42 篇归入其命名空间 | 篇数 = 42，ID 集合 = 1–44 |
 | 3 | 生成 v1 manifest（`legacy_article_id` 写入） | manifest 篇数、hash 与磁盘一致 |
+
+> 步骤 2–4 由 `CoursewareSeeder` 承担：`TUTOR_COURSEWARE_SEED_ENABLED=true` 启动时读取
+> `public/data/articles.json` 索引与 `public/articles` 文件、按 `blog_id` 取 `article_answer_keys`，
+> 逐科目发布初始老师的 v1 release（已有版本默认跳过，`TUTOR_COURSEWARE_SEED_OVERWRITE=true` 可重发）。
 | 4 | 上传正文与图片到对象存储 | 124 条图片引用全部可解析 |
 | 5 | 改造 `courseware_catalog`（加列 → 回填 → 换主键） | 行数不变，无重复 |
 | 6 | 迁移 `article_answer_keys`：按 `(blog_id, question_id)` 关联到 `course_article` | 答案条数一致 |
