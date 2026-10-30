@@ -114,14 +114,14 @@ class TestLearnerHttpContractTest {
                 """);
         jdbc.update("""
                 INSERT INTO public.courseware_catalog (article_id, subject, title)
-                VALUES (101, '化学', '原子结构'), (102, '化学', '元素周期表')
+                VALUES (101, '高中化学', '原子结构'), (102, '高中化学', '元素周期表')
                 """);
         insertActiveAdministrator(ADMIN_ACCOUNT_ID, "admin", "Admin-password-2026");
         insertActiveLearner(1001L, ALICE_ID, "alice", "Learner-password-2026");
         insertActiveLearner(1002L, TEST_LEARNER_ID, "tester", "Tester-password-2026");
         jdbc.update("""
                 INSERT INTO public.admin_subject_claim (admin_account_id, subject)
-                VALUES (500, '化学')
+                VALUES (500, '高中化学')
                 """);
         jdbc.queryForObject(
                 "SELECT setval(pg_get_serial_sequence('public.student', 'id'), "
@@ -300,9 +300,9 @@ class TestLearnerHttpContractTest {
                         .header("X-CSRF-TOKEN", admin.csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("items", List.of(
-                                Map.of("articleId", 101, "subject", "化学", "title", "原子结构"),
-                                Map.of("articleId", 102, "subject", "化学", "title", "元素周期表"),
-                                Map.of("articleId", 103, "subject", "化学", "title", "化学键"))))))
+                                Map.of("articleId", 101, "subject", "高中化学", "title", "原子结构"),
+                                Map.of("articleId", 102, "subject", "高中化学", "title", "元素周期表"),
+                                Map.of("articleId", 103, "subject", "高中化学", "title", "化学键"))))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.synced").value(3));
 

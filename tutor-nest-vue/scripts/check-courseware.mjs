@@ -1,7 +1,8 @@
 /**
  * scripts/check-courseware.mjs
  *
- * 课件格式校验：确保 public/articles/ 下的每一份课件都能被错题本正确解析题干。
+ * 课件格式校验：确保 public/articles/ 下的每一份课件都能被错题本正确解析题干，
+ * 并且答题占位符在页面上真的渲染成答题卡片（而不是被转义成代码块里的纯文本）。
  * 规则来源：tutor-nest-vue/docs/文章格式规范.md
  *
  * 用法：
@@ -12,6 +13,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { marked } from 'marked'
 import { analyzeCourseware } from '../src/utils/questionText.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -87,6 +89,19 @@ function checkFile(relPath) {
         } else if (question.stem.replace(/\s/g, '').length < 5) {
             errors.push(`第 ${question.order} 题（id=${question.id}）题干过短，请补全【题干${question.id}】内容`)
         }
+    }
+
+    // 5. 占位符必须真的渲染成答题卡片；行首缩进 4 空格或制表符会变成代码块，卡片被转义成纯文本
+    const injected = markdown
+        .replace(/【@(\d*)】/g, (_, id) => `<div class="question-slot" data-question-id="${id || 'auto'}"></div>`)
+        .replace(/【题干\s*\d+(?:\s*-\s*\d+)?\s*】/g, '<span class="stem-label">题号</span>')
+    const html = marked.parse(injected)
+    const escapedSlots = (html.match(/&lt;div class="question-slot"/g) || []).length
+    const renderedSlots = (html.match(/<div class="question-slot"/g) || []).length
+    if (escapedSlots > 0) {
+        errors.push(`有 ${escapedSlots} 个作答占位符被渲染成纯文本（行首缩进 4 空格或制表符会变成代码块）`)
+    } else if (renderedSlots !== questions.length) {
+        errors.push(`答题卡片数量与作答占位符不一致：渲染 ${renderedSlots} / 占位 ${questions.length}`)
     }
 
     return { relPath, questions, errors, warnings, skipped: false }

@@ -127,8 +127,8 @@ const activeFilter = ref('all')
 function subjectTone(subject) {
     if (!subject) return 'violet'
     if (subject.includes('初中英语')) return 'amber'
-    if (subject.includes('化学')) return 'cyan'
-    if (subject.includes('英语')) return 'violet'
+    if (subject.includes('高中化学')) return 'cyan'
+    if (subject.includes('高中英语')) return 'violet'
     return 'pink'
 }
 

@@ -99,12 +99,12 @@ const routes = [
   {
     path: '/chemistry',
     name: 'Chemistry',
-    redirect: '/category?subject=化学'
+    redirect: '/category?subject=高中化学'
   },
   {
     path: '/english',
     name: 'English',
-    redirect: '/category?subject=英语'
+    redirect: '/category?subject=高中英语'
   },
   {
     path: '/:pathMatch(.*)*',

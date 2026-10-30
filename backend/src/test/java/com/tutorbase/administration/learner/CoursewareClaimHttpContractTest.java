@@ -52,8 +52,8 @@ class CoursewareClaimHttpContractTest {
     private static final long CHEMISTRY_ARTICLE_ONE = 101L;
     private static final long CHEMISTRY_ARTICLE_TWO = 102L;
     private static final long ENGLISH_ARTICLE = 201L;
-    private static final String CHEMISTRY = "化学";
-    private static final String ENGLISH = "英语";
+    private static final String CHEMISTRY = "高中化学";
+    private static final String ENGLISH = "高中英语";
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
@@ -357,7 +357,7 @@ class CoursewareClaimHttpContractTest {
                 .andExpect(status().isOk());
 
         syncCatalog(adminCookie, admin,
-                "{\"items\":[{\"articleId\":103,\"subject\":\"化学\",\"title\":\"化学键\"}]}")
+                "{\"items\":[{\"articleId\":103,\"subject\":\"高中化学\",\"title\":\"化学键\"}]}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.synced").value(1));
 
@@ -498,7 +498,7 @@ class CoursewareClaimHttpContractTest {
                         .header("X-CSRF-TOKEN", admin.csrfToken()))
                 .andExpect(status().isOk());
 
-        // 学员原有授权：101（化学，当前管理员可见）与 201（英语，当前管理员不可见）。
+        // 学员原有授权：101（高中化学，当前管理员可见）与 201（高中英语，当前管理员不可见）。
         mockMvc.perform(put("/api/v1/admin/learners/2/content-grants")
                         .cookie(adminCookie)
                         .header("X-CSRF-TOKEN", admin.csrfToken())

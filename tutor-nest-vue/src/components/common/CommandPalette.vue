@@ -34,7 +34,7 @@
             <div v-else class="palette__empty">
               <i class="fas fa-satellite-dish" aria-hidden="true"></i>
               <p>没有匹配的结果</p>
-              <span>{{ authStore.isAdministrator ? '试试「学员」「批阅」或「课件」' : '试试「签到」「化学」或「错题」' }}</span>
+              <span>{{ authStore.isAdministrator ? '试试「学员」「批阅」或「课件」' : '试试「签到」「高中化学」或「错题」' }}</span>
             </div>
           </div>
 
@@ -70,8 +70,8 @@ const selectedId = ref('')
 const inputRef = ref(null)
 
 const SUBJECT_TINTS = {
-  化学: 'linear-gradient(135deg, #0f8f7c, #7cc5f0)',
-  英语: 'linear-gradient(135deg, #ed4b2a, #ffc53d)',
+  高中化学: 'linear-gradient(135deg, #0f8f7c, #7cc5f0)',
+  高中英语: 'linear-gradient(135deg, #ed4b2a, #ffc53d)',
   初中英语: 'linear-gradient(135deg, #1d4ed8, #c9ef4a)'
 }
 

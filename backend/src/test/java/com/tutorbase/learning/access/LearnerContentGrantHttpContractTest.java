@@ -189,7 +189,7 @@ class LearnerContentGrantHttpContractTest {
                         .cookie(adminCookie)
                         .header("X-CSRF-TOKEN", admin.csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"articleIds\":[],\"enrolledSubjects\":[\"英语\"]}"))
+                        .content("{\"articleIds\":[],\"enrolledSubjects\":[\"高中英语\"]}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("courseware_not_claimed"));
 
