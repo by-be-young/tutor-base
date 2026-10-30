@@ -63,6 +63,10 @@ jobs:
       - run: npm ci
       - name: Test frontend gateways and security behavior
         run: npm run test:frontend
+      - name: Check SFC compilation and const reassignment
+        run: |
+          npm run check:sfc
+          npm run check:const
       - name: Validate courseware question marks
         run: npm run test:courseware
       - name: Validate OpenAPI contract
