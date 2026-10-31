@@ -20,4 +20,10 @@ public interface CoursewareStorage {
 
     /** 写入不可变发布清单。 */
     void putManifest(long teacherId, String subject, int version, byte[] json);
+
+    /** 列出该老师命名空间下的全部正文 blob（hash → 字节数），供配额与 GC 使用。 */
+    java.util.Map<String, Long> listBlobs(long teacherId);
+
+    /** 删除一个正文 blob；不存在返回 false。 */
+    boolean deleteBlob(long teacherId, String contentHash);
 }

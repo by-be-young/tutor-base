@@ -50,8 +50,14 @@ public final class CoursewareFailures {
         }
     }
 
-    /** 旧认领模型已下线：调用方应改用「我的课件 + 资源目录」。 */
-    public static final class Retired extends RuntimeException {
+    /** 超出存储配额。 */
+    public static final class QuotaExceeded extends RuntimeException {
+        public QuotaExceeded(String message) {
+            super(message);
+        }
+    }
+
+    /** 旧认领模型已下线：调用方应改用「我的课件 + 资源目录」。 */    public static final class Retired extends RuntimeException {
         public Retired(String message) {
             super(message);
         }

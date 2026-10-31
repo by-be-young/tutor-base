@@ -24,6 +24,12 @@ class CoursewareHttpExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, "courseware_forbidden", "无权访问课件", exception.getMessage(), request);
     }
 
+    @ExceptionHandler(CoursewareFailures.QuotaExceeded.class)
+    ProblemDetail quotaExceeded(CoursewareFailures.QuotaExceeded exception, HttpServletRequest request) {
+        return problem(HttpStatus.PAYLOAD_TOO_LARGE, "courseware_quota_exceeded", "存储配额不足",
+                exception.getMessage(), request);
+    }
+
     @ExceptionHandler(CoursewareFailures.Retired.class)
     ProblemDetail retired(CoursewareFailures.Retired exception, HttpServletRequest request) {
         return problem(HttpStatus.GONE, "courseware_claims_retired", "认领模型已下线",

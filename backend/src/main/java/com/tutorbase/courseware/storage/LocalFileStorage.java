@@ -65,8 +65,40 @@ public class LocalFileStorage implements CoursewareStorage {
         }
     }
 
-    /** 内容哈希：{@code sha256:<hex>}。 */
-    public static String sha256(byte[] content) {
+    @Override
+    public java.util.Map<String, Long> listBlobs(long teacherId) {
+        java.util.Map<String, Long> blobs = new java.util.LinkedHashMap<>();
+        Path directory = root.resolve(Long.toString(teacherId)).resolve("blobs");
+        if (!Files.isDirectory(directory)) {
+            return blobs;
+        }
+        try (var files = Files.list(directory)) {
+            files.filter(path -> path.getFileName().toString().endsWith(".md")).forEach(path -> {
+                String name = path.getFileName().toString();
+                String hex = name.substring(0, name.length() - ".md".length());
+                try {
+                    blobs.put("sha256:" + hex, Files.size(path));
+                } catch (IOException exception) {
+                    throw new IllegalStateException("读取 blob 大小失败：" + path, exception);
+                }
+            });
+        } catch (IOException exception) {
+            throw new IllegalStateException("列出课件正文失败", exception);
+        }
+        return blobs;
+    }
+
+    @Override
+    public boolean deleteBlob(long teacherId, String contentHash) {
+        Path target = blobPath(teacherId, contentHash);
+        try {
+            return Files.deleteIfExists(target);
+        } catch (IOException exception) {
+            throw new IllegalStateException("删除课件正文失败：" + contentHash, exception);
+        }
+    }
+
+    /** 内容哈希：{@code sha256:<hex>}。 */    public static String sha256(byte[] content) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(content);
             return "sha256:" + HexFormat.of().formatHex(digest);

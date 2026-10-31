@@ -57,6 +57,8 @@ tutor:
     max-article-bytes: ${TUTOR_COURSEWARE_MAX_ARTICLE_BYTES:1048576}
     # 旧「认领」模型：false 后认领写入接口返回 410（读接口保留），改用「我的课件 + 资源目录」
     legacy-claims-enabled: ${TUTOR_COURSEWARE_LEGACY_CLAIMS:true}
+    # 每个老师的正文存储配额（字节，默认 2 GB，0 表示不限）
+    quota-bytes: ${TUTOR_COURSEWARE_QUOTA_BYTES:2147483648}
     seed:
       enabled: ${TUTOR_COURSEWARE_SEED_ENABLED:false}
       index: ${TUTOR_COURSEWARE_SEED_INDEX:../tutor-nest-vue/public/data/articles.json}

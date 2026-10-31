@@ -34,29 +34,37 @@ public class CoursewarePublisher {
     private final CoursewareProperties properties;
     private final ObjectMapper objectMapper;
     private final com.tutorbase.courseware.notification.CoursewareNotificationService notifications;
+    private final com.tutorbase.courseware.ops.CoursewareMaintenanceService maintenance;
 
     CoursewarePublisher(
             JdbcClient jdbc,
             CoursewareStorage storage,
             CoursewareProperties properties,
             ObjectMapper objectMapper,
-            com.tutorbase.courseware.notification.CoursewareNotificationService notifications) {
+            com.tutorbase.courseware.notification.CoursewareNotificationService notifications,
+            com.tutorbase.courseware.ops.CoursewareMaintenanceService maintenance) {
         this.jdbc = jdbc;
         this.storage = storage;
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.notifications = notifications;
+        this.maintenance = maintenance;
     }
 
     @Transactional
     public Published publish(long teacherAccountId, String subject, Integer expectVersion, List<CoursewareArticleInput> articles) {
         List<String> errors = new ArrayList<>();
+        long incomingBytes = 0;
         for (CoursewareArticleInput article : articles) {
             errors.addAll(CoursewareValidator.validate(article, properties.maxArticleBytes()));
+            if (article.markdown() != null) {
+                incomingBytes += article.markdown().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            }
         }
         if (!errors.isEmpty()) {
             throw new CoursewareFailures.Validation(errors);
         }
+        maintenance.requireWithinQuota(teacherAccountId, incomingBytes);
 
         long currentReleaseId = 0;
         int currentVersion = 0;

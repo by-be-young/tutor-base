@@ -796,6 +796,19 @@ P4 把写入补齐：
 | 多老师分组 | `blogStore` 新增 `teacherGroups` / `multipleTeachers`（纯函数 `groupByTeacher`），按后端顺序给出「老师 → 科目 → 课件」，供首页与目录区分归属 |
 | 「我的课件」入口 | 新增 `GET /admin/courseware/overview`（每科目版本、篇数、草稿、被获取、分享数与待处理汇总）与 `/admin/courseware` 页面；管理端导航「课件」指向新页，旧认领页更名「旧版认领」并在新页里标注即将下线 |
 
+### 8.12 P5 配额与运维（2026-10-31）
+
+| 能力 | 实现 |
+| --- | --- |
+| 存储配额 | `tutor.courseware.quota-bytes`（默认 2 GB，0 表示不限）；发布前按「已有 blob 字节 + 本次正文字节」校验，超限返回 **413 `courseware_quota_exceeded`** |
+| 用量 | `GET /admin/courseware/maintenance/usage`（超管可传 `teacherId`），返回 blob 数、总字节、被引用数、孤儿数与配额 |
+| 全站用量 | `GET /admin/courseware/maintenance/usage/all`（仅超管） |
+| 孤儿 blob 回收 | `POST /admin/courseware/maintenance/gc`（默认 `dryRun=true`）：只删**任何地方都不再引用**的 blob —— `course_article.content_hash`（含历史版本）、`course_release.manifest_hash`、`course_copy.base_content_hash/dismissed_hash`、草稿正文 hash 都算引用 |
+
+内容寻址让配额与 GC 都以「该老师命名空间下 blob 的实际字节数」为口径，同一份正文被多篇/多版本引用时只算一次。
+
+**P5 剩余**：归档导出、监控指标（Prometheus）、导出包过期清理、跨老师共享 blob 的物理去重（当前按老师隔离）。
+
 ---
 
 ## 9. 前端改造
