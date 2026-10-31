@@ -787,6 +787,14 @@ P4 把写入补齐：
 效果：**课件改版不再改变历史错题里的题干**（`CoursewareSnapshotHttpContractTest` 验证
 "提交 → 错题带快照 → 发布全新题干 → 错题里的题干不变"）。解析不到托管数据时写空值，不阻塞学员作答。
 
+### 8.11 P4 认领模型下线与多老师分组（2026-10-31）
+
+| 项 | 实现 |
+| --- | --- |
+| 认领写入下线开关 | `tutor.courseware.legacy-claims-enabled`（默认 `true`）：设 `false` 后 `PUT/DELETE /admin/courseware-claims/**` 与放弃接口返回 **410 `courseware_claims_retired`**，读接口（`GET /courseware-claims`、`/catalog`）保留，旧页面不至于整页报错 |
+| 平滑切换 | 一旦线上确认没有认领入口在用，把环境变量 `TUTOR_COURSEWARE_LEGACY_CLAIMS` 设为 `false` 即可；`CoursewareScope` 仍按 `courseware_catalog` 读，不影响批阅与授权 |
+| 多老师分组 | `blogStore` 新增 `teacherGroups` / `multipleTeachers`（纯函数 `groupByTeacher`），按后端顺序给出「老师 → 科目 → 课件」，供首页与目录区分归属 |
+
 ---
 
 ## 9. 前端改造

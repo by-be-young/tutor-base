@@ -29,9 +29,23 @@ public class AdminCoursewareClaimController {
     private static final int MAX_CATALOG_ITEMS = 5_000;
 
     private final CoursewareClaimAdministration administration;
+    private final com.tutorbase.courseware.CoursewareProperties properties;
 
-    public AdminCoursewareClaimController(CoursewareClaimAdministration administration) {
+    public AdminCoursewareClaimController(CoursewareClaimAdministration administration,
+            com.tutorbase.courseware.CoursewareProperties properties) {
         this.administration = administration;
+        this.properties = properties;
+    }
+
+    /**
+     * 认领写入的收口检查：`tutor.courseware.legacy-claims-enabled=false` 后返回 410，
+     * 客户端应改用「我的课件 + 资源目录」（P1 已上线）。默认 true，保持兼容。
+     */
+    private void requireLegacyClaimsEnabled() {
+        if (!properties.legacyClaimsEnabled()) {
+            throw new com.tutorbase.courseware.CoursewareFailures.Retired(
+                    "认领模型已下线，请使用「我的课件」与「资源目录」管理课件归属");
+        }
     }
 
     @PostMapping("/courseware-catalog/sync")
@@ -57,6 +71,7 @@ public class AdminCoursewareClaimController {
     SubjectClaimResponse claimSubject(
             @AuthenticationPrincipal AccountPrincipal administrator,
             @PathVariable @NotBlank @Size(max = 100) String subject) {
+        requireLegacyClaimsEnabled();
         CoursewareClaimAdministration.SubjectClaim claim =
                 administration.claimSubject(administrator.accountId(), subject);
         return new SubjectClaimResponse(claim.subject(), claim.claimedAt());
@@ -66,6 +81,7 @@ public class AdminCoursewareClaimController {
     ResponseEntity<Void> releaseSubject(
             @AuthenticationPrincipal AccountPrincipal administrator,
             @PathVariable @NotBlank @Size(max = 100) String subject) {
+        requireLegacyClaimsEnabled();
         administration.releaseSubject(administrator.accountId(), subject);
         return ResponseEntity.noContent().build();
     }
@@ -74,6 +90,7 @@ public class AdminCoursewareClaimController {
     ArticleClaimResponse claimArticle(
             @AuthenticationPrincipal AccountPrincipal administrator,
             @PathVariable @Positive long articleId) {
+        requireLegacyClaimsEnabled();
         CoursewareClaimAdministration.ArticleClaim claim =
                 administration.claimArticle(administrator.accountId(), articleId);
         return new ArticleClaimResponse(claim.articleId(), claim.claimedAt());
@@ -83,6 +100,7 @@ public class AdminCoursewareClaimController {
     ResponseEntity<Void> releaseArticle(
             @AuthenticationPrincipal AccountPrincipal administrator,
             @PathVariable @Positive long articleId) {
+        requireLegacyClaimsEnabled();
         administration.releaseArticle(administrator.accountId(), articleId);
         return ResponseEntity.noContent().build();
     }
@@ -91,6 +109,7 @@ public class AdminCoursewareClaimController {
     ResponseEntity<Void> abandonArticle(
             @AuthenticationPrincipal AccountPrincipal administrator,
             @PathVariable @Positive long articleId) {
+        requireLegacyClaimsEnabled();
         administration.abandonArticle(administrator.accountId(), articleId);
         return ResponseEntity.noContent().build();
     }

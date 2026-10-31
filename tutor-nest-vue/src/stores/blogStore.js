@@ -2,7 +2,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { coursewareGateway } from '@/gateways/coursewareGateway'
-import { flattenManifests } from '@/utils/coursewareManifest'
+import { flattenManifests, groupByTeacher } from '@/utils/coursewareManifest'
+import { computed } from 'vue'
 
 /** 静态目录索引：`id/title/series/date/path`，仅用于兜底与补充日期、图片路径。 */
 async function fetchStaticIndex() {
@@ -55,6 +56,10 @@ export const useArticleStore = defineStore('blog', () => {
         return blogData.value.filter(b => b.series === subject)
     }
 
+    /** 多老师分组：同一学员属于多位老师时，首页/目录按老师区分归属。 */
+    const teacherGroups = computed(() => groupByTeacher(blogData.value))
+    const multipleTeachers = computed(() => teacherGroups.value.length > 1)
+
     function getArticleById(id) {
         return blogData.value.find(b => b.id === id)
     }
@@ -64,6 +69,8 @@ export const useArticleStore = defineStore('blog', () => {
         isLoading,
         error,
         source,
+        teacherGroups,
+        multipleTeachers,
         loadArticleData,
         getArticlesBySubject,
         getArticleById

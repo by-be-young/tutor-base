@@ -50,8 +50,14 @@ public final class CoursewareFailures {
         }
     }
 
-    /** 目标路径已存在：获取/导入时本地同名篇目冲突。 */
-    public static final class TargetExists extends RuntimeException {
+    /** 旧认领模型已下线：调用方应改用「我的课件 + 资源目录」。 */
+    public static final class Retired extends RuntimeException {
+        public Retired(String message) {
+            super(message);
+        }
+    }
+
+    /** 目标路径已存在：获取/导入时本地同名篇目冲突。 */    public static final class TargetExists extends RuntimeException {
         public TargetExists(String message) {
             super(message);
         }

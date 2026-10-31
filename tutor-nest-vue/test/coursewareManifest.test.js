@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { flattenManifests } from '../src/utils/coursewareManifest.js'
+import { flattenManifests, groupByTeacher } from '../src/utils/coursewareManifest.js'
 import { loadArticleMarkdown } from '../src/utils/articleContent.js'
 
 const MANIFESTS = [
@@ -83,6 +83,40 @@ test('跨老师撞号时退回命名空间内唯一的 articleId', () => {
   assert.deepEqual(articles.map(article => article.id), [3, 1200, 1003])
   assert.equal(articles[2].title, '讲义（另一位老师）')
   assert.equal(articles[2].teacherId, 9)
+})
+
+test('多老师时按老师分组，保持后端顺序', () => {
+  const other = {
+    teacherId: 9,
+    teacherName: 'Amy',
+    subject: '高中英语',
+    version: 2,
+    publishedAt: '2026-10-31T16:00:00Z',
+    articles: [{
+      articleId: 2001,
+      legacyArticleId: null,
+      title: '语法讲义',
+      series: '高中英语',
+      logicalPath: '高中英语/语法讲义.md',
+      contentHash: 'sha256:ddd',
+      questionCount: 2
+    }]
+  }
+
+  const groups = groupByTeacher(flattenManifests([...MANIFESTS, other], []))
+
+  assert.equal(groups.length, 2)
+  assert.equal(groups[0].teacherId, 7)
+  assert.deepEqual(groups[0].subjects, ['高中化学'])
+  assert.equal(groups[0].articles.length, 2)
+  assert.equal(groups[1].teacherName, 'Amy')
+  assert.deepEqual(groups[1].subjects, ['高中英语'])
+})
+
+test('单老师时不额外分组', () => {
+  const groups = groupByTeacher(flattenManifests(MANIFESTS, []))
+  assert.equal(groups.length, 1)
+  assert.equal(groups[0].articles.length, 2)
 })
 
 test('正文优先取托管接口，接口失败时回退静态文件', async () => {

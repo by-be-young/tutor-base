@@ -2,6 +2,32 @@
 // /courseware/manifests 与静态目录索引的合流规则（纯函数，供 store 与单测共用）。
 
 /**
+ * 按老师分组：多老师场景下首页/目录需要区分「谁的课件」。
+ *
+ * 输入是 `flattenManifests` 的结果，输出保持老师出现顺序（后端已按用户名排序）。
+ */
+export function groupByTeacher(articles) {
+  const groups = new Map()
+  for (const article of articles || []) {
+    const key = article.teacherId == null ? 'self' : String(article.teacherId)
+    if (!groups.has(key)) {
+      groups.set(key, {
+        teacherId: article.teacherId ?? null,
+        teacherName: article.teacherName || '',
+        subjects: [],
+        articles: []
+      })
+    }
+    const group = groups.get(key)
+    group.articles.push(article)
+    if (article.series && !group.subjects.includes(article.series)) {
+      group.subjects.push(article.series)
+    }
+  }
+  return [...groups.values()]
+}
+
+/**
  * 把清单展平成与 `data/articles.json` 同构的列表。
  *
  * 运行时仍以全局数值 `id` 识别课件（权限、错题、学习记录都用它），因此优先沿用
