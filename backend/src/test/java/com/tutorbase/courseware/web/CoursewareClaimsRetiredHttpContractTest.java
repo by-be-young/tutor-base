@@ -126,6 +126,15 @@ class CoursewareClaimsRetiredHttpContractTest {
                         .header("X-CSRF-TOKEN", csrf))
                 .andExpect(status().isGone());
 
+        mockMvc.perform(post("/api/v1/admin/courseware-catalog/sync")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "items", java.util.List.of(Map.of("articleId", 10, "subject", "数学"))))))
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.code").value("courseware_claims_retired"));
+
         mockMvc.perform(get("/api/v1/admin/courseware-claims").cookie(cookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.subjectClaims").isEmpty());

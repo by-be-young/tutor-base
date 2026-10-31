@@ -1073,6 +1073,8 @@ paths:
       description: >-
         按 articleId upsert 课件目录的学科与标题，并刷新 updatedAt；不会删除请求中未出现的条目。
         管理端每次进入时调用，重复调用结果一致。
+        属于旧认领链路的写入：`tutor.courseware.legacy-claims-enabled=false` 时返回
+        410 `courseware_claims_retired`，客户端应改用「我的课件」与「资源目录」。
       security:
         - sessionCookie: []
       parameters:
@@ -1095,6 +1097,8 @@ paths:
         '401':
           $ref: '#/components/responses/Problem'
         '403':
+          $ref: '#/components/responses/Problem'
+        '410':
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'

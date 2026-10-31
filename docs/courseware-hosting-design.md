@@ -792,7 +792,8 @@ P4 把写入补齐：
 | 项 | 实现 |
 | --- | --- |
 | 认领写入下线开关 | `tutor.courseware.legacy-claims-enabled`（默认 `true`）：设 `false` 后 `PUT/DELETE /admin/courseware-claims/**` 与放弃接口返回 **410 `courseware_claims_retired`**，读接口（`GET /courseware-claims`、`/catalog`）保留，旧页面不至于整页报错 |
-| 平滑切换 | 一旦线上确认没有认领入口在用，把环境变量 `TUTOR_COURSEWARE_LEGACY_CLAIMS` 设为 `false` 即可；`CoursewareScope` 仍按 `courseware_catalog` 读，不影响批阅与授权 |
+| 平滑切换 | 一旦线上确认没有认领入口在用，把环境变量 `TUTOR_COURSEWARE_LEGACY_CLAIMS` 设为 `false` 即可；`POST /admin/courseware-catalog/sync` 同样返回 410（属于认领写入链路） |
+| 可见范围去依赖 | `CoursewareScope` 增加「发布归属」判定：当前生效版本（`course_release_head`）+ `course_article.legacy_article_id` 属于该管理员即可见。旧认领分支（科目/单篇认领、排除、放弃）保留直到认领链路删除；两条分支取并集，因此 V26 换主键后不会因为旧表外键被删而失去可见性 |
 | 多老师分组 | `blogStore` 新增 `teacherGroups` / `multipleTeachers`（纯函数 `groupByTeacher`），按后端顺序给出「老师 → 科目 → 课件」，供首页与目录区分归属 |
 | 「我的课件」入口 | 新增 `GET /admin/courseware/overview`（每科目版本、篇数、草稿、被获取、分享数与待处理汇总）与 `/admin/courseware` 页面；管理端导航「课件」指向新页，旧认领页更名「旧版认领」并在新页里标注即将下线 |
 
