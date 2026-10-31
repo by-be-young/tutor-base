@@ -68,10 +68,11 @@ export function useWrongQuestionsResolve() {
             let order = null
             if (q.source_blog_id != null) {
                 const blog = blogStore.blogData.find(b => Number(b.id) === Number(q.source_blog_id))
-                subject = blog?.series || ''
+                subject = q.subject || blog?.series || ''
                 const index = indexQuestions(q.source_blog_id, articleCache.get(String(q.source_blog_id)))
                 const resolved = index.get(String(q.source_question_id))
-                questionText = resolved?.stem || ''
+                // 优先用后端写入的题干快照：课件改版后历史错题仍显示当时看到的题干
+                questionText = q.stem_snapshot || resolved?.stem || ''
                 order = resolved?.order ?? null
                 const key = answerMap.get(`${q.source_blog_id}-${String(q.source_question_id)}`)
                 correctAnswer = key?.answerText || ''
