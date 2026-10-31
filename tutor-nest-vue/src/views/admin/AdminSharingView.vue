@@ -1,12 +1,11 @@
 <template>
-  <div class="page page--wide sharing">
-    <header class="page-head">
+  <div class="sharing">
+    <section class="panel panel--tight sharing__lead">
       <p class="eyebrow">课件共享</p>
-      <h1 class="page-title sharing__title">课件共享</h1>
-      <p class="page-sub">
+      <p class="sharing__lead-text">
         分享自己的整科或单篇课件，或从资源目录获取其他老师的课件。获取后先进入草稿，发布时才随版本上线。
       </p>
-      <div v-if="notifications.length" class="panel panel--tight sharing__notify">
+      <div v-if="notifications.length" class="sharing__notify">
         <span class="chip chip--amber">{{ unreadCount }} 条未读提醒</span>
         <ul class="sharing__notify-list">
           <li v-for="item in notifications.slice(0, 3)" :key="item.id">
@@ -18,7 +17,7 @@
           全部标记已读
         </button>
       </div>
-    </header>
+    </section>
 
     <div class="seg sharing__tabs" role="tablist" aria-label="课件共享视图">
       <button
@@ -595,8 +594,17 @@ onMounted(async () => {
   gap: 20px;
 }
 
-.sharing__title {
+.sharing__lead {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sharing__lead-text {
   margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--text-2);
 }
 
 .sharing__tabs {

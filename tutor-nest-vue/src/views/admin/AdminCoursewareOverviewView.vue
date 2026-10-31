@@ -1,14 +1,13 @@
 <!-- src/views/admin/AdminCoursewareOverviewView.vue -->
 <template>
-  <div class="page page--wide overview">
-    <header class="page-head">
+  <div class="overview">
+    <section class="panel panel--tight overview__lead">
       <p class="eyebrow">课件托管</p>
-      <h1 class="page-title">我的课件</h1>
-      <p class="page-sub">
+      <p class="overview__lead-text">
         每个科目一个发布版本；草稿保存后学员端看不到，点「发布」才生效。
         获取他人的课件、分享自己的课件都在「共享」页。
       </p>
-    </header>
+    </section>
 
     <div class="stat-grid">
       <div class="stat-card">
@@ -190,6 +189,19 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.overview__lead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.overview__lead-text {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--text-2);
 }
 
 .overview__head {

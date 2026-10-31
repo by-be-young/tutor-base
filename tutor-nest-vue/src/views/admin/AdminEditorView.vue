@@ -1,13 +1,12 @@
 <template>
-  <div class="page page--wide editor">
-    <header class="page-head">
+  <div class="editor">
+    <section class="panel panel--tight editor__lead">
       <p class="eyebrow">课件托管</p>
-      <h1 class="page-title editor__title">课件编辑器</h1>
-      <p class="page-sub">
+      <p class="editor__lead-text">
         草稿保存后学员端看不到，点「发布」才生效。布局指令写在 <code>&lt;!-- @layout:X --&gt;</code> 注释里，
         不影响题干与作答占位符解析。
       </p>
-    </header>
+    </section>
 
     <div class="panel panel--tight editor__toolbar">
       <label class="editor__field">
@@ -461,8 +460,17 @@ onMounted(async () => {
   gap: 16px;
 }
 
-.editor__title {
+.editor__lead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editor__lead-text {
   margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--text-2);
 }
 
 .editor__toolbar,
