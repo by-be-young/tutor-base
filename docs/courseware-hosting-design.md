@@ -995,6 +995,11 @@ ALTER TABLE public.courseware_catalog
 - 建议把这次迁移拆成两个 Flyway 脚本：`V21` 加列/回填，`V22` 换主键/建新表，便于失败回退（Flyway 版本号只允许数字与点/下划线，不要用 `V21a` 这类字母后缀）。
 - 同步提供 `database/reconciliation/2026-11-xx_teacher_scoped_courseware.sql`（幂等版），与现有仓库惯例一致。
 
+**执行状态（2026-10-31）**：加列/回填已由 `V21` 完成；换主键拆到 **V26**
+（`database/planned/V26__teacher_scoped_courseware_keys.sql` + `.rollback.sql`），已在临时
+PostgreSQL 容器演练通过（正向/回滚/重复执行/断言拦截均实测），**尚未纳入 Flyway**。
+执行前置条件、验收清单与回滚流程见 [`docs/courseware-v26-migration-runbook.md`](./courseware-v26-migration-runbook.md)。
+
 ### 11.3 存量数据映射
 
 | 存量 | 迁移后 |
@@ -1011,6 +1016,9 @@ ALTER TABLE public.courseware_catalog
 
 - 迁移前：`pg_dump` 全库 + 对象存储清单（hash 列表）。
 - 迁移脚本幂等，可重复执行。
+- **V26（换主键）单独提供回滚脚本**：`database/planned/V26__teacher_scoped_courseware_keys.rollback.sql`，
+  只在该迁移之前不存在"跨老师重复 `article_id`"时能成功，脚本会先断言。详见
+  [`docs/courseware-v26-migration-runbook.md`](./courseware-v26-migration-runbook.md)。
 - 应用侧保留双读开关（`COURSEWARE_SOURCE=static|storage`），出问题可切回静态索引。
 - 内容层：blob 内容寻址，不会因迁移丢失；旧 `public/articles` 在一个发布周期内保留在仓库中作为兜底。
 

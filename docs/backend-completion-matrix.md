@@ -59,12 +59,12 @@
 
 | 能力 | 状态 | 已完成 | 待完成 / 验证方式 |
 | --- | --- | --- | --- |
-| 数据模型（老师命名空间、发布版本、分享/获取、快照列） | 进行中 | V21 基础表与列回填、V22 `course_notification`、V23 `course_layout`，均配幂等 reconciliation；`FlywayMigrationTest` 覆盖空库、增量与幂等（当前版本 25） | 换主键/唯一键（V26+）与代码切换同批上线 |
+| 数据模型（老师命名空间、发布版本、分享/获取、快照列） | 进行中 | V21 基础表与列回填、V22 `course_notification`、V23 `course_layout`，均配幂等 reconciliation；`FlywayMigrationTest` 覆盖空库、增量与幂等（当前版本 25）；V26 换主键脚本已在 `database/planned/` 完成并演练（正向/回滚/幂等/断言拦截均实测） | 换主键（V26）需先下线旧认领链路并改造 `JdbcCoursewareScope` 归属判定，见 `docs/courseware-v26-migration-runbook.md` |
 | 契约 | 进行中 | `openapi.yaml` 新增 `GET /courseware/manifests`、`GET /courseware/articles/{teacherId}/{articleId}/content`、`POST /admin/courseware/releases`；`CoursewareReleaseHttpContractTest` 覆盖发布→清单→正文、409/400/401/403 |
 | 发布与读取（P0） | 已完成 | 存储抽象与内容寻址本地实现、发布校验（题干/占位符/答案键/路径/大小/注入）、发布器（不可变 manifest + head 切换）、正文鉴权、存量种子导入 `CoursewareSeeder`、前端 `blogStore`/正文读取切 `/courseware/*` 并保留静态兜底、`tutor.courseware.source=static\|storage` 开关（生产默认 static，待持久卷就绪再切） | 生产可写卷/对象存储后切 `storage` 并重跑种子导入 |
 | 分享/获取/更新（P1） | 已完成 | 分享（整科/单篇，幂等刷新）、资源目录、共享树、来源预览（`allow_preview`）、获取（内容寻址复制 → 未发布草稿 + `course_copy` 上游指针；重复获取幂等；同名路径默认 409、`conflictStrategy=rename` 自动改名）、改名改路径、我的获取关系（含 `hasUpdate`）、更新汇总/单篇 diff/覆盖（先备份）/忽略（`expectedSourceHash` 乐观锁）、消息提醒（V22 `course_notification`：被获取、来源更新、来源撤回；未读筛选与全部已读）、管理端「共享」页（分享/资源目录/我的获取/更新） | 通知中心独立页与角标接入导航（可选打磨）；生产切 `storage` 后才会对外供数 |
 | 在线编辑器与 Git 工作区（P2/P3） | 已完成 | V23 布局注册表、V24 模板库（通用 + 科目模板，内置 4 套骨架）；草稿 CRUD、预检、从草稿发布；导出 zip 与导入（落草稿、默认跳过、可覆盖）；`/admin/editor`（源码 + 预览 + 大纲上移下移 + 模板选择 + 插入块 + 校验 + 保存 + 发布 + 导入导出）；Git 工作区：`workspace/manifest`（无正文）+ `workspace/files` + `workspace/push`（`baseVersion` 乐观锁，404/409/400 全覆盖）+ CLI `courseware-cli.mjs`（pull/status/push，冲突不覆盖） | 所见即所得、拖拽排序（当前为上移/下移 / CLI） |
-| 认领模型下线（P4） | 进行中 | 学习记录快照已落地（作答/错题写 `stem_snapshot`/`answer_snapshot`/`subject`，错题本响应 `stemSnapshot`，课件改版不影响历史题干）；认领写入下线开关 `tutor.courseware.legacy-claims-enabled`（false → 410 `courseware_claims_retired`，读接口保留）；多老师分组 `blogStore.teacherGroups`；新「我的课件」概览 `GET /admin/courseware/overview` + `/admin/courseware` 页，导航「课件」已切换，旧认领页降为「旧版认领」 | 删除旧认领页与 `coursewareStore` 认领逻辑（确认无引用后）；V25 换主键 `(teacher, article_id)` |
+| 认领模型下线（P4） | 进行中 | 学习记录快照已落地（作答/错题写 `stem_snapshot`/`answer_snapshot`/`subject`，错题本响应 `stemSnapshot`，课件改版不影响历史题干）；认领写入下线开关 `tutor.courseware.legacy-claims-enabled`（false → 410 `courseware_claims_retired`，读接口保留）；多老师分组 `blogStore.teacherGroups`；新「我的课件」概览 `GET /admin/courseware/overview` + `/admin/courseware` 页，导航「课件」已切换，旧认领页降为「旧版认领」 | 删除旧认领页与 `coursewareStore` 认领逻辑（确认无引用后）；换主键 V26 上线（runbook 已备） |
 | 配额与运维（P5） | 已完成 | 存储配额 `tutor.courseware.quota-bytes`（超限 413 `courseware_quota_exceeded`）、用量统计（我的 / 全站，含孤儿数）、孤儿 blob 回收（默认 dryRun，引用判定覆盖历史版本与草稿）、全站指标 `GET /maintenance/metrics`、老师归档 `POST /maintenance/archive`（V25 审计动作 `archive`） | Prometheus 导出、导出包过期清理 |
 
 回归要求：`npm run test:courseware`、前端 70 项单测、SFC 检查与课件校验保持通过；`mvnw verify` 中 `FlywayMigrationTest` 必须包含新增表与列的断言。
