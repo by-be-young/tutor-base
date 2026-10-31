@@ -89,7 +89,7 @@ public class CoursewareMaintenanceService {
         return new GcResult(dryRun, removed.size(), freed, removed);
     }
 
-    /** 全站统计：每个出现过课件的老师的用量。 */
+    /** 全站统计（管理员用）：每个老师的 blob 数与字节数。 */
     @Transactional(readOnly = true)
     public List<TeacherUsage> allUsage() {
         List<Long> teacherIds = jdbc.sql("""
@@ -142,6 +142,92 @@ public class CoursewareMaintenanceService {
                 .param("teacherId", teacherId)
                 .query(String.class)
                 .list();
+    }
+
+    /** 全站计数：版本、篇目、分享、获取、草稿、待处理更新、提醒与存储汇总。 */
+    @Transactional(readOnly = true)
+    public Metrics metrics() {
+        int releases = count("SELECT count(*) FROM public.course_release WHERE status = 'published'");
+        int archivedReleases = count("SELECT count(*) FROM public.course_release WHERE status = 'archived'");
+        int articles = count("SELECT count(*) FROM public.course_article");
+        int activeShares = count("SELECT count(*) FROM public.course_share WHERE revoked_at IS NULL");
+        int copies = count("SELECT count(*) FROM public.course_copy WHERE status = 'active'");
+        int drafts = count("SELECT count(*) FROM public.course_draft");
+        int templates = count("SELECT count(*) FROM public.course_template WHERE active");
+        int unreadNotifications = count("""
+                SELECT count(*) FROM public.course_notification WHERE read_at IS NULL
+                """);
+        int pendingUpdates = count("""
+                SELECT count(*) FROM public.course_copy AS c
+                JOIN public.course_article AS ca
+                  ON ca.teacher_account_id = c.source_teacher_account_id
+                 AND ca.article_id = c.source_article_id
+                JOIN public.course_release_head AS h
+                  ON h.teacher_account_id = c.source_teacher_account_id
+                 AND h.release_id = ca.release_id
+                WHERE c.status = 'active'
+                  AND ca.content_hash <> c.base_content_hash
+                  AND (c.dismissed_hash IS NULL OR ca.content_hash <> c.dismissed_hash)
+                """);
+        List<TeacherUsage> usage = allUsage();
+        long totalBytes = usage.stream().mapToLong(TeacherUsage::totalBytes).sum();
+        long orphanBytes = usage.stream().mapToLong(TeacherUsage::orphanBytes).sum();
+        int overQuota = (int) usage.stream().filter(TeacherUsage::overQuota).count();
+        return new Metrics(releases, archivedReleases, articles, activeShares, copies, drafts, templates,
+                unreadNotifications, pendingUpdates, totalBytes, orphanBytes, overQuota);
+    }
+
+    /**
+     * 归档某位老师的全部发布版本（账号停用/交接时用）。
+     *
+     * <p>只改 {@code course_release.status}，正文与历史记录保持可查；导出仍走
+     * {@code GET /admin/courseware/export}。
+     */
+    @Transactional
+    public ArchiveResult archive(long teacherId) {
+        int releases = jdbc.sql("""
+                UPDATE public.course_release
+                SET status = 'archived'
+                WHERE teacher_account_id = :teacherId AND status = 'published'
+                """)
+                .param("teacherId", teacherId)
+                .update();
+        int heads = jdbc.sql("DELETE FROM public.course_release_head WHERE teacher_account_id = :teacherId")
+                .param("teacherId", teacherId)
+                .update();
+        jdbc.sql("""
+                INSERT INTO public.course_operation_log
+                    (actor_account_id, action, teacher_account_id, detail)
+                VALUES (:teacherId, 'archive', :teacherId, cast(:detail as jsonb))
+                """)
+                .param("teacherId", teacherId)
+                .param("detail", "{\"archive\":true,\"releases\":" + releases + ",\"clearedHeads\":" + heads + "}")
+                .update();
+        return new ArchiveResult(teacherId, releases, heads);
+    }
+
+    private int count(String sql) {
+        return jdbc.sql(sql).query(Integer.class).single();
+    }
+
+    /** 全站计数。 */
+    public record Metrics(
+            int publishedReleases,
+            int archivedReleases,
+            int articles,
+            int activeShares,
+            int activeCopies,
+            int drafts,
+            int activeTemplates,
+            int unreadNotifications,
+            int pendingUpdates,
+            long totalBlobBytes,
+            long orphanBlobBytes,
+            int teachersOverQuota) {
+    }
+
+    /** 归档结果。 */
+    public record ArchiveResult(long teacherId, int archivedReleases, int clearedHeads) {
     }
 
     /** 一个老师的用量。 */

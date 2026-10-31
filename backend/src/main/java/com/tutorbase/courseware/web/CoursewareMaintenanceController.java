@@ -57,6 +57,26 @@ public class CoursewareMaintenanceController {
                 .body(GcResponse.from(maintenance.collectGarbage(target, dryRun)));
     }
 
+    /** 全站计数指标（仅超管）。 */
+    @GetMapping("/metrics")
+    ResponseEntity<MetricsResponse> metrics(@AuthenticationPrincipal AccountPrincipal principal) {
+        requireSuperAdmin(principal);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(MetricsResponse.from(maintenance.metrics()));
+    }
+
+    /** 归档某位老师的全部发布版本（仅超管；正文与历史记录保留）。 */
+    @PostMapping("/archive")
+    ResponseEntity<ArchiveResponse> archive(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @RequestParam long teacherId) {
+        requireSuperAdmin(principal);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(ArchiveResponse.from(maintenance.archive(teacherId)));
+    }
+
     private long resolveTeacherId(AccountPrincipal principal, Long requested) {
         if (principal == null) {
             throw new CoursewareFailures.Forbidden("未登录");
@@ -112,6 +132,35 @@ public class CoursewareMaintenanceController {
         static GcResponse from(CoursewareMaintenanceService.GcResult result) {
             return new GcResponse(result.dryRun(), result.removedCount(), result.freedBytes(),
                     result.removedHashes());
+        }
+    }
+
+    record MetricsResponse(
+            int publishedReleases,
+            int archivedReleases,
+            int articles,
+            int activeShares,
+            int activeCopies,
+            int drafts,
+            int activeTemplates,
+            int unreadNotifications,
+            int pendingUpdates,
+            long totalBlobBytes,
+            long orphanBlobBytes,
+            int teachersOverQuota) {
+
+        static MetricsResponse from(CoursewareMaintenanceService.Metrics metrics) {
+            return new MetricsResponse(metrics.publishedReleases(), metrics.archivedReleases(),
+                    metrics.articles(), metrics.activeShares(), metrics.activeCopies(), metrics.drafts(),
+                    metrics.activeTemplates(), metrics.unreadNotifications(), metrics.pendingUpdates(),
+                    metrics.totalBlobBytes(), metrics.orphanBlobBytes(), metrics.teachersOverQuota());
+        }
+    }
+
+    record ArchiveResponse(long teacherId, int archivedReleases, int clearedHeads) {
+
+        static ArchiveResponse from(CoursewareMaintenanceService.ArchiveResult result) {
+            return new ArchiveResponse(result.teacherId(), result.archivedReleases(), result.clearedHeads());
         }
     }
 }

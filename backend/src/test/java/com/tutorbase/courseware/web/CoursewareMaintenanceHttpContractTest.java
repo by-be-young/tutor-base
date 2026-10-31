@@ -103,8 +103,8 @@ class CoursewareMaintenanceHttpContractTest {
         jdbc.update("INSERT INTO public.student (id, username, permissions) VALUES (2, 'young', '{}')");
         jdbc.update("""
                 INSERT INTO public.account
-                    (learner_id, username, username_normalized, password_hash, status, role, activated_at)
-                VALUES (2, 'young', 'young', ?, 'active', 'administrator', now())
+                    (learner_id, username, username_normalized, password_hash, status, role, is_super_admin, activated_at)
+                VALUES (2, 'young', 'young', ?, 'active', 'administrator', true, now())
                 """, passwords.encode("Admin-password-2026"));
     }
 
@@ -145,6 +145,42 @@ class CoursewareMaintenanceHttpContractTest {
         publish(cookie, csrf, huge.toString())
                 .andExpect(status().isPayloadTooLarge())
                 .andExpect(jsonPath("$.code").value("courseware_quota_exceeded"));
+    }
+
+    @Test
+    void metricsAndArchiveAreSuperAdminOnly() throws Exception {
+        Cookie admin = login(csrf(null), "young", "Admin-password-2026");
+        String csrf = csrf(admin).csrfToken();
+        publish(admin, csrf, "【题干1】题\n\n【@1】\n").andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/admin/courseware/maintenance/metrics").cookie(admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.publishedReleases").value(1))
+                .andExpect(jsonPath("$.articles").value(1))
+                .andExpect(jsonPath("$.archivedReleases").value(0))
+                .andExpect(jsonPath("$.teachersOverQuota").value(0));
+
+        long teacherId = jdbc.queryForObject(
+                "SELECT id FROM public.account WHERE username = 'young'", Long.class);
+        mockMvc.perform(post("/api/v1/admin/courseware/maintenance/archive")
+                        .param("teacherId", Long.toString(teacherId))
+                        .cookie(admin)
+                        .header("X-CSRF-TOKEN", csrf))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.archivedReleases").value(1))
+                .andExpect(jsonPath("$.clearedHeads").value(1));
+
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM public.course_release WHERE status = 'archived'", Long.class))
+                .isEqualTo(1L);
+        // 归档后不再对外供数，但正文与历史版本仍在
+        mockMvc.perform(get("/api/v1/admin/courseware/overview").cookie(admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.subjects").isEmpty());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.course_article", Long.class)).isEqualTo(1L);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM public.course_operation_log WHERE action = 'archive'", Long.class))
+                .isEqualTo(1L);
     }
 
     private ResultActions publish(Cookie cookie, String csrfToken, String markdown) throws Exception {
