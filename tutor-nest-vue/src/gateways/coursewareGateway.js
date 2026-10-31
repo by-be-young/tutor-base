@@ -98,6 +98,23 @@ export const coursewareGateway = {
     }
   },
 
+  /** 我的存储用量与配额水位（GET /admin/courseware/maintenance/usage）。 */
+  async getUsage() {
+    const response = await backendClient.request('/admin/courseware/maintenance/usage')
+    const quotaBytes = Number(response?.quotaBytes) || 0
+    const totalBytes = Number(response?.totalBytes) || 0
+    return {
+      blobCount: Number(response?.blobCount) || 0,
+      totalBytes,
+      orphanBytes: Number(response?.orphanBytes) || 0,
+      orphanCount: Number(response?.orphanCount) || 0,
+      quotaBytes,
+      overQuota: Boolean(response?.overQuota),
+      usageRatio: Number(response?.usageRatio) || 0,
+      level: ['ok', 'warn', 'critical'].includes(response?.level) ? response.level : 'ok'
+    }
+  },
+
   /** 模板库（新建课件时的骨架来源）。 */
   async listTemplates(subject) {
     const query = subject ? `?${new URLSearchParams({ subject })}` : ''

@@ -119,10 +119,14 @@ class CoursewareMaintenanceHttpContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.quotaBytes").value(3000))
                 .andExpect(jsonPath("$.orphanCount").value(0))
+                .andExpect(jsonPath("$.level").value("ok"))
                 .andReturn();
         long totalBytes = objectMapper.readTree(usage.getResponse().getContentAsString())
                 .get("totalBytes").asLong();
+        double ratio = objectMapper.readTree(usage.getResponse().getContentAsString())
+                .get("usageRatio").asDouble();
         assertThat(totalBytes).isPositive();
+        assertThat(ratio).isEqualTo((double) totalBytes / 3000);
 
         // 历史版本的正文仍被 course_article 引用，不该被回收
         mockMvc.perform(post("/api/v1/admin/courseware/maintenance/gc").cookie(cookie)
@@ -158,7 +162,11 @@ class CoursewareMaintenanceHttpContractTest {
                 .andExpect(jsonPath("$.publishedReleases").value(1))
                 .andExpect(jsonPath("$.articles").value(1))
                 .andExpect(jsonPath("$.archivedReleases").value(0))
-                .andExpect(jsonPath("$.teachersOverQuota").value(0));
+                .andExpect(jsonPath("$.teachersOverQuota").value(0))
+                .andExpect(jsonPath("$.teacherCount").value(1))
+                .andExpect(jsonPath("$.quotaPerTeacherBytes").value(3000))
+                .andExpect(jsonPath("$.capacityBytes").value(3000))
+                .andExpect(jsonPath("$.capacityLevel").value("ok"));
 
         long teacherId = jdbc.queryForObject(
                 "SELECT id FROM public.account WHERE username = 'young'", Long.class);

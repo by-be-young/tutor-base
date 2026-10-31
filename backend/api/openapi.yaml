@@ -4665,7 +4665,7 @@ components:
     CoursewareUsage:
       type: object
       additionalProperties: false
-      required: [teacherId, blobCount, totalBytes, referencedCount, orphanCount, orphanBytes, quotaBytes, overQuota]
+      required: [teacherId, blobCount, totalBytes, referencedCount, orphanCount, orphanBytes, quotaBytes, overQuota, usageRatio, level]
       properties:
         teacherId:
           type: integer
@@ -4690,6 +4690,13 @@ components:
           minimum: 0
         overQuota:
           type: boolean
+        usageRatio:
+          type: number
+          description: 已用字节 / 配额，配额为 0 时返回 0。
+        level:
+          type: string
+          enum: [ok, warn, critical]
+          description: 水位档位；≥80% 为 warn，≥95% 为 critical。
     CoursewareTeacherUsage:
       type: object
       additionalProperties: false
@@ -4732,7 +4739,7 @@ components:
     CoursewareMetrics:
       type: object
       additionalProperties: false
-      required: [publishedReleases, archivedReleases, articles, activeShares, activeCopies, drafts, activeTemplates, unreadNotifications, pendingUpdates, totalBlobBytes, orphanBlobBytes, teachersOverQuota]
+      required: [publishedReleases, archivedReleases, articles, activeShares, activeCopies, drafts, activeTemplates, unreadNotifications, pendingUpdates, totalBlobBytes, orphanBlobBytes, teachersOverQuota, teacherCount, quotaPerTeacherBytes, capacityBytes, capacityUsageRatio, capacityLevel]
       properties:
         publishedReleases:
           type: integer
@@ -4770,6 +4777,25 @@ components:
         teachersOverQuota:
           type: integer
           minimum: 0
+        teacherCount:
+          type: integer
+          minimum: 0
+          description: 有课件的老师数（发布、草稿或被获取任一来源）。
+        quotaPerTeacherBytes:
+          type: integer
+          minimum: 0
+          description: 每位老师的存储配额；0 表示未设限。
+        capacityBytes:
+          type: integer
+          minimum: 0
+          description: 全站容量 = 每位老师配额 × 老师数（未设限时为 0）。
+        capacityUsageRatio:
+          type: number
+          description: 已用字节 / 全站容量，容量为 0 时返回 0。
+        capacityLevel:
+          type: string
+          enum: [ok, warn, critical]
+          description: 容量水位；≥80% 触发告警（warn），≥95% 为 critical。
     CoursewareArchiveResult:
       type: object
       additionalProperties: false

@@ -811,9 +811,20 @@ P4 把写入补齐：
 | 补充能力 | 实现 |
 | --- | --- |
 | 全站指标 | `GET /admin/courseware/maintenance/metrics`（仅超管）：发布/归档版本数、篇目、生效分享、获取、草稿、模板、未读提醒、待处理更新、blob 总字节、孤儿字节、超配额老师数 |
+| 容量水位 | 用量与指标都带 `usageRatio`/`level`（`ok`、`warn ≥80%`、`critical ≥95%`）；指标另给 `teacherCount`、`quotaPerTeacherBytes`、`capacityBytes`、`capacityUsageRatio`、`capacityLevel`，即「配额 × 老师数」的全站口径，达到 80% 即可直接告警 |
 | 归档 | `POST /admin/courseware/maintenance/archive?teacherId=`（仅超管）：`course_release.status='archived'` + 清空版本指针，正文与历史版本保留、学员历史仍可查，审计动作 `archive`（V25 扩展 `course_operation_log_action_check`） |
 
-**P5 剩余**：Prometheus 导出（当前用 `/maintenance/metrics` 直读）、导出包过期清理、跨老师共享 blob 的物理去重（当前按老师隔离）。
+前端：`/admin/courseware` 概览页顶部显示「存储空间」进度条 + 水位标签（余量充足 / 接近上限 / 容量告急），数据来自 `GET /maintenance/usage`；加载失败只降级该卡片，不影响概览。
+
+### 8.13 Git 零基础向导（2026-10-31）
+
+| 能力 | 实现 |
+| --- | --- |
+| `doctor` 自检 | `node scripts/courseware-cli.mjs doctor`：检查 Node 版本、`TUTOR_API_BASE`、`TUTOR_SESSION`、接口连通性（`GET /system/status`）、会话是否有效（`GET /courseware/manifests`）、工作区目录是否存在；未通过时给出中文原因与修复命令 |
+| 页面内引导 | `/admin/editor` 侧栏「Git 工作区（可选）」四步：装 Node/Git → 填 `TUTOR_SESSION` → `doctor` → `pull/push`；命令按当前科目生成，可一键复制，不阻塞日常网页编辑 |
+| 失败语义 | `push` 的 409 表示服务端版本已变（需先 `pull`），401 表示会话失效（重新登录取 cookie）；`pull` 不覆盖本地已改但未推送的文件 |
+
+**P5 剩余**：Prometheus 导出（当前用 `/maintenance/metrics` 直读）、跨老师共享 blob 的物理去重（当前按老师隔离）。导出 zip 是流式生成、不落盘，因此不需要「导出包过期清理」。
 
 ---
 

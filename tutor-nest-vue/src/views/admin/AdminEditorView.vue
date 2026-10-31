@@ -1,14 +1,15 @@
 <template>
-  <section class="editor">
-    <header class="editor__head">
-      <h1 class="editor__title">课件编辑器</h1>
-      <p class="editor__hint">
+  <div class="page page--wide editor">
+    <header class="page-head">
+      <p class="eyebrow">课件托管</p>
+      <h1 class="page-title editor__title">课件编辑器</h1>
+      <p class="page-sub">
         草稿保存后学员端看不到，点「发布」才生效。布局指令写在 <code>&lt;!-- @layout:X --&gt;</code> 注释里，
         不影响题干与作答占位符解析。
       </p>
     </header>
 
-    <div class="editor__toolbar">
+    <div class="panel panel--tight editor__toolbar">
       <label class="editor__field">
         <span>科目</span>
         <input v-model="subject" type="text" placeholder="例如 高中化学" />
@@ -39,7 +40,7 @@
     </div>
 
     <div class="editor__body">
-      <aside class="editor__list">
+      <aside class="panel panel--tight editor__list">
         <h2 class="editor__list-title">大纲</h2>
         <p v-if="!outline.length" class="editor__empty">正文里还没有 `# ` 章节。</p>
         <ul v-else class="editor__outline">
@@ -82,17 +83,35 @@
         <p v-if="importReport" class="editor__report">
           导入 {{ importReport.imported }} · 覆盖 {{ importReport.overwritten }} · 跳过 {{ importReport.skipped }}
         </p>
+
+        <h2 class="editor__list-title">Git 工作区（可选）</h2>
+        <p class="editor__report">
+          习惯本地编辑时用：仓库里只有 Markdown，发布仍走服务端校验。
+        </p>
+        <ol class="editor__wizard">
+          <li v-for="(step, index) in gitSteps" :key="index">
+            <span class="editor__wizard-step">{{ index + 1 }}</span>
+            <span class="editor__wizard-body">
+              <strong>{{ step.title }}</strong>
+              <code v-if="step.command" class="editor__wizard-cmd">{{ step.command }}</code>
+              <em v-if="step.hint">{{ step.hint }}</em>
+            </span>
+            <button v-if="step.command" type="button" class="editor__ghost editor__copy" @click="copyCommand(step.command)">
+              复制
+            </button>
+          </li>
+        </ol>
       </aside>
 
       <div class="editor__main">
-        <div class="editor__pane">
+        <div class="panel panel--tight editor__pane">
           <div class="editor__pane-head">
             <span>Markdown 源码{{ articleId ? ` · #${articleId}` : ' · 未保存' }}</span>
             <span v-if="dirty" class="editor__tag">未保存</span>
           </div>
           <textarea v-model="markdown" class="editor__code" spellcheck="false" @input="dirty = true" />
         </div>
-        <div class="editor__pane">
+        <div class="panel panel--tight editor__pane">
           <div class="editor__pane-head">
             <span>预览</span>
             <span v-if="precheck.errors.length" class="editor__tag is-error">
@@ -108,12 +127,12 @@
       </div>
     </div>
 
-    <footer class="editor__footer">
+    <footer class="panel panel--tight editor__footer">
       <button type="button" class="editor__ghost" :disabled="busy" @click="runPrecheck">校验</button>
       <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="save">保存草稿</button>
       <button type="button" class="editor__primary" :disabled="busy || !subject" @click="publish">发布</button>
     </footer>
-  </section>
+  </div>
 </template>
 
 <script setup>
@@ -387,6 +406,42 @@ async function onImportFile(event) {
   }
 }
 
+/** 零基础 Git 向导：三步走，命令可一键复制，不需要记参数。 */
+const gitSteps = computed(() => {
+  const target = subject.value ? ` --subject ${subject.value}` : ' --subject <科目>'
+  return [
+    {
+      title: '安装 Node.js 18+ 与 Git',
+      command: '',
+      hint: 'https://nodejs.org/ 与 https://git-scm.com/ ，Windows 默认选项即可'
+    },
+    {
+      title: '登录后取会话 cookie，填进环境变量',
+      command: "$env:TUTOR_SESSION='<浏览器 cookie 值>'",
+      hint: '开发者工具 → Application → Cookies → TUTOR_SESSION'
+    },
+    {
+      title: '自检环境',
+      command: 'node scripts/courseware-cli.mjs doctor',
+      hint: '未通过时会直接告诉你缺什么'
+    },
+    {
+      title: '拉取 → 本地编辑 → 推送',
+      command: `node scripts/courseware-cli.mjs pull${target} --dir ./courseware`,
+      hint: '改完用同样的 --subject 执行 push；冲突会提示先 pull，不会覆盖你的改动'
+    }
+  ]
+})
+
+async function copyCommand(command) {
+  try {
+    await navigator.clipboard.writeText(command)
+    showToast('命令已复制', 'success')
+  } catch {
+    showToast('复制失败，请手动选择命令文本', 'warn')
+  }
+}
+
 onMounted(async () => {
   try {
     layouts.value = await coursewareGateway.listLayouts()
@@ -400,105 +455,447 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.editor { display: flex; flex-direction: column; gap: 16px; padding: 4px 0 32px; }
-.editor__head { display: flex; flex-direction: column; gap: 6px; }
-.editor__title { margin: 0; font-size: 22px; font-weight: 700; }
-.editor__hint { margin: 0; color: #6b7280; font-size: 13px; line-height: 1.6; }
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.editor__title {
+  margin: 0;
+}
+
 .editor__toolbar,
-.editor__footer { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
-.editor__field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #374151; min-width: 180px; }
+.editor__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.editor__footer {
+  justify-content: flex-end;
+}
+
+.editor__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: var(--text-2);
+  min-width: 180px;
+}
+
 .editor__field input,
 .editor__field select {
-  padding: 8px 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 13px;
+  padding: 7px 10px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-sm);
+  background: var(--paper-1);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.82rem;
 }
-.editor__body { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; }
-.editor__list { display: flex; flex-direction: column; gap: 8px; }
-.editor__list-title { margin: 8px 0 0; font-size: 13px; font-weight: 600; color: #374151; }
-.editor__list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+
+.editor__body {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.editor__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editor__list-title {
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.editor__list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .editor__list-item {
   width: 100%;
   text-align: left;
-  border: 1px solid #e5e7eb;
-  background: #fff;
-  border-radius: 8px;
-  padding: 8px 10px;
+  border: 1.5px solid var(--ink);
+  background: var(--paper-1);
+  border-radius: var(--r-sm);
+  padding: 7px 9px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-size: 13px;
+  font-size: 0.8rem;
+  color: var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  transition: transform 0.14s var(--ease-out), box-shadow 0.14s var(--ease-out);
 }
-.editor__list-item.is-active { border-color: #6366f1; background: #eef2ff; }
-.editor__list-item em { color: #6b7280; font-size: 12px; font-style: normal; }
-.editor__main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+
+.editor__list-item:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.editor__list-item.is-active {
+  background: var(--lime);
+}
+
+.editor__list-item em {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-style: normal;
+}
+
+.editor__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
 .editor__pane {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
   padding: 12px;
-  background: #fff;
   min-height: 460px;
 }
-.editor__pane-head { display: flex; justify-content: space-between; font-size: 13px; color: #6b7280; }
+
+.editor__pane-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
 .editor__code {
   flex: 1;
   min-height: 400px;
-  border: none;
+  border: 1.5px dashed var(--ink);
+  border-radius: var(--r-sm);
+  background: var(--paper-2);
+  color: var(--ink);
+  padding: 10px;
   outline: none;
   resize: vertical;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-  line-height: 1.7;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.75;
 }
-.editor__preview { flex: 1; overflow: auto; font-size: 13px; line-height: 1.7; }
-.editor__preview :deep(pre) { white-space: pre-wrap; word-break: break-word; margin: 0 0 12px; }
-.editor__preview :deep(.layout) { display: inline-block; background: #eef2ff; color: #4338ca; border-radius: 6px; padding: 1px 8px; font-size: 12px; margin-bottom: 6px; }
-.editor__preview :deep(.slot) { background: #f3f4f6; border: 1px dashed #9ca3af; border-radius: 6px; padding: 1px 6px; font-size: 12px; }
-.editor__preview :deep(mark) { background: #fef3c7; padding: 0 4px; border-radius: 4px; }
-.editor__errors { margin: 0; padding-left: 18px; color: #b91c1c; font-size: 12px; }
-.editor__tag { font-size: 12px; color: #6b7280; }
-.editor__tag.is-error { color: #b91c1c; }
-.editor__tag.is-ok { color: #047857; }
-.editor__empty { margin: 0; color: #6b7280; font-size: 13px; }
-.editor__outline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+
+.editor__preview {
+  flex: 1;
+  overflow: auto;
+  font-size: 0.84rem;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+.editor__preview :deep(pre) {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0 0 12px;
+}
+
+.editor__preview :deep(.layout) {
+  display: inline-block;
+  background: var(--sky);
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-full);
+  padding: 1px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  margin-bottom: 6px;
+}
+
+.editor__preview :deep(.slot) {
+  background: var(--paper-2);
+  border: 1.5px dashed var(--ink);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+}
+
+.editor__preview :deep(mark) {
+  background: var(--lime);
+  color: var(--ink);
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+.editor__errors {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--vermilion);
+  font-size: 0.78rem;
+}
+
+.editor__tag {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.editor__tag.is-error {
+  color: var(--vermilion);
+}
+
+.editor__tag.is-ok {
+  color: var(--teal);
+}
+
+.editor__empty {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 0.78rem;
+}
+
+.editor__outline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .editor__outline li {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: #374151;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  font-size: 0.76rem;
+  color: var(--text-2);
+  border: 1.5px solid var(--paper-2);
+  border-radius: var(--r-sm);
   padding: 4px 8px;
+  background: var(--paper-2);
 }
-.editor__outline-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.editor__outline em { color: #4338ca; font-style: normal; background: #eef2ff; border-radius: 4px; padding: 0 4px; }
-.editor__outline-actions { display: flex; gap: 2px; }
+
+.editor__outline-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.editor__outline em {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.62rem;
+  background: var(--butter);
+  border-radius: var(--r-full);
+  padding: 0 6px;
+}
+
+.editor__outline-actions {
+  display: flex;
+  gap: 2px;
+}
+
 .editor__outline-actions button {
-  border: none;
-  background: #f3f4f6;
+  border: 1.5px solid var(--ink);
+  background: var(--paper-1);
   border-radius: 4px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 0.68rem;
   padding: 1px 5px;
+  color: var(--ink);
 }
-.editor__outline-actions button:disabled { color: #d1d5db; cursor: not-allowed; }
-.editor__report { margin: 0; font-size: 12px; color: #4b5563; }
-.editor__upload { display: inline-flex; flex-direction: column; gap: 4px; font-size: 12px; color: #4b5563; }
-.editor__check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #374151; }
+
+.editor__outline-actions button:disabled {
+  color: var(--text-3);
+  border-color: var(--paper-2);
+  background: var(--paper-2);
+  cursor: not-allowed;
+}
+
+.editor__report {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-2);
+}
+
+.editor__wizard {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editor__wizard li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border: 1.5px solid var(--paper-2);
+  background: var(--paper-2);
+  border-radius: var(--r-sm);
+}
+
+.editor__wizard-step {
+  flex: 0 0 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-full);
+  background: var(--lime);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.editor__wizard-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.editor__wizard-body strong {
+  font-size: 0.76rem;
+  color: var(--ink);
+}
+
+.editor__wizard-body em {
+  font-style: normal;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.editor__wizard-cmd {
+  display: block;
+  overflow-x: auto;
+  padding: 4px 6px;
+  border: 1px dashed var(--ink);
+  border-radius: 4px;
+  background: var(--paper-1);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--ink);
+  white-space: pre;
+}
+
+.editor__copy {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  font-size: 0.68rem;
+}
+
+.editor__upload {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.74rem;
+  color: var(--text-2);
+}
+
+.editor__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+
+.editor__check input[type='checkbox'] {
+  accent-color: var(--cobalt);
+  width: 15px;
+  height: 15px;
+}
+
 .editor__primary,
-.editor__ghost { padding: 9px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; }
-.editor__primary { border: none; background: #6366f1; color: #fff; }
-.editor__primary:disabled { background: #c7d2fe; cursor: not-allowed; }
-.editor__ghost { border: 1px solid #d1d5db; background: #fff; color: #374151; }
-.editor__ghost:disabled { color: #9ca3af; cursor: not-allowed; }
+.editor__ghost {
+  padding: 8px 16px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-full);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.14s var(--ease-out), box-shadow 0.14s var(--ease-out);
+}
+
+.editor__primary {
+  background: var(--vermilion);
+  color: var(--paper-1);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.editor__primary:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.editor__primary:disabled {
+  background: var(--paper-2);
+  color: var(--text-3);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.editor__ghost {
+  background: var(--paper-1);
+  color: var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.editor__ghost:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.editor__ghost:disabled {
+  color: var(--text-3);
+  border-color: var(--text-3);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 @media (max-width: 1100px) {
-  .editor__body { grid-template-columns: 1fr; }
-  .editor__main { grid-template-columns: 1fr; }
+  .editor__body {
+    grid-template-columns: 1fr;
+  }
+
+  .editor__main {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .editor__field {
+    min-width: 100%;
+  }
 }
 </style>
