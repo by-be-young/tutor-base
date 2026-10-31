@@ -86,6 +86,27 @@ export const coursewareGateway = {
     return Array.isArray(response) ? response.map(normalizeCopyResult) : []
   },
 
+  /** 模板库（新建课件时的骨架来源）。 */
+  async listTemplates(subject) {
+    const query = subject ? `?${new URLSearchParams({ subject })}` : ''
+    const response = await backendClient.request(`/admin/courseware/templates${query}`)
+    return Array.isArray(response) ? response : []
+  },
+
+  async getTemplate(templateId) {
+    const response = await backendClient.request(
+      `/admin/courseware/templates/${encodeURIComponent(templateId)}`
+    )
+    return String(response?.markdown || '')
+  },
+
+  saveTemplate({ subject, kind, name, markdown }) {
+    return backendClient.request('/admin/courseware/templates', {
+      method: 'POST',
+      body: { subject, kind, name, markdown }
+    })
+  },
+
   /** 布局注册表（编辑器与渲染共用）。 */
   async listLayouts() {
     const response = await backendClient.request('/admin/courseware/layouts')

@@ -2226,6 +2226,105 @@ paths:
         '403':
           $ref: '#/components/responses/Problem'
 
+  /admin/courseware/templates:
+    get:
+      operationId: listCoursewareTemplates
+      summary: 模板库（通用模板 + 指定科目模板）
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: subject
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 模板列表（不含正文）。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoursewareTemplate'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: saveCoursewareTemplate
+      summary: 把正文存为模板（同科目同类型同名覆盖）
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareTemplateSaveRequest'
+      responses:
+        '200':
+          description: 保存后的模板。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareTemplate'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/templates/{templateId}:
+    get:
+      operationId: getCoursewareTemplate
+      summary: 取模板正文
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: markdown 正文。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareSkeleton'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: deleteCoursewareTemplate
+      summary: 停用模板
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: 已停用。
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+
 components:
   parameters:
     CsrfHeader:
@@ -4151,3 +4250,35 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CoursewareImportItem'
+    CoursewareTemplate:
+      type: object
+      additionalProperties: false
+      required: [id, kind, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        subject:
+          type: [string, 'null']
+          description: null 表示全科通用
+        kind:
+          type: string
+          enum: [new_lesson, practice, review, topic]
+        name:
+          type: string
+    CoursewareTemplateSaveRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, name, markdown]
+      properties:
+        subject:
+          type: string
+        kind:
+          type: string
+          enum: [new_lesson, practice, review, topic]
+        name:
+          type: string
+          maxLength: 120
+        markdown:
+          type: string
+          maxLength: 1048576

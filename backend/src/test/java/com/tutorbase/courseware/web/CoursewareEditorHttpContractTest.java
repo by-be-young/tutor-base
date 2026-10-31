@@ -305,6 +305,57 @@ class CoursewareEditorHttpContractTest {
                 .andExpect(jsonPath("$.code").value("courseware_validation_failed"));
     }
 
+    @Test
+    void templateLibraryListsSeedsAndSavesCustomOnes() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+
+        mockMvc.perform(get("/api/v1/admin/courseware/templates").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(4))
+                .andExpect(jsonPath("$[0].kind").value("new_lesson"));
+
+        long templateId = jdbc.queryForObject(
+                "SELECT id FROM public.course_template WHERE kind = 'practice'", Long.class);
+        mockMvc.perform(get("/api/v1/admin/courseware/templates/{id}", templateId).cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.markdown").value(org.hamcrest.Matchers.containsString("【@1】")));
+
+        MvcResult saved = mockMvc.perform(post("/api/v1/admin/courseware/templates")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "subject", "高中化学",
+                                "kind", "topic",
+                                "name", "电化学专题",
+                                "markdown", "<!-- @layout:A -->\n# 专题\n\n正文\n"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("电化学专题"))
+                .andReturn();
+        assertThat(objectMapper.readTree(saved.getResponse().getContentAsString()).get("id").asLong()).isPositive();
+
+        // 带科目的模板只在对应科目下可见
+        mockMvc.perform(get("/api/v1/admin/courseware/templates")
+                        .param("subject", "高中化学")
+                        .cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(5));
+        mockMvc.perform(get("/api/v1/admin/courseware/templates")
+                        .param("subject", "高中英语")
+                        .cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(4));
+
+        mockMvc.perform(post("/api/v1/admin/courseware/templates")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "kind", "unknown", "name", "x", "markdown", "y"))))
+                .andExpect(status().isBadRequest());
+    }
+
     private static byte[] zipOf(Map<String, String> entries) throws Exception {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         try (ZipOutputStream stream = new ZipOutputStream(buffer, StandardCharsets.UTF_8)) {

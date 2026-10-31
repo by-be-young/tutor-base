@@ -189,6 +189,33 @@ test('编辑器草稿与布局接口', async () => {
   )
 })
 
+test('模板库接口', async () => {
+  await withFetch(
+    (url) => {
+      if (url.includes('/csrf')) return jsonResponse(200, { token: 'test-token' })
+      if (/\/templates\/\d+$/.test(url) && (url.includes('/templates/7'))) {
+        return jsonResponse(200, { markdown: '<!-- @layout:A -->\n# 专题\n' })
+      }
+      if (url.includes('/templates')) {
+        return jsonResponse(200, [{ id: 7, subject: null, kind: 'practice', name: '习题课' }])
+      }
+      return jsonResponse(200, [])
+    },
+    async (calls) => {
+      const templates = await coursewareGateway.listTemplates('高中化学')
+      assert.equal(templates[0].kind, 'practice')
+      assert.match(calls[0].url, /templates\?subject=/)
+
+      const markdown = await coursewareGateway.getTemplate(7)
+      assert.match(markdown, /@layout:A/)
+
+      await coursewareGateway.saveTemplate({ kind: 'review', name: '复习', markdown: 'x' })
+      const post = calls.find(call => call.options.method === 'POST')
+      assert.deepEqual(JSON.parse(post.options.body), { kind: 'review', name: '复习', markdown: 'x' })
+    }
+  )
+})
+
 test('导入 zip 用 multipart 且不带 JSON Content-Type', async () => {
   await withFetch(
     (url) => {

@@ -6,6 +6,7 @@ import java.util.List;
 import com.tutorbase.courseware.CoursewareFailures;
 import com.tutorbase.courseware.draft.CoursewareDraftService;
 import com.tutorbase.courseware.layout.CoursewareLayoutService;
+import com.tutorbase.courseware.layout.CoursewareTemplateService;
 import com.tutorbase.courseware.publish.CoursewarePublisher;
 import com.tutorbase.courseware.transfer.CoursewareTransferService;
 import com.tutorbase.identity.AccountPrincipal;
@@ -37,12 +38,52 @@ public class CoursewareEditorController {
     private final CoursewareLayoutService layouts;
     private final CoursewareDraftService drafts;
     private final CoursewareTransferService transfers;
+    private final CoursewareTemplateService templates;
 
     CoursewareEditorController(CoursewareLayoutService layouts, CoursewareDraftService drafts,
-            CoursewareTransferService transfers) {
+            CoursewareTransferService transfers, CoursewareTemplateService templates) {
         this.layouts = layouts;
         this.drafts = drafts;
         this.transfers = transfers;
+        this.templates = templates;
+    }
+
+    @GetMapping("/templates")
+    ResponseEntity<List<TemplateResponse>> templates(@RequestParam(required = false) String subject) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(templates.list(subject).stream().map(TemplateResponse::from).toList());
+    }
+
+    @GetMapping("/templates/{templateId}")
+    ResponseEntity<SkeletonResponse> template(@PathVariable long templateId) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new SkeletonResponse(templates.markdown(templateId)));
+    }
+
+    @PostMapping("/templates")
+    ResponseEntity<TemplateResponse> saveTemplate(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @Valid @RequestBody SaveTemplateRequest request) {
+        teacherId(principal);
+        long id = templates.save(request.subject(), request.kind(), request.name(), request.markdown());
+        return templates.list(request.subject()).stream()
+                .filter(template -> template.id() == id)
+                .findFirst()
+                .map(template -> ResponseEntity.ok()
+                        .cacheControl(CacheControl.noStore())
+                        .body(TemplateResponse.from(template)))
+                .orElseThrow(() -> new CoursewareFailures.NotFound("模板保存后不可见：" + id));
+    }
+
+    @DeleteMapping("/templates/{templateId}")
+    ResponseEntity<Void> deleteTemplate(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @PathVariable long templateId) {
+        teacherId(principal);
+        templates.deactivate(templateId);
+        return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
     }
 
     @GetMapping("/layouts")
@@ -184,6 +225,20 @@ public class CoursewareEditorController {
     }
 
     record SkeletonResponse(String markdown) {
+    }
+
+    record TemplateResponse(long id, String subject, String kind, String name) {
+
+        static TemplateResponse from(CoursewareTemplateService.Template template) {
+            return new TemplateResponse(template.id(), template.subject(), template.kind(), template.name());
+        }
+    }
+
+    record SaveTemplateRequest(
+            String subject,
+            @NotBlank String kind,
+            @NotBlank @Size(max = 120) String name,
+            @NotBlank @Size(max = 1_048_576) String markdown) {
     }
 
     record SaveDraftRequest(

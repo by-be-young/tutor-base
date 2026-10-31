@@ -14,6 +14,15 @@
         <input v-model="subject" type="text" placeholder="例如 高中化学" />
       </label>
       <label class="editor__field">
+        <span>模板</span>
+        <select v-model="templateId">
+          <option :value="null">不用模板（按布局新建）</option>
+          <option v-for="template in templates" :key="template.id" :value="template.id">
+            {{ template.name }}{{ template.subject ? ` · ${template.subject}` : '' }}
+          </option>
+        </select>
+      </label>
+      <label class="editor__field">
         <span>布局</span>
         <select v-model="layoutId">
           <option v-for="layout in layouts" :key="layout.layoutId" :value="layout.layoutId">
@@ -24,10 +33,26 @@
       <button type="button" class="editor__ghost" :disabled="busy" @click="insertLayout">插入布局</button>
       <button type="button" class="editor__ghost" :disabled="busy" @click="insertQuestion">插入题目</button>
       <button type="button" class="editor__ghost" :disabled="busy" @click="newDraft">新建草稿</button>
+      <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="saveAsTemplate">
+        存为模板
+      </button>
     </div>
 
     <div class="editor__body">
       <aside class="editor__list">
+        <h2 class="editor__list-title">大纲</h2>
+        <p v-if="!outline.length" class="editor__empty">正文里还没有 `# ` 章节。</p>
+        <ul v-else class="editor__outline">
+          <li v-for="(section, index) in outline" :key="index">
+            <span class="editor__outline-title">{{ section.title }}</span>
+            <em v-if="section.layout">{{ section.layout }}</em>
+            <span class="editor__outline-actions">
+              <button type="button" :disabled="index === 0" @click="moveSection(index, -1)">↑</button>
+              <button type="button" :disabled="index === outline.length - 1" @click="moveSection(index, 1)">↓</button>
+            </span>
+          </li>
+        </ul>
+
         <h2 class="editor__list-title">我的草稿</h2>
         <p v-if="!drafts.length" class="editor__empty">还没有草稿。选择布局后点「新建草稿」。</p>
         <ul v-else>
@@ -97,6 +122,8 @@ import { coursewareGateway } from '@/gateways/coursewareGateway'
 import { showToast } from '@/utils/toast'
 
 const layouts = ref([])
+const templates = ref([])
+const templateId = ref(null)
 const drafts = ref([])
 const articleId = ref(null)
 const subject = ref('')
@@ -109,6 +136,70 @@ const importReport = ref(null)
 const precheck = reactive({ checked: false, errors: [] })
 
 const previewHtml = computed(() => renderSections(markdown.value))
+
+/** 大纲：按 `# ` 切 section，带布局标签与索引，供上移/下移。 */
+const outline = computed(() => splitSections(markdown.value))
+
+function splitSections(source) {
+  const sections = []
+  let current = null
+  let pendingLayout = null
+  for (const line of (source || '').split('\n')) {
+    const directive = line.match(/<!--\s*@layout:\s*([A-Za-z0-9_-]+)\s*-->/)
+    if (directive) {
+      pendingLayout = directive[1]
+      continue
+    }
+    const heading = line.match(/^#\s+(.*)$/)
+    if (heading) {
+      current = { title: heading[1].trim(), layout: pendingLayout, lines: [line] }
+      pendingLayout = null
+      sections.push(current)
+      continue
+    }
+    if (current) current.lines.push(line)
+  }
+  return sections.filter(section => section.title)
+}
+
+/** 上移/下移一个 section（连同它前面的布局指令一起移动）。 */
+function moveSection(index, delta) {
+  const lines = markdown.value.split('\n')
+  const blocks = []
+  let buffer = []
+  let layoutLine = null
+  for (const line of lines) {
+    if (/<!--\s*@layout:/.test(line)) {
+      layoutLine = line
+      continue
+    }
+    if (/^#\s+/.test(line) && (buffer.length || layoutLine)) {
+      blocks.push({ layout: layoutLine, lines: buffer })
+      buffer = [line]
+      layoutLine = null
+      continue
+    }
+    buffer.push(line)
+  }
+  blocks.push({ layout: layoutLine, lines: buffer })
+
+  const headingIndexes = blocks
+    .map((block, position) => (block.lines.some(line => /^#\s+/.test(line)) ? position : -1))
+    .filter(position => position >= 0)
+  const from = headingIndexes[index]
+  const to = headingIndexes[index + delta]
+  if (from == null || to == null) return
+  const [moved] = blocks.splice(from, 1)
+  blocks.splice(to, 0, moved)
+
+  const rebuilt = []
+  for (const block of blocks) {
+    if (block.layout) rebuilt.push(block.layout)
+    rebuilt.push(...block.lines)
+  }
+  markdown.value = rebuilt.join('\n')
+  dirty.value = true
+}
 
 /** 按 `# ` 切 section，把布局指令显示成小标签；题目占位符显示成卡片占位。 */
 function renderSections(source) {
@@ -156,11 +247,33 @@ async function loadDrafts() {
 async function newDraft() {
   busy.value = true
   try {
-    markdown.value = await coursewareGateway.getLayoutSkeleton(layoutId.value, subject.value || '新课件')
+    markdown.value = templateId.value
+      ? await coursewareGateway.getTemplate(templateId.value)
+      : await coursewareGateway.getLayoutSkeleton(layoutId.value, subject.value || '新课件')
     articleId.value = null
     dirty.value = true
     precheck.checked = false
     precheck.errors = []
+  } catch (error) {
+    reportError(error)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function saveAsTemplate() {
+  const name = window.prompt('模板名（同科目同类型同名会覆盖）', '新模板')
+  if (!name) return
+  busy.value = true
+  try {
+    await coursewareGateway.saveTemplate({
+      subject: subject.value || undefined,
+      kind: 'new_lesson',
+      name,
+      markdown: markdown.value
+    })
+    showToast('已存为模板', 'success')
+    templates.value = await coursewareGateway.listTemplates(subject.value || undefined)
   } catch (error) {
     reportError(error)
   } finally {
@@ -278,6 +391,7 @@ onMounted(async () => {
   try {
     layouts.value = await coursewareGateway.listLayouts()
     if (layouts.value.length) layoutId.value = layouts.value[0].layoutId
+    templates.value = await coursewareGateway.listTemplates()
   } catch (error) {
     reportError(error)
   }
@@ -351,6 +465,29 @@ onMounted(async () => {
 .editor__tag.is-error { color: #b91c1c; }
 .editor__tag.is-ok { color: #047857; }
 .editor__empty { margin: 0; color: #6b7280; font-size: 13px; }
+.editor__outline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.editor__outline li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+.editor__outline-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor__outline em { color: #4338ca; font-style: normal; background: #eef2ff; border-radius: 4px; padding: 0 4px; }
+.editor__outline-actions { display: flex; gap: 2px; }
+.editor__outline-actions button {
+  border: none;
+  background: #f3f4f6;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 1px 5px;
+}
+.editor__outline-actions button:disabled { color: #d1d5db; cursor: not-allowed; }
 .editor__report { margin: 0; font-size: 12px; color: #4b5563; }
 .editor__upload { display: inline-flex; flex-direction: column; gap: 4px; font-size: 12px; color: #4b5563; }
 .editor__check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #374151; }
