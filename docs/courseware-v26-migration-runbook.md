@@ -58,7 +58,7 @@ V26 换主键后，任何"只按 `article_id` 定位目录行"的代码都会变
 | [`JdbcCoursewareClaimAdministration#syncCatalog`](../backend/src/main/java/com/tutorbase/administration/courseware/JdbcCoursewareClaimAdministration.java:46) | `INSERT ... (article_id, subject, title, updated_at) ON CONFLICT (article_id)` | 缺 `teacher_account_id` → 违反 `NOT NULL`；`ON CONFLICT (article_id)` 不再命中任何唯一约束 | **已处理**：该接口已受 `legacy-claims-enabled` 收口（`false` → 410），V26 前必须确保开关为 `false` |
 | [`JdbcCoursewareClaimAdministration`](../backend/src/main/java/com/tutorbase/administration/courseware/JdbcCoursewareClaimAdministration.java:427) | `WHERE article_id = :articleId` | 跨老师会命中多行 | 同上，随认领链路停用 |
 | [`JdbcCoursewareScope`](../backend/src/main/java/com/tutorbase/administration/courseware/JdbcCoursewareScope.java:16) | `scoped_catalog.article_id = %s` 反查可见性 | 会匹配到任意老师的同名行，越权放行 | **已处理**：新增「发布归属」判定（`course_release_head` + `course_article.legacy_article_id`），不再只靠旧认领表；旧分支保留到认领链路彻底删除 |
-| `JdbcContentGrantQuery` / `JdbcLearnerAdministration` / `AdminAnalyticsService` | `FROM courseware_catalog` 聚合 `article_id` | 同名会重复计数 | 加 `teacher_account_id` 维度或 `DISTINCT` |
+| `JdbcContentGrantQuery` / `JdbcLearnerAdministration` / `AdminAnalyticsService` | `FROM courseware_catalog` 聚合 `article_id` | 同名会重复计数（`subjectProgress` 的 `count(*)` 会翻倍、特殊测试学员的 permissions 数组会出现重复值） | **已处理**：`JdbcContentGrantQuery` 改 `array_agg(DISTINCT …)`；`AdminAnalyticsService.coursewareStats` 改用 `SELECT DISTINCT article_id, subject` 子查询；`subjectProgress` 的 catalog join 增加 `teacher_account_id` 匹配（`answer.teacher_account_id IS NULL` 时保持旧行为）；`JdbcLearnerAdministration` 与其余位置是 `EXISTS`/`DISTINCT` 语义，无需改动；`visibleArticleIds` 已保证去重排序（`Set.copyOf` 不会因重复元素抛异常） |
 
 配套的运维动作：
 
@@ -246,3 +246,4 @@ WHERE attrelid = 'public.courseware_catalog'::regclass AND attname = 'teacher_ac
 | --- | --- |
 | 2026-10-31 | 初版：脚本完成 + 临时容器演练通过（正向/回滚/幂等/断言均实测），runbook 建立 |
 | 2026-10-31 | 代码侧前置项落地：`/admin/courseware-catalog/sync` 受 `legacy-claims-enabled` 收口（410）；`JdbcCoursewareScope` 增加「发布归属」判定并保留旧认领分支；新增 `CoursewareScopeOwnershipTest` |
+| 2026-10-31 | 聚合去重：`JdbcContentGrantQuery`（`array_agg(DISTINCT …)`）、`AdminAnalyticsService.coursewareStats`（`DISTINCT (article_id, subject)` 子查询）与 `subjectProgress`（catalog join 加 `teacher_account_id`） |

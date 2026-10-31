@@ -26,7 +26,8 @@ final class JdbcContentGrantQuery implements ContentGrantQuery {
         return jdbc.sql("""
                 SELECT CASE
                            WHEN learner.is_special_test THEN COALESCE(
-                               (SELECT array_agg(catalog.article_id::integer ORDER BY catalog.article_id)
+                               (SELECT array_agg(DISTINCT catalog.article_id::integer
+                                                 ORDER BY catalog.article_id::integer)
                                 FROM public.courseware_catalog AS catalog),
                                learner.permissions)
                            ELSE learner.permissions
