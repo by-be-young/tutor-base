@@ -53,10 +53,16 @@ const routes = [
         meta: { adminTitle: '批阅' }
       },
       {
+        path: 'courseware',
+        name: 'AdminCoursewareOverview',
+        component: () => import('@/views/admin/AdminCoursewareOverviewView.vue'),
+        meta: { adminTitle: '我的课件' }
+      },
+      {
         path: 'content',
         name: 'AdminContent',
         component: () => import('@/views/admin/AdminContentView.vue'),
-        meta: { adminTitle: '课件' }
+        meta: { adminTitle: '旧版认领' }
       },
       {
         path: 'sharing',

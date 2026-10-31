@@ -86,6 +86,18 @@ export const coursewareGateway = {
     return Array.isArray(response) ? response.map(normalizeCopyResult) : []
   },
 
+  /** 「我的课件」概览：科目、版本、草稿与待处理数量。 */
+  async getOverview() {
+    const response = await backendClient.request('/admin/courseware/overview')
+    return {
+      subjects: Array.isArray(response?.subjects) ? response.subjects : [],
+      pendingDrafts: Number(response?.pendingDrafts) || 0,
+      acquiredCount: Number(response?.acquiredCount) || 0,
+      pendingUpdates: Number(response?.pendingUpdates) || 0,
+      unreadNotifications: Number(response?.unreadNotifications) || 0
+    }
+  },
+
   /** 模板库（新建课件时的骨架来源）。 */
   async listTemplates(subject) {
     const query = subject ? `?${new URLSearchParams({ subject })}` : ''

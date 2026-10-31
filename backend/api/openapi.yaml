@@ -2410,6 +2410,24 @@ paths:
         '409':
           $ref: '#/components/responses/Problem'
 
+  /admin/courseware/overview:
+    get:
+      operationId: getCoursewareOverview
+      summary: 「我的课件」概览（科目 / 版本 / 草稿与待处理数量）
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 概览。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareOverview'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+
 components:
   parameters:
     CsrfHeader:
@@ -4472,3 +4490,49 @@ components:
           type: array
           items:
             type: string
+    CoursewareOverviewSubject:
+      type: object
+      additionalProperties: false
+      required: [subject, version, publishedAt, articleCount, draftCount, copiedCount, shareCount]
+      properties:
+        subject:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+        publishedAt:
+          type: string
+          format: date-time
+        articleCount:
+          type: integer
+          minimum: 0
+        draftCount:
+          type: integer
+          minimum: 0
+        copiedCount:
+          type: integer
+          minimum: 0
+        shareCount:
+          type: integer
+          minimum: 0
+    CoursewareOverview:
+      type: object
+      additionalProperties: false
+      required: [subjects, pendingDrafts, acquiredCount, pendingUpdates, unreadNotifications]
+      properties:
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoursewareOverviewSubject'
+        pendingDrafts:
+          type: integer
+          minimum: 0
+        acquiredCount:
+          type: integer
+          minimum: 0
+        pendingUpdates:
+          type: integer
+          minimum: 0
+        unreadNotifications:
+          type: integer
+          minimum: 0

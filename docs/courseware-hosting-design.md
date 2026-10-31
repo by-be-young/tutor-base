@@ -794,6 +794,7 @@ P4 把写入补齐：
 | 认领写入下线开关 | `tutor.courseware.legacy-claims-enabled`（默认 `true`）：设 `false` 后 `PUT/DELETE /admin/courseware-claims/**` 与放弃接口返回 **410 `courseware_claims_retired`**，读接口（`GET /courseware-claims`、`/catalog`）保留，旧页面不至于整页报错 |
 | 平滑切换 | 一旦线上确认没有认领入口在用，把环境变量 `TUTOR_COURSEWARE_LEGACY_CLAIMS` 设为 `false` 即可；`CoursewareScope` 仍按 `courseware_catalog` 读，不影响批阅与授权 |
 | 多老师分组 | `blogStore` 新增 `teacherGroups` / `multipleTeachers`（纯函数 `groupByTeacher`），按后端顺序给出「老师 → 科目 → 课件」，供首页与目录区分归属 |
+| 「我的课件」入口 | 新增 `GET /admin/courseware/overview`（每科目版本、篇数、草稿、被获取、分享数与待处理汇总）与 `/admin/courseware` 页面；管理端导航「课件」指向新页，旧认领页更名「旧版认领」并在新页里标注即将下线 |
 
 ---
 

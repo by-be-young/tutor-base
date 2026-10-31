@@ -458,6 +458,51 @@ class CoursewareEditorHttpContractTest {
                 .andExpect(jsonPath("$.errors[0]").value(org.hamcrest.Matchers.containsString("布局 Z")));
     }
 
+    @Test
+    void overviewSummarizesSubjectsAndPendingWork() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+
+        mockMvc.perform(post("/api/v1/admin/courseware/releases")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "subject", "高中化学",
+                                "articles", List.of(Map.of(
+                                        "articleId", 3, "legacyArticleId", 3,
+                                        "title", "3-1 原电池", "series", "高中化学",
+                                        "logicalPath", "高中化学/理论课讲义/3-1 原电池.md",
+                                        "markdown", "【题干1】题\n\n【@1】\n",
+                                        "answers", List.of(Map.of(
+                                                "questionId", "1", "answer", "A", "autoGrade", true))))))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/admin/courseware/overview").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.subjects[0].subject").value("高中化学"))
+                .andExpect(jsonPath("$.subjects[0].version").value(1))
+                .andExpect(jsonPath("$.subjects[0].articleCount").value(1))
+                .andExpect(jsonPath("$.subjects[0].draftCount").value(0))
+                .andExpect(jsonPath("$.pendingDrafts").value(0))
+                .andExpect(jsonPath("$.acquiredCount").value(0))
+                .andExpect(jsonPath("$.pendingUpdates").value(0))
+                .andExpect(jsonPath("$.unreadNotifications").value(0));
+
+        // 存一份草稿后概览能看到待发布数量
+        mockMvc.perform(put("/api/v1/admin/courseware/drafts/{articleId}", 3)
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "markdown", "【题干1】改过的题干\n\n【@1】\n"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/admin/courseware/overview").cookie(cookie))
+                .andExpect(jsonPath("$.subjects[0].draftCount").value(1))
+                .andExpect(jsonPath("$.pendingDrafts").value(1));
+    }
+
     private static byte[] zipOf(Map<String, String> entries) throws Exception {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         try (ZipOutputStream stream = new ZipOutputStream(buffer, StandardCharsets.UTF_8)) {

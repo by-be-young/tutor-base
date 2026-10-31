@@ -8,6 +8,7 @@ import com.tutorbase.courseware.draft.CoursewareDraftService;
 import com.tutorbase.courseware.layout.CoursewareLayoutService;
 import com.tutorbase.courseware.layout.CoursewareTemplateService;
 import com.tutorbase.courseware.publish.CoursewarePublisher;
+import com.tutorbase.courseware.query.CoursewareOverviewService;
 import com.tutorbase.courseware.transfer.CoursewareTransferService;
 import com.tutorbase.courseware.workspace.CoursewareWorkspaceService;
 import com.tutorbase.identity.AccountPrincipal;
@@ -41,15 +42,17 @@ public class CoursewareEditorController {
     private final CoursewareTransferService transfers;
     private final CoursewareTemplateService templates;
     private final CoursewareWorkspaceService workspace;
+    private final CoursewareOverviewService overview;
 
     CoursewareEditorController(CoursewareLayoutService layouts, CoursewareDraftService drafts,
             CoursewareTransferService transfers, CoursewareTemplateService templates,
-            CoursewareWorkspaceService workspace) {
+            CoursewareWorkspaceService workspace, CoursewareOverviewService overview) {
         this.layouts = layouts;
         this.drafts = drafts;
         this.transfers = transfers;
         this.templates = templates;
         this.workspace = workspace;
+        this.overview = overview;
     }
 
     @GetMapping("/workspace/manifest")
@@ -243,6 +246,13 @@ public class CoursewareEditorController {
                 .body(ImportReportResponse.from(report));
     }
 
+    @GetMapping("/overview")
+    ResponseEntity<OverviewResponse> overview(@AuthenticationPrincipal AccountPrincipal principal) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(OverviewResponse.from(overview.overview(teacherId(principal))));
+    }
+
     private static long teacherId(AccountPrincipal principal) {
         if (principal == null) {
             throw new CoursewareFailures.Forbidden("未登录");
@@ -310,9 +320,7 @@ public class CoursewareEditorController {
     }
 
     record WorkspaceFilesResponse(java.util.Map<String, String> files) {
-    }
-
-    record WorkspaceFileRequest(
+    }    record WorkspaceFileRequest(
             @NotBlank @Size(max = 500) String logicalPath,
             @NotBlank @Size(max = 1_048_576) String markdown) {
     }
@@ -335,6 +343,36 @@ public class CoursewareEditorController {
         static WorkspacePushResponse from(CoursewareWorkspaceService.PushResult result) {
             return new WorkspacePushResponse(result.version(), result.articleCount(), result.changedCount(),
                     result.deletedCount(), result.changedPaths(), result.deletedPaths());
+        }
+    }
+
+    record SubjectOverviewResponse(
+            String subject,
+            int version,
+            java.time.Instant publishedAt,
+            int articleCount,
+            int draftCount,
+            int copiedCount,
+            int shareCount) {
+
+        static SubjectOverviewResponse from(CoursewareOverviewService.SubjectOverview subject) {
+            return new SubjectOverviewResponse(subject.subject(), subject.version(), subject.publishedAt(),
+                    subject.articleCount(), subject.draftCount(), subject.copiedCount(), subject.shareCount());
+        }
+    }
+
+    record OverviewResponse(
+            List<SubjectOverviewResponse> subjects,
+            int pendingDrafts,
+            int acquiredCount,
+            int pendingUpdates,
+            int unreadNotifications) {
+
+        static OverviewResponse from(CoursewareOverviewService.Overview overview) {
+            return new OverviewResponse(
+                    overview.subjects().stream().map(SubjectOverviewResponse::from).toList(),
+                    overview.pendingDrafts(), overview.acquiredCount(), overview.pendingUpdates(),
+                    overview.unreadNotifications());
         }
     }
 
