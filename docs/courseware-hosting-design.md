@@ -770,6 +770,32 @@ CLI 行为要点：
 - `push` 先比对服务端版本，本地 base 过期直接失败（要求先 pull）；`--dry-run` 只打印计划；
 - 推送走与在线编辑器完全相同的发布路径，因此布局校验、manifest、审计日志口径一致。
 
+### 8.10 P4 学习记录快照（2026-10-31）
+
+V21 已给 `article_question_submissions` / `wrong_questions` 加了 `stem_snapshot`、`answer_snapshot`、
+`teacher_account_id`、`release_id`、`subject` 列，但一直是空的 —— 错题本题干仍靠前端按课件原文现场解析。
+P4 把写入补齐：
+
+| 位置 | 行为 |
+| --- | --- |
+| `CoursewareStemExtractor` | 按格式规范抽题干：`【题干N】` 到下一个标记/`---`；`【题干N-M】` 共享材料 + 各自小问；去 `>`/`#`/`**`；≤400 字按行截断 |
+| `CoursewareSnapshotResolver` | `legacy_article_id` 优先、回落 `article_id`，解析到当前版本的 `teacherAccountId/releaseId/subject/markdown` |
+| 作答写入 | `article_question_submissions` 同批写 `stem_snapshot`/`answer_snapshot`；冲突更新用 `COALESCE` 保留已有快照 |
+| 错题写入 | `wrong_questions` 同批写 `stem_snapshot`/`subject` |
+| 错题本读取 | 响应新增 `stemSnapshot`/`subject`；前端优先用快照，缺失才回退解析原文 |
+
+效果：**课件改版不再改变历史错题里的题干**（`CoursewareSnapshotHttpContractTest` 验证
+"提交 → 错题带快照 → 发布全新题干 → 错题里的题干不变"）。解析不到托管数据时写空值，不阻塞学员作答。
+
+### 8.11 P4 认领模型下线与多老师分组（2026-10-31）
+
+| 项 | 实现 |
+| --- | --- |
+| 认领写入下线开关 | `tutor.courseware.legacy-claims-enabled`（默认 `true`）：设 `false` 后 `PUT/DELETE /admin/courseware-claims/**` 与放弃接口返回 **410 `courseware_claims_retired`**，读接口（`GET /courseware-claims`、`/catalog`）保留，旧页面不至于整页报错 |
+| 平滑切换 | 一旦线上确认没有认领入口在用，把环境变量 `TUTOR_COURSEWARE_LEGACY_CLAIMS` 设为 `false` 即可；`CoursewareScope` 仍按 `courseware_catalog` 读，不影响批阅与授权 |
+| 多老师分组 | `blogStore` 新增 `teacherGroups` / `multipleTeachers`（纯函数 `groupByTeacher`），按后端顺序给出「老师 → 科目 → 课件」，供首页与目录区分归属 |
+| 「我的课件」入口 | 新增 `GET /admin/courseware/overview`（每科目版本、篇数、草稿、被获取、分享数与待处理汇总）与 `/admin/courseware` 页面；管理端导航「课件」指向新页，旧认领页更名「旧版认领」并在新页里标注即将下线 |
+
 ---
 
 ## 9. 前端改造

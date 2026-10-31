@@ -236,6 +236,25 @@ test('导入 zip 用 multipart 且不带 JSON Content-Type', async () => {
   )
 })
 
+test('课件概览接口', async () => {
+  await withFetch(
+    () => jsonResponse(200, {
+      subjects: [{ subject: '高中化学', version: 3, articleCount: 24, draftCount: 1, copiedCount: 2, shareCount: 1 }],
+      pendingDrafts: 1,
+      acquiredCount: 2,
+      pendingUpdates: 1,
+      unreadNotifications: 4
+    }),
+    async (calls) => {
+      const overview = await coursewareGateway.getOverview()
+      assert.equal(overview.subjects.length, 1)
+      assert.equal(overview.pendingDrafts, 1)
+      assert.equal(overview.unreadNotifications, 4)
+      assert.match(calls[0].url, /\/admin\/courseware\/overview$/)
+    }
+  )
+})
+
 test('提醒与更新接口', async () => {
   await withFetch(
     (url) => {

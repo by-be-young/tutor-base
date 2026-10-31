@@ -17,10 +17,13 @@ class LearningService {
 
     private final JdbcClient jdbc;
     private final CoursewareScope coursewareScope;
+    private final com.tutorbase.courseware.snapshot.CoursewareSnapshotResolver snapshots;
 
-    LearningService(JdbcClient jdbc, CoursewareScope coursewareScope) {
+    LearningService(JdbcClient jdbc, CoursewareScope coursewareScope,
+            com.tutorbase.courseware.snapshot.CoursewareSnapshotResolver snapshots) {
         this.jdbc = jdbc;
         this.coursewareScope = coursewareScope;
+        this.snapshots = snapshots;
     }
 
     @Transactional(readOnly = true)
@@ -149,20 +152,31 @@ class LearningService {
         boolean autoGrade = key != null && key.autoGrade() && !key.answerText().isBlank();
         String reviewStatus = autoGrade ? "reviewed" : "pending";
         String reviewResult = autoGrade ? AnswerGradingPolicy.grade(answerText, key.answerText()) : null;
+        CoursewareSnapshot snapshot = snapshotOf(articleId, questionId);
 
         Submission submission = jdbc.sql("""
                 INSERT INTO public.article_question_submissions
                     (blog_id, student_id, question_id, answer_text,
-                     review_status, review_result, submitted_at, reviewed_at)
+                     review_status, review_result, submitted_at, reviewed_at,
+                     teacher_account_id, release_id, stem_snapshot, answer_snapshot)
                 VALUES (:articleId, :learnerId, :questionId, :answerText,
                         :reviewStatus, :reviewResult, now(),
-                        CASE WHEN :reviewStatus = 'reviewed' THEN now() ELSE NULL END)
+                        CASE WHEN :reviewStatus = 'reviewed' THEN now() ELSE NULL END,
+                        :teacherAccountId, :releaseId, :stemSnapshot, :answerSnapshot)
                 ON CONFLICT (blog_id, student_id, question_id) DO UPDATE
                     SET answer_text = EXCLUDED.answer_text,
                         review_status = EXCLUDED.review_status,
                         review_result = EXCLUDED.review_result,
                         submitted_at = EXCLUDED.submitted_at,
-                        reviewed_at = EXCLUDED.reviewed_at
+                        reviewed_at = EXCLUDED.reviewed_at,
+                        teacher_account_id = COALESCE(EXCLUDED.teacher_account_id,
+                            article_question_submissions.teacher_account_id),
+                        release_id = COALESCE(EXCLUDED.release_id,
+                            article_question_submissions.release_id),
+                        stem_snapshot = COALESCE(EXCLUDED.stem_snapshot,
+                            article_question_submissions.stem_snapshot),
+                        answer_snapshot = COALESCE(EXCLUDED.answer_snapshot,
+                            article_question_submissions.answer_snapshot)
                 RETURNING id, blog_id, student_id, question_id, answer_text,
                           review_status, review_result, submitted_at, reviewed_at
                 """)
@@ -172,6 +186,10 @@ class LearningService {
                 .param("answerText", answerText)
                 .param("reviewStatus", reviewStatus)
                 .param("reviewResult", reviewResult)
+                .param("teacherAccountId", snapshot.teacherAccountId())
+                .param("releaseId", snapshot.releaseId())
+                .param("stemSnapshot", blankToNull(snapshot.stem()))
+                .param("answerSnapshot", blankToNull(key == null ? null : key.answerText()))
                 .query(Submission::map)
                 .single();
 
@@ -318,25 +336,56 @@ class LearningService {
 
     private void collectAutomaticWrongQuestion(long learnerId, long articleId, String questionId,
                                                String myAnswer, String correctAnswer) {
+        CoursewareSnapshot snapshot = snapshotOf(articleId, questionId);
         jdbc.sql("""
                 INSERT INTO public.wrong_questions
                     (student_id, source_blog_id, source_question_id, my_answer,
-                     correct_answer, is_manual, removed, wrong_count)
+                     correct_answer, is_manual, removed, wrong_count,
+                     teacher_account_id, release_id, stem_snapshot, subject)
                 VALUES (:learnerId, :articleId, :questionId, :myAnswer,
-                        :correctAnswer, false, false, 1)
+                        :correctAnswer, false, false, 1,
+                        :teacherAccountId, :releaseId, :stemSnapshot, :subject)
                 ON CONFLICT (student_id, source_blog_id, source_question_id) DO UPDATE
                     SET my_answer = EXCLUDED.my_answer,
                         correct_answer = EXCLUDED.correct_answer,
                         is_manual = false,
                         removed = false,
-                        wrong_count = wrong_questions.wrong_count + 1
+                        wrong_count = wrong_questions.wrong_count + 1,
+                        teacher_account_id = COALESCE(EXCLUDED.teacher_account_id,
+                            wrong_questions.teacher_account_id),
+                        release_id = COALESCE(EXCLUDED.release_id, wrong_questions.release_id),
+                        stem_snapshot = COALESCE(EXCLUDED.stem_snapshot, wrong_questions.stem_snapshot),
+                        subject = COALESCE(EXCLUDED.subject, wrong_questions.subject)
                 """)
                 .param("learnerId", learnerId)
                 .param("articleId", articleId)
                 .param("questionId", questionId)
                 .param("myAnswer", myAnswer)
                 .param("correctAnswer", correctAnswer)
+                .param("teacherAccountId", snapshot.teacherAccountId())
+                .param("releaseId", snapshot.releaseId())
+                .param("stemSnapshot", blankToNull(snapshot.stem()))
+                .param("subject", blankToNull(snapshot.subject()))
                 .update();
+    }
+
+    /** 作答/错题写入时的课件快照；解析不到返回空快照（各字段为 null），不阻塞业务。 */
+    private CoursewareSnapshot snapshotOf(long articleId, String questionId) {
+        return snapshots.resolve(articleId)
+                .map(resolved -> new CoursewareSnapshot(
+                        resolved.teacherAccountId(),
+                        resolved.releaseId(),
+                        resolved.subject(),
+                        com.tutorbase.courseware.snapshot.CoursewareStemExtractor.extract(
+                                resolved.markdown(), questionId)))
+                .orElse(new CoursewareSnapshot(null, null, null, ""));
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
+    }
+
+    private record CoursewareSnapshot(Long teacherAccountId, Long releaseId, String subject, String stem) {
     }
 
     record AnswerKeyInput(String questionId, String answerText, boolean autoGrade) {

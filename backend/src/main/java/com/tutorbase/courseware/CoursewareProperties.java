@@ -16,7 +16,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record CoursewareProperties(
         Path root,
         @DefaultValue("storage") String source,
-        @DefaultValue("1048576") long maxArticleBytes) {
+        @DefaultValue("1048576") long maxArticleBytes,
+        @DefaultValue("true") boolean legacyClaimsEnabled) {
 
     public CoursewareProperties {
         if (root == null) {

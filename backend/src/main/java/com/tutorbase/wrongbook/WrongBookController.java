@@ -93,12 +93,12 @@ public class WrongBookController {
     record EntryResponse(long id, long learnerId, String correctAnswer, String myAnswer,
                          String wrongReason, List<String> tags, String note, Long sourceArticleId,
                          String sourceQuestionId, boolean manual, boolean mastered, int wrongCount,
-                         Instant createdAt, Instant updatedAt) {
+                         Instant createdAt, Instant updatedAt, String stemSnapshot, String subject) {
         static EntryResponse from(WrongBookService.Entry entry) {
             return new EntryResponse(entry.id(), entry.learnerId(), entry.correctAnswer(), entry.myAnswer(),
                     entry.wrongReason(), entry.tags(), entry.note(), entry.sourceArticleId(),
                     entry.sourceQuestionId(), entry.manual(), entry.mastered(), entry.wrongCount(),
-                    entry.createdAt(), entry.updatedAt());
+                    entry.createdAt(), entry.updatedAt(), entry.stemSnapshot(), entry.subject());
         }
     }
 

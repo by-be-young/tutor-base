@@ -25,6 +25,7 @@ class WrongBookService {
                        wrong.wrong_reason, wrong.tags, wrong.note, wrong.source_blog_id,
                        wrong.source_question_id, wrong.is_manual, wrong.mastered,
                        wrong.removed, wrong.wrong_count, wrong.created_at, wrong.updated_at,
+                       wrong.stem_snapshot, wrong.subject,
                        CASE WHEN EXISTS (
                            SELECT 1 FROM public.article_question_submissions submission
                            WHERE submission.student_id = wrong.student_id
@@ -167,7 +168,7 @@ class WrongBookService {
     record Entry(long id, long learnerId, String correctAnswer, String myAnswer, String wrongReason,
                  List<String> tags, String note, Long sourceArticleId, String sourceQuestionId,
                  boolean manual, boolean mastered, boolean removed, int wrongCount,
-                 Instant createdAt, Instant updatedAt) {
+                 Instant createdAt, Instant updatedAt, String stemSnapshot, String subject) {
         static Entry map(ResultSet row, int rowNumber) throws SQLException {
             long sourceArticleIdValue = row.getLong("source_blog_id");
             Long sourceArticleId = row.wasNull() ? null : sourceArticleIdValue;
@@ -177,7 +178,8 @@ class WrongBookService {
                     row.getString("note"), sourceArticleId, row.getString("source_question_id"),
                     row.getBoolean("is_manual"), row.getBoolean("mastered"), row.getBoolean("removed"),
                     row.getInt("wrong_count"), row.getTimestamp("created_at").toInstant(),
-                    row.getTimestamp("updated_at").toInstant());
+                    row.getTimestamp("updated_at").toInstant(),
+                    row.getString("stem_snapshot"), row.getString("subject"));
         }
     }
 

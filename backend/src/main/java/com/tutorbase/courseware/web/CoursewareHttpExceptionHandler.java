@@ -24,6 +24,12 @@ class CoursewareHttpExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, "courseware_forbidden", "无权访问课件", exception.getMessage(), request);
     }
 
+    @ExceptionHandler(CoursewareFailures.Retired.class)
+    ProblemDetail retired(CoursewareFailures.Retired exception, HttpServletRequest request) {
+        return problem(HttpStatus.GONE, "courseware_claims_retired", "认领模型已下线",
+                exception.getMessage(), request);
+    }
+
     @ExceptionHandler(CoursewareFailures.SourceForbidden.class)
     ProblemDetail sourceForbidden(CoursewareFailures.SourceForbidden exception, HttpServletRequest request) {
         return problem(HttpStatus.FORBIDDEN, "courseware_source_forbidden", "来源未开放获取",
