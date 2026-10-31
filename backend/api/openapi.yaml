@@ -2428,6 +2428,82 @@ paths:
         '403':
           $ref: '#/components/responses/Problem'
 
+  /admin/courseware/maintenance/usage:
+    get:
+      operationId: getCoursewareUsage
+      summary: 我的存储用量（超管可传 teacherId 查他人）
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: teacherId
+          in: query
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 用量。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareUsage'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/maintenance/usage/all:
+    get:
+      operationId: listAllCoursewareUsage
+      summary: 全站用量（仅超级管理员）
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 每个老师的用量。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoursewareTeacherUsage'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/maintenance/gc:
+    post:
+      operationId: collectCoursewareGarbage
+      summary: 回收孤儿 blob（默认 dryRun）
+      description: >-
+        只删除没有被 `course_article.content_hash`、`course_release.manifest_hash`、
+        `course_copy.base_content_hash/dismissed_hash`、草稿正文 hash 引用的 blob；
+        历史版本的正文仍被引用，不会被删。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: teacherId
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: dryRun
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: 回收结果。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareGcResult'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+
 components:
   parameters:
     CsrfHeader:
@@ -4536,3 +4612,70 @@ components:
         unreadNotifications:
           type: integer
           minimum: 0
+    CoursewareUsage:
+      type: object
+      additionalProperties: false
+      required: [teacherId, blobCount, totalBytes, referencedCount, orphanCount, orphanBytes, quotaBytes, overQuota]
+      properties:
+        teacherId:
+          type: integer
+          format: int64
+        blobCount:
+          type: integer
+          minimum: 0
+        totalBytes:
+          type: integer
+          minimum: 0
+        referencedCount:
+          type: integer
+          minimum: 0
+        orphanCount:
+          type: integer
+          minimum: 0
+        orphanBytes:
+          type: integer
+          minimum: 0
+        quotaBytes:
+          type: integer
+          minimum: 0
+        overQuota:
+          type: boolean
+    CoursewareTeacherUsage:
+      type: object
+      additionalProperties: false
+      required: [teacherId, blobCount, totalBytes, orphanCount, orphanBytes, overQuota]
+      properties:
+        teacherId:
+          type: integer
+          format: int64
+        blobCount:
+          type: integer
+          minimum: 0
+        totalBytes:
+          type: integer
+          minimum: 0
+        orphanCount:
+          type: integer
+          minimum: 0
+        orphanBytes:
+          type: integer
+          minimum: 0
+        overQuota:
+          type: boolean
+    CoursewareGcResult:
+      type: object
+      additionalProperties: false
+      required: [dryRun, removedCount, freedBytes, removedHashes]
+      properties:
+        dryRun:
+          type: boolean
+        removedCount:
+          type: integer
+          minimum: 0
+        freedBytes:
+          type: integer
+          minimum: 0
+        removedHashes:
+          type: array
+          items:
+            type: string
