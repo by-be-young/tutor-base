@@ -9,6 +9,7 @@ import com.tutorbase.courseware.layout.CoursewareLayoutService;
 import com.tutorbase.courseware.layout.CoursewareTemplateService;
 import com.tutorbase.courseware.publish.CoursewarePublisher;
 import com.tutorbase.courseware.transfer.CoursewareTransferService;
+import com.tutorbase.courseware.workspace.CoursewareWorkspaceService;
 import com.tutorbase.identity.AccountPrincipal;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -39,13 +40,51 @@ public class CoursewareEditorController {
     private final CoursewareDraftService drafts;
     private final CoursewareTransferService transfers;
     private final CoursewareTemplateService templates;
+    private final CoursewareWorkspaceService workspace;
 
     CoursewareEditorController(CoursewareLayoutService layouts, CoursewareDraftService drafts,
-            CoursewareTransferService transfers, CoursewareTemplateService templates) {
+            CoursewareTransferService transfers, CoursewareTemplateService templates,
+            CoursewareWorkspaceService workspace) {
         this.layouts = layouts;
         this.drafts = drafts;
         this.transfers = transfers;
         this.templates = templates;
+        this.workspace = workspace;
+    }
+
+    @GetMapping("/workspace/manifest")
+    ResponseEntity<WorkspaceManifestResponse> workspaceManifest(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @RequestParam String subject) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(WorkspaceManifestResponse.from(workspace.manifest(teacherId(principal), subject)));
+    }
+
+    @GetMapping("/workspace/files")
+    ResponseEntity<WorkspaceFilesResponse> workspaceFiles(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @RequestParam String subject) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new WorkspaceFilesResponse(workspace.pull(teacherId(principal), subject)));
+    }
+
+    @PostMapping("/workspace/push")
+    ResponseEntity<WorkspacePushResponse> workspacePush(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @Valid @RequestBody WorkspacePushRequest request) {
+        List<CoursewareWorkspaceService.WorkspaceFile> files = request.files() == null
+                ? List.of()
+                : request.files().stream()
+                        .map(file -> new CoursewareWorkspaceService.WorkspaceFile(
+                                file.logicalPath(), file.markdown()))
+                        .toList();
+        CoursewareWorkspaceService.PushResult result = workspace.push(
+                teacherId(principal), request.subject(), request.baseVersion(), files, request.deletedPaths());
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(WorkspacePushResponse.from(result));
     }
 
     @GetMapping("/templates")
@@ -239,6 +278,64 @@ public class CoursewareEditorController {
             @NotBlank String kind,
             @NotBlank @Size(max = 120) String name,
             @NotBlank @Size(max = 1_048_576) String markdown) {
+    }
+
+    record WorkspaceEntryResponse(
+            long articleId,
+            Long legacyArticleId,
+            String title,
+            String series,
+            String logicalPath,
+            String contentHash,
+            int questionCount) {
+
+        static WorkspaceEntryResponse from(CoursewareWorkspaceService.Entry entry) {
+            return new WorkspaceEntryResponse(entry.articleId(), entry.legacyArticleId(), entry.title(),
+                    entry.series(), entry.logicalPath(), entry.contentHash(), entry.questionCount());
+        }
+    }
+
+    record WorkspaceManifestResponse(
+            long teacherId,
+            String subject,
+            int version,
+            String contentHash,
+            List<WorkspaceEntryResponse> entries) {
+
+        static WorkspaceManifestResponse from(CoursewareWorkspaceService.Manifest manifest) {
+            return new WorkspaceManifestResponse(manifest.teacherId(), manifest.subject(), manifest.version(),
+                    manifest.contentHash(),
+                    manifest.entries().stream().map(WorkspaceEntryResponse::from).toList());
+        }
+    }
+
+    record WorkspaceFilesResponse(java.util.Map<String, String> files) {
+    }
+
+    record WorkspaceFileRequest(
+            @NotBlank @Size(max = 500) String logicalPath,
+            @NotBlank @Size(max = 1_048_576) String markdown) {
+    }
+
+    record WorkspacePushRequest(
+            @NotBlank @Size(max = 60) String subject,
+            @jakarta.validation.constraints.NotNull Integer baseVersion,
+            List<@Valid WorkspaceFileRequest> files,
+            List<String> deletedPaths) {
+    }
+
+    record WorkspacePushResponse(
+            int version,
+            int articleCount,
+            int changedCount,
+            int deletedCount,
+            List<String> changedPaths,
+            List<String> deletedPaths) {
+
+        static WorkspacePushResponse from(CoursewareWorkspaceService.PushResult result) {
+            return new WorkspacePushResponse(result.version(), result.articleCount(), result.changedCount(),
+                    result.deletedCount(), result.changedPaths(), result.deletedPaths());
+        }
     }
 
     record SaveDraftRequest(

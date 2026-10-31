@@ -2325,6 +2325,91 @@ paths:
         '404':
           $ref: '#/components/responses/Problem'
 
+  /admin/courseware/workspace/manifest:
+    get:
+      operationId: getCoursewareWorkspaceManifest
+      summary: Git 工作区清单（只含路径与 hash，无正文）
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: subject
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 当前版本清单。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareWorkspaceManifest'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/workspace/files:
+    get:
+      operationId: pullCoursewareWorkspaceFiles
+      summary: 拉取正文（路径 → markdown）
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: subject
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 正文映射。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareWorkspaceFiles'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/workspace/push:
+    post:
+      operationId: pushCoursewareWorkspace
+      summary: 推送变更并发布新版本
+      description: >-
+        `files` 覆盖同路径、`deletedPaths` 移除、其余保持现状。`baseVersion` 与当前版本不一致返回 409；
+        布局 id 未注册或残留模板变量返回 400。一次推送即一个 release，与在线编辑器走同一条发布路径。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareWorkspacePushRequest'
+      responses:
+        '200':
+          description: 推送结果。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareWorkspacePushResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+
 components:
   parameters:
     CsrfHeader:
@@ -4282,3 +4367,108 @@ components:
         markdown:
           type: string
           maxLength: 1048576
+    CoursewareWorkspaceEntry:
+      type: object
+      additionalProperties: false
+      required: [articleId, title, series, logicalPath, contentHash, questionCount]
+      properties:
+        articleId:
+          type: integer
+          format: int64
+        legacyArticleId:
+          type: [integer, 'null']
+          format: int64
+        title:
+          type: string
+        series:
+          type: string
+        logicalPath:
+          type: string
+        contentHash:
+          type: string
+        questionCount:
+          type: integer
+          minimum: 0
+    CoursewareWorkspaceManifest:
+      type: object
+      additionalProperties: false
+      required: [teacherId, subject, version, contentHash, entries]
+      properties:
+        teacherId:
+          type: integer
+          format: int64
+        subject:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+        contentHash:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoursewareWorkspaceEntry'
+    CoursewareWorkspaceFiles:
+      type: object
+      additionalProperties: false
+      required: [files]
+      properties:
+        files:
+          type: object
+          additionalProperties:
+            type: string
+          description: 逻辑路径 → markdown
+    CoursewareWorkspaceFile:
+      type: object
+      additionalProperties: false
+      required: [logicalPath, markdown]
+      properties:
+        logicalPath:
+          type: string
+          maxLength: 500
+        markdown:
+          type: string
+          maxLength: 1048576
+    CoursewareWorkspacePushRequest:
+      type: object
+      additionalProperties: false
+      required: [subject, baseVersion]
+      properties:
+        subject:
+          type: string
+          maxLength: 60
+        baseVersion:
+          type: integer
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoursewareWorkspaceFile'
+        deletedPaths:
+          type: array
+          items:
+            type: string
+    CoursewareWorkspacePushResult:
+      type: object
+      additionalProperties: false
+      required: [version, articleCount, changedCount, deletedCount, changedPaths, deletedPaths]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        articleCount:
+          type: integer
+          minimum: 0
+        changedCount:
+          type: integer
+          minimum: 0
+        deletedCount:
+          type: integer
+          minimum: 0
+        changedPaths:
+          type: array
+          items:
+            type: string
+        deletedPaths:
+          type: array
+          items:
+            type: string

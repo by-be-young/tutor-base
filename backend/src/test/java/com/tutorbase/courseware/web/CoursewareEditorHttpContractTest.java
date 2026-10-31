@@ -356,6 +356,108 @@ class CoursewareEditorHttpContractTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void workspacePullEditPushCreatesNewVersion() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+
+        mockMvc.perform(post("/api/v1/admin/courseware/releases")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "subject", "高中化学",
+                                "articles", List.of(
+                                        Map.of("articleId", 3, "legacyArticleId", 3,
+                                                "title", "3-1 原电池", "series", "高中化学",
+                                                "logicalPath", "高中化学/理论课讲义/3-1 原电池.md",
+                                                "markdown", "【题干1】旧\n\n【@1】\n",
+                                                "answers", List.of(Map.of(
+                                                        "questionId", "1", "answer", "A", "autoGrade", true))),
+                                        Map.of("articleId", 9, "legacyArticleId", 9,
+                                                "title", "3-2 电解池", "series", "高中化学",
+                                                "logicalPath", "高中化学/理论课讲义/3-2 电解池.md",
+                                                "markdown", "【题干1】电解\n\n【@1】\n",
+                                                "answers", List.of(Map.of(
+                                                        "questionId", "1", "answer", "B", "autoGrade", true))))))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/admin/courseware/workspace/manifest")
+                        .param("subject", "高中化学")
+                        .cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(1))
+                .andExpect(jsonPath("$.entries.length()").value(2))
+                .andExpect(jsonPath("$.entries[0].contentHash")
+                        .value(org.hamcrest.Matchers.startsWith("sha256:")))
+                .andExpect(jsonPath("$.entries[0].markdown").doesNotExist());
+
+        mockMvc.perform(get("/api/v1/admin/courseware/workspace/files")
+                        .param("subject", "高中化学")
+                        .cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.files['高中化学/理论课讲义/3-1 原电池.md']")
+                        .value(org.hamcrest.Matchers.containsString("【题干1】旧")));
+
+        // 改一篇、加一篇、删一篇
+        mockMvc.perform(post("/api/v1/admin/courseware/workspace/push")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "subject", "高中化学",
+                                "baseVersion", 1,
+                                "files", List.of(
+                                        Map.of("logicalPath", "高中化学/理论课讲义/3-1 原电池.md",
+                                                "markdown", "【题干1】新\n\n【@1】\n"),
+                                        Map.of("logicalPath", "高中化学/理论课讲义/3-3 新增.md",
+                                                "markdown", "【题干1】新增\n\n【@1】\n")),
+                                "deletedPaths", List.of("高中化学/理论课讲义/3-2 电解池.md")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.articleCount").value(2))
+                .andExpect(jsonPath("$.changedCount").value(2))
+                .andExpect(jsonPath("$.deletedCount").value(1));
+
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM public.course_release_head AS h
+                JOIN public.course_article AS ca
+                  ON ca.release_id = h.release_id AND ca.teacher_account_id = h.teacher_account_id
+                WHERE h.subject = '高中化学' AND ca.logical_path LIKE '%3-2 电解池%'
+                """, Long.class)).isZero();
+        assertThat(jdbc.queryForObject("""
+                SELECT ca.title FROM public.course_release_head AS h
+                JOIN public.course_article AS ca
+                  ON ca.release_id = h.release_id AND ca.teacher_account_id = h.teacher_account_id
+                WHERE ca.logical_path LIKE '%3-3 新增%'
+                """, String.class)).isEqualTo("3-3 新增");
+
+        // 过期 baseVersion → 409
+        mockMvc.perform(post("/api/v1/admin/courseware/workspace/push")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "subject", "高中化学",
+                                "baseVersion", 1,
+                                "files", List.of(Map.of("logicalPath", "高中化学/x.md", "markdown", "x"))))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("courseware_release_conflict"));
+
+        // 未知布局 → 400
+        mockMvc.perform(post("/api/v1/admin/courseware/workspace/push")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "subject", "高中化学",
+                                "baseVersion", 2,
+                                "files", List.of(Map.of("logicalPath", "高中化学/x.md",
+                                        "markdown", "<!-- @layout:Z -->\n# 节\n\n正文\n"))))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0]").value(org.hamcrest.Matchers.containsString("布局 Z")));
+    }
+
     private static byte[] zipOf(Map<String, String> entries) throws Exception {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         try (ZipOutputStream stream = new ZipOutputStream(buffer, StandardCharsets.UTF_8)) {

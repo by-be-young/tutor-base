@@ -742,7 +742,33 @@ Content-Type: application/json
 设计稿原本的 `templates/<科目>/<类型>.md` 落库实现的原因：生产容器 `read_only` 且不含仓库文件，
 运行时读不到模板文件；落库后模板与布局注册表同源，可在线维护。
 
-**P2 剩余**：真正的所见即所得、可拖拽排序（当前是上移/下移按钮）、Git 工作区（P3）。
+**P2 剩余**：真正的所见即所得、可拖拽排序（当前是上移/下移按钮）。
+
+### 8.9 P3 Git 工作区（2026-10-31）
+
+仓库里只有 Markdown，正文与版本仍由服务端托管：
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /admin/courseware/workspace/manifest?subject=` | 当前版本每篇的 `logicalPath` / `contentHash` / `questionCount`，**不含正文** |
+| `GET /admin/courseware/workspace/files?subject=` | `逻辑路径 → markdown`，供 CLI 落盘 |
+| `POST /admin/courseware/workspace/push` | `files` 覆盖、`deletedPaths` 移除、其余保持；`baseVersion` 乐观锁（过期 409 `courseware_release_conflict`）；一次推送即一个 release |
+
+CLI：`tutor-nest-vue/scripts/courseware-cli.mjs`
+
+```powershell
+$env:TUTOR_SESSION='<cookie 值>'; $env:TUTOR_CSRF='<token>'
+node tutor-nest-vue/scripts/courseware-cli.mjs pull   --subject 高中化学 --dir ./courseware
+node tutor-nest-vue/scripts/courseware-cli.mjs status --subject 高中化学 --dir ./courseware
+node tutor-nest-vue/scripts/courseware-cli.mjs push   --subject 高中化学 --dir ./courseware --dry-run
+```
+
+CLI 行为要点：
+
+- `pull` 只写「缺失或 hash 变了且本地未改动」的文件；本地改过但未 push 的文件**保留并提示冲突**，不静默覆盖；
+- 状态存在 `<dir>/.courseware-state.json`（base 版本 + 每个文件的 hash）；
+- `push` 先比对服务端版本，本地 base 过期直接失败（要求先 pull）；`--dry-run` 只打印计划；
+- 推送走与在线编辑器完全相同的发布路径，因此布局校验、manifest、审计日志口径一致。
 
 ---
 
