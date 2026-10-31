@@ -73,9 +73,40 @@ async function requestText(path, options = {}) {
   return response.text()
 }
 
+async function requestBlob(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: options.method || 'GET',
+    headers: { ...options.headers },
+    credentials: 'include',
+    cache: 'no-store'
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new BackendGatewayError(body, response.status)
+  }
+  return response.blob()
+}
+
+/** multipart 上传：不要手动设置 Content-Type，交给浏览器带 boundary。 */
+async function requestForm(path, form) {
+  const headers = { 'X-CSRF-TOKEN': await getCsrfToken() }
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    cache: 'no-store',
+    body: form
+  })
+  const body = await response.json().catch(() => null)
+  if (!response.ok) throw new BackendGatewayError(body, response.status)
+  return body
+}
+
 export const backendClient = {
   request,
   requestText,
+  requestBlob,
+  requestForm,
   clearCsrfToken() {
     csrfToken = null
   }

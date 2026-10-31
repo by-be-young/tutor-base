@@ -713,6 +713,23 @@ Content-Type: application/json
 
 **P1 状态：已完成。** 待实现（P2/P5）：导出导入 zip、Git 工作区、在线编辑器、通知中心独立页面。
 
+### 8.7 P2 已实现（2026-10-31）
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /admin/courseware/layouts` · `GET .../layouts/{id}/skeleton` | 布局注册表（V23 `course_layout`，A 讲义 / B 练习 / C 对比表 / D 图文卡片）与新建骨架 |
+| `GET/POST /admin/courseware/drafts` · `GET/PUT/DELETE .../drafts/{articleId}` | 草稿 CRUD；草稿不出现在学员端，只有发布才生效 |
+| `POST /admin/courseware/drafts/precheck` | 与发布同一套规则（含布局校验）的预检，不阻塞保存 |
+| `POST /admin/courseware/drafts/publish` | 当前版本篇目 + 该科目全部草稿 → 一次 release；未知布局或 `{{…}}` 残留直接 400 |
+| `GET /admin/courseware/export` | zip：`manifest.json` + `articles/<逻辑路径>.md` + `answers.json`（条目数 ≤500、单篇 ≤2 MB） |
+| `POST /admin/courseware/import` | multipart zip → 全部落草稿；同路径默认跳过，`overwrite=true` 覆盖；结果不与任何来源建立 `course_copy` 关系 |
+
+布局指令（`<!-- @layout:A -->`）与 front-matter（`defaultLayout`）都只是 Markdown 注释/元数据，
+`questionText.js` 与 `check-courseware` 的解析不受影响；没有指令的存量课件照旧发布。
+
+前端：`/admin/editor`（左草稿列表 + 中源码 + 右预览，插入布局/题目、校验、保存、发布、导出导入），
+`/admin/sharing`（P1）。**P2 剩余**：模板库、可拖拽大纲、真正的所见即所得编辑、Git 工作区（P3）。
+
 ---
 
 ## 9. 前端改造
