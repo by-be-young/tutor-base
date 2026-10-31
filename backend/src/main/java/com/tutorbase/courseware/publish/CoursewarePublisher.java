@@ -33,16 +33,19 @@ public class CoursewarePublisher {
     private final CoursewareStorage storage;
     private final CoursewareProperties properties;
     private final ObjectMapper objectMapper;
+    private final com.tutorbase.courseware.notification.CoursewareNotificationService notifications;
 
     CoursewarePublisher(
             JdbcClient jdbc,
             CoursewareStorage storage,
             CoursewareProperties properties,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            com.tutorbase.courseware.notification.CoursewareNotificationService notifications) {
         this.jdbc = jdbc;
         this.storage = storage;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.notifications = notifications;
     }
 
     @Transactional
@@ -182,6 +185,7 @@ public class CoursewarePublisher {
                         """.formatted(escape(subject), nextVersion, prepared.size(), currentReleaseId))
                 .update();
 
+        notifications.notifyCopiersOfNewRelease(teacherAccountId, subject);
         return new Published(teacherAccountId, subject, nextVersion, manifestHash, prepared.size(), Instant.now());
     }
 

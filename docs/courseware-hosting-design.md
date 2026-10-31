@@ -701,8 +701,17 @@ Content-Type: application/json
 | `GET /admin/courseware/resources/tree` | 已实现 | 保留完整 `logicalPath`，逐篇带 `allowCopy` |
 | `POST /admin/courseware/copies` | 已实现 | 内容寻址复制 → `course_draft`（未发布）+ `course_copy` 上游指针；重复获取幂等；本地同名路径 409 `courseware_target_exists` |
 | `GET /admin/courseware/copies` | 已实现 | 与来源当前 hash 比对给出 `hasUpdate` |
+| `GET /admin/courseware/updates` | 已实现 | 汇总：有更新 / 同科目尚未获取的新增 / 来源已下线 |
+| `GET /admin/courseware/copies/{copyId}/updates` | 已实现 | 行级 LCS diff、`localModified`、`answerChanged`、来源版本 |
+| `POST /admin/courseware/copies/{copyId}/updates/apply` | 已实现 | `overwrite` 先把本地草稿存成备份 blob 再覆盖并推进 `base_*`；`expectedSourceHash` 做乐观锁，冲突 409 |
+| `POST /admin/courseware/copies/{copyId}/updates/dismiss` | 已实现 | 写 `dismissed_hash`，之后同一来源版本不再提示 |
+| `GET /admin/courseware/resources/articles/{teacherId}/{articleId}/preview` | 已实现 | 需 `allow_preview=true`，返回 markdown 原文 |
+| `PATCH /admin/courseware/copies/{copyId}` | 已实现 | 改标题 / 逻辑路径（不动 `article_id` 与来源追踪），同名路径 409 |
+| `GET /admin/courseware/notifications` · `POST .../notifications/read` | 已实现 | `course_notification`（V22）；获取、发布新版本、撤回分享都会写提醒，支持未读筛选与全部已读 |
 
-待实现：`updates` 系列（汇总、单篇 diff、apply/dismiss）、导出导入、工作区、通知；前端资源目录与获取对话框。
+获取接口额外支持 `conflictStrategy=rename`（同名路径自动加 `（2）` 后缀），默认 `fail` 返回 409。
+
+**P1 状态：已完成。** 待实现（P2/P5）：导出导入 zip、Git 工作区、在线编辑器、通知中心独立页面。
 
 ---
 

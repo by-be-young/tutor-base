@@ -43,6 +43,13 @@ public final class CoursewareFailures {
         }
     }
 
+    /** 应用更新时来源已再次变化（乐观锁失败）。 */
+    public static final class HashConflict extends RuntimeException {
+        public HashConflict(String message) {
+            super(message);
+        }
+    }
+
     /** 目标路径已存在：获取/导入时本地同名篇目冲突。 */
     public static final class TargetExists extends RuntimeException {
         public TargetExists(String message) {

@@ -5,6 +5,8 @@ import java.util.List;
 import com.tutorbase.courseware.CoursewareFailures;
 import com.tutorbase.courseware.share.CoursewareCopyService;
 import com.tutorbase.courseware.share.CoursewareShareService;
+import com.tutorbase.courseware.notification.CoursewareNotificationService;
+import com.tutorbase.courseware.update.CoursewareUpdateService;
 import com.tutorbase.identity.AccountPrincipal;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -13,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,10 +30,16 @@ public class CoursewareShareController {
 
     private final CoursewareShareService shares;
     private final CoursewareCopyService copies;
+    private final CoursewareUpdateService updates;
+    private final CoursewareNotificationService notifications;
 
-    CoursewareShareController(CoursewareShareService shares, CoursewareCopyService copies) {
+    CoursewareShareController(
+            CoursewareShareService shares, CoursewareCopyService copies, CoursewareUpdateService updates,
+            CoursewareNotificationService notifications) {
         this.shares = shares;
         this.copies = copies;
+        this.updates = updates;
+        this.notifications = notifications;
     }
 
     @PostMapping("/shares")
@@ -88,7 +97,8 @@ public class CoursewareShareController {
             @AuthenticationPrincipal AccountPrincipal principal,
             @jakarta.validation.Valid @RequestBody AcquireRequest request) {
         List<CopyResponse> items = copies.acquire(teacherId(principal), request.sourceTeacherId(),
-                        request.subject(), request.articleIds(), request.targetRootPath())
+                        request.subject(), request.articleIds(), request.targetRootPath(),
+                        request.conflictStrategy() == null ? "fail" : request.conflictStrategy())
                 .stream()
                 .map(CopyResponse::from)
                 .toList();
@@ -103,8 +113,92 @@ public class CoursewareShareController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(items);
     }
 
-    private static long teacherId(AccountPrincipal principal) {
-        if (principal == null) {
+    @GetMapping("/updates")
+    ResponseEntity<DigestResponse> updates(@AuthenticationPrincipal AccountPrincipal principal) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(DigestResponse.from(updates.digest(teacherId(principal))));
+    }
+
+    @GetMapping("/copies/{copyId}/updates")
+    ResponseEntity<UpdateDetailResponse> updateDetail(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @PathVariable long copyId) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(UpdateDetailResponse.from(updates.detail(teacherId(principal), copyId)));
+    }
+
+    @PostMapping("/copies/{copyId}/updates/apply")
+    ResponseEntity<ApplyResponse> applyUpdate(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @PathVariable long copyId,
+            @jakarta.validation.Valid @RequestBody ApplyRequest request) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(ApplyResponse.from(updates.apply(
+                        teacherId(principal), copyId, request.mode(), request.expectedSourceHash())));
+    }
+
+    @PostMapping("/copies/{copyId}/updates/dismiss")
+    ResponseEntity<ApplyResponse> dismissUpdate(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @PathVariable long copyId) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(ApplyResponse.from(updates.apply(teacherId(principal), copyId, "keep", null)));
+    }
+
+    @GetMapping("/resources/articles/{teacherId}/{articleId}/preview")
+    ResponseEntity<String> preview(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @PathVariable long teacherId,
+            @PathVariable long articleId) {
+        CoursewareCopyService.Preview preview = copies.preview(teacherId(principal), teacherId, articleId);
+        return ResponseEntity.ok()
+                .contentType(new org.springframework.http.MediaType(
+                        "text", "markdown", java.nio.charset.StandardCharsets.UTF_8))
+                .cacheControl(CacheControl.noStore())
+                .body(preview.markdown());
+    }
+
+    @PatchMapping("/copies/{copyId}")
+    ResponseEntity<CopySummaryResponse> rename(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @PathVariable long copyId,
+            @jakarta.validation.Valid @RequestBody RenameRequest request) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(CopySummaryResponse.from(
+                        copies.rename(teacherId(principal), copyId, request.title(), request.logicalPath())));
+    }
+
+    @GetMapping("/notifications")
+    ResponseEntity<NotificationCollectionResponse> notifications(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @RequestParam(defaultValue = "false") boolean unreadOnly) {
+        long teacherId = teacherId(principal);
+        List<NotificationResponse> items = notifications.list(teacherId, unreadOnly).stream()
+                .map(NotificationResponse::from)
+                .toList();
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new NotificationCollectionResponse(items, notifications.unreadCount(teacherId)));
+    }
+
+    @PostMapping("/notifications/read")
+    ResponseEntity<NotificationReadResponse> markNotificationsRead(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @RequestBody(required = false) MarkReadRequest request) {
+        long teacherId = teacherId(principal);
+        List<Long> ids = request == null ? List.of() : request.ids();
+        int updated = notifications.markRead(teacherId, ids);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new NotificationReadResponse(updated, notifications.unreadCount(teacherId)));
+    }
+
+    private static long teacherId(AccountPrincipal principal) {        if (principal == null) {
             throw new CoursewareFailures.Forbidden("未登录");
         }
         return principal.accountId();
@@ -174,7 +268,38 @@ public class CoursewareShareController {
             long sourceTeacherId,
             @NotBlank @Size(max = 60) String subject,
             List<Long> articleIds,
-            @Size(max = 500) String targetRootPath) {
+            @Size(max = 500) String targetRootPath,
+            String conflictStrategy) {
+    }
+
+    record RenameRequest(@Size(max = 200) String title, @Size(max = 500) String logicalPath) {
+    }
+
+    record NotificationResponse(
+            long id,
+            String kind,
+            String title,
+            String body,
+            Long sourceTeacherId,
+            Long copyId,
+            Long articleId,
+            java.time.Instant createdAt,
+            boolean read) {
+
+        static NotificationResponse from(CoursewareNotificationService.Notification notification) {
+            return new NotificationResponse(notification.id(), notification.kind(), notification.title(),
+                    notification.body(), notification.sourceTeacherId(), notification.copyId(),
+                    notification.articleId(), notification.createdAt(), notification.read());
+        }
+    }
+
+    record NotificationCollectionResponse(List<NotificationResponse> items, long unreadCount) {
+    }
+
+    record MarkReadRequest(List<Long> ids) {
+    }
+
+    record NotificationReadResponse(int updated, long unreadCount) {
     }
 
     record CopyResponse(
@@ -209,6 +334,65 @@ public class CoursewareShareController {
                     summary.sourceTeacherId(), summary.sourceTeacherName(), summary.sourceArticleId(),
                     summary.sourceLogicalPath(), summary.localLogicalPath(), summary.baseContentHash(),
                     summary.sourceContentHash(), summary.status(), summary.hasUpdate());
+        }
+    }
+
+    record DigestItemResponse(
+            Long copyId,
+            Long localArticleId,
+            long sourceArticleId,
+            String title,
+            String logicalPath,
+            String baseContentHash,
+            String sourceContentHash) {
+
+        static DigestItemResponse from(CoursewareUpdateService.DigestItem item) {
+            return new DigestItemResponse(item.copyId(), item.localArticleId(), item.sourceArticleId(),
+                    item.title(), item.logicalPath(), item.baseContentHash(), item.sourceContentHash());
+        }
+    }
+
+    record DigestResponse(
+            int updatedCount,
+            int addedCount,
+            int removedCount,
+            List<DigestItemResponse> updated,
+            List<DigestItemResponse> added,
+            List<DigestItemResponse> removed) {
+
+        static DigestResponse from(CoursewareUpdateService.Digest digest) {
+            return new DigestResponse(digest.updatedCount(), digest.addedCount(), digest.removedCount(),
+                    digest.updated().stream().map(DigestItemResponse::from).toList(),
+                    digest.added().stream().map(DigestItemResponse::from).toList(),
+                    digest.removed().stream().map(DigestItemResponse::from).toList());
+        }
+    }
+
+    record UpdateDetailResponse(
+            long copyId,
+            int sourceVersion,
+            String baseHash,
+            String sourceHash,
+            boolean localModified,
+            boolean answerChanged,
+            String diff,
+            String sourceTitle,
+            String sourceLogicalPath) {
+
+        static UpdateDetailResponse from(CoursewareUpdateService.UpdateDetail detail) {
+            return new UpdateDetailResponse(detail.copyId(), detail.sourceVersion(), detail.baseHash(),
+                    detail.sourceHash(), detail.localModified(), detail.answerChanged(), detail.diff(),
+                    detail.sourceTitle(), detail.sourceLogicalPath());
+        }
+    }
+
+    record ApplyRequest(@NotBlank String mode, String expectedSourceHash) {
+    }
+
+    record ApplyResponse(boolean applied, String backupHash, boolean answerKeyUpdated) {
+
+        static ApplyResponse from(CoursewareUpdateService.ApplyResult result) {
+            return new ApplyResponse(result.applied(), result.backupHash(), result.answerKeyUpdated());
         }
     }
 }

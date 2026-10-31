@@ -4,6 +4,7 @@ import { backendClient } from './backendClient.js'
 import {
   normalizeCopyResult,
   normalizeCopySummary,
+  normalizeNotification,
   normalizeSharedArticle,
   normalizeSharedSubject,
   normalizeShares
@@ -88,6 +89,75 @@ export const coursewareGateway = {
   async listCopies() {
     const response = await backendClient.request('/admin/courseware/copies')
     return Array.isArray(response) ? response.map(normalizeCopySummary) : []
+  },
+
+  /** 预览来源正文（只读，需 allow_preview）。 */
+  previewArticle(teacherId, articleId) {
+    return backendClient.requestText(
+      `/admin/courseware/resources/articles/${encodeURIComponent(teacherId)}/${encodeURIComponent(articleId)}/preview`
+    )
+  },
+
+  /** 改标题 / 改逻辑路径。 */
+  async renameCopy(copyId, { title, logicalPath }) {
+    const body = {}
+    if (title) body.title = title
+    if (logicalPath) body.logicalPath = logicalPath
+    return normalizeCopySummary(
+      await backendClient.request(`/admin/courseware/copies/${encodeURIComponent(copyId)}`, {
+        method: 'PATCH',
+        body
+      })
+    )
+  },
+
+  async listNotifications(unreadOnly = false) {
+    const parameters = new URLSearchParams({ unreadOnly: String(Boolean(unreadOnly)) })
+    const response = await backendClient.request(`/admin/courseware/notifications?${parameters}`)
+    return {
+      items: Array.isArray(response?.items) ? response.items.map(normalizeNotification).filter(Boolean) : [],
+      unreadCount: Number(response?.unreadCount) || 0
+    }
+  },
+
+  async markNotificationsRead(ids) {
+    const body = Array.isArray(ids) && ids.length ? { ids } : {}
+    const response = await backendClient.request('/admin/courseware/notifications/read', {
+      method: 'POST',
+      body
+    })
+    return { updated: Number(response?.updated) || 0, unreadCount: Number(response?.unreadCount) || 0 }
+  },
+
+  async getUpdates() {
+    const response = await backendClient.request('/admin/courseware/updates')
+    return {
+      updatedCount: Number(response?.updatedCount) || 0,
+      addedCount: Number(response?.addedCount) || 0,
+      removedCount: Number(response?.removedCount) || 0,
+      updated: Array.isArray(response?.updated) ? response.updated : [],
+      added: Array.isArray(response?.added) ? response.added : [],
+      removed: Array.isArray(response?.removed) ? response.removed : []
+    }
+  },
+
+  async getUpdateDetail(copyId) {
+    return backendClient.request(`/admin/courseware/copies/${encodeURIComponent(copyId)}/updates`)
+  },
+
+  applyUpdate(copyId, { mode, expectedSourceHash }) {
+    const body = { mode }
+    if (expectedSourceHash) body.expectedSourceHash = expectedSourceHash
+    return backendClient.request(`/admin/courseware/copies/${encodeURIComponent(copyId)}/updates/apply`, {
+      method: 'POST',
+      body
+    })
+  },
+
+  dismissUpdate(copyId) {
+    return backendClient.request(`/admin/courseware/copies/${encodeURIComponent(copyId)}/updates/dismiss`, {
+      method: 'POST'
+    })
   },
 
   /** 同步前端静态课件目录；重复调用幂等。 */

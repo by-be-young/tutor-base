@@ -1693,6 +1693,236 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+  /admin/courseware/updates:
+    get:
+      operationId: getCoursewareUpdateDigest
+      summary: 更新汇总（有更新 / 新增 / 来源已下线）
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 更新汇总。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareUpdateDigest'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/copies/{copyId}/updates:
+    get:
+      operationId: getCoursewareCopyUpdate
+      summary: 单篇更新详情（行级 diff 与答案变更标记）
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: copyId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 更新详情。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareUpdateDetail'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/copies/{copyId}/updates/apply:
+    post:
+      operationId: applyCoursewareCopyUpdate
+      summary: 应用或忽略来源更新
+      description: >-
+        `mode=overwrite` 先用本地草稿生成备份 blob 再覆盖，答案键与正文同批推进；
+        `mode=keep` 记住当前来源 hash 不再提示。`expectedSourceHash` 不一致返回 409。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: copyId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareUpdateApplyRequest'
+      responses:
+        '200':
+          description: 处理结果。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareUpdateApplyResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/copies/{copyId}/updates/dismiss:
+    post:
+      operationId: dismissCoursewareCopyUpdate
+      summary: 忽略当前来源版本
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: copyId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 已忽略。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareUpdateApplyResult'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+
+  /admin/courseware/resources/articles/{teacherId}/{articleId}/preview:
+    get:
+      operationId: previewCoursewareResource
+      summary: 预览来源正文（只读）
+      description: 需要来源该科目仍分享且 `allow_preview=true`，返回 markdown 原文。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 来源正文。
+          content:
+            text/markdown:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/copies/{copyId}:
+    patch:
+      operationId: renameCoursewareCopy
+      summary: 改获取副本的标题与逻辑路径
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: copyId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareCopyRenameRequest'
+      responses:
+        '200':
+          description: 更新后的获取关系。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareCopySummary'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/notifications:
+    get:
+      operationId: listCoursewareNotifications
+      summary: 课件提醒列表
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: unreadOnly
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: 提醒列表与未读数。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareNotificationCollection'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/notifications/read:
+    post:
+      operationId: markCoursewareNotificationsRead
+      summary: 标记提醒已读（不传 ids 表示全部）
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareNotificationReadRequest'
+      responses:
+        '200':
+          description: 更新条数与剩余未读。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareNotificationReadResult'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+
 components:
   parameters:
     CsrfHeader:
@@ -3322,3 +3552,172 @@ components:
           enum: [active, source_unavailable, source_revoked]
         hasUpdate:
           type: boolean
+    CoursewareUpdateItem:
+      type: object
+      additionalProperties: false
+      required: [sourceArticleId, title]
+      properties:
+        copyId:
+          type: [integer, 'null']
+          format: int64
+        localArticleId:
+          type: [integer, 'null']
+          format: int64
+        sourceArticleId:
+          type: integer
+          format: int64
+        title:
+          type: string
+        logicalPath:
+          type: [string, 'null']
+        baseContentHash:
+          type: [string, 'null']
+        sourceContentHash:
+          type: [string, 'null']
+    CoursewareUpdateDigest:
+      type: object
+      additionalProperties: false
+      required: [updatedCount, addedCount, removedCount, updated, added, removed]
+      properties:
+        updatedCount:
+          type: integer
+          minimum: 0
+        addedCount:
+          type: integer
+          minimum: 0
+        removedCount:
+          type: integer
+          minimum: 0
+        updated:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoursewareUpdateItem'
+        added:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoursewareUpdateItem'
+        removed:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoursewareUpdateItem'
+    CoursewareUpdateDetail:
+      type: object
+      additionalProperties: false
+      required: [copyId, sourceVersion, baseHash, sourceHash, localModified, answerChanged, diff]
+      properties:
+        copyId:
+          type: integer
+          format: int64
+        sourceVersion:
+          type: integer
+          minimum: 1
+        baseHash:
+          type: string
+        sourceHash:
+          type: string
+        localModified:
+          type: boolean
+        answerChanged:
+          type: boolean
+        diff:
+          type: string
+          description: 行级 diff（`-` 本地、`+` 来源），超过 400 行截断
+        sourceTitle:
+          type: string
+        sourceLogicalPath:
+          type: string
+    CoursewareUpdateApplyRequest:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [overwrite, keep]
+        expectedSourceHash:
+          type: string
+          description: 乐观锁；与来源当前 hash 不一致返回 409
+    CoursewareUpdateApplyResult:
+      type: object
+      additionalProperties: false
+      required: [applied, answerKeyUpdated]
+      properties:
+        applied:
+          type: boolean
+        backupHash:
+          type: [string, 'null']
+          description: 覆盖前本地草稿的备份 blob hash
+        answerKeyUpdated:
+          type: boolean
+    CoursewareCopyRenameRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        logicalPath:
+          type: string
+          maxLength: 500
+    CoursewareNotification:
+      type: object
+      additionalProperties: false
+      required: [id, kind, title, body, createdAt, read]
+      properties:
+        id:
+          type: integer
+          format: int64
+        kind:
+          type: string
+          enum: [share_acquired, source_updated, share_revoked]
+        title:
+          type: string
+        body:
+          type: string
+        sourceTeacherId:
+          type: [integer, 'null']
+          format: int64
+        copyId:
+          type: [integer, 'null']
+          format: int64
+        articleId:
+          type: [integer, 'null']
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        read:
+          type: boolean
+    CoursewareNotificationCollection:
+      type: object
+      additionalProperties: false
+      required: [items, unreadCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoursewareNotification'
+        unreadCount:
+          type: integer
+          minimum: 0
+    CoursewareNotificationReadRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        ids:
+          type: array
+          description: 为空表示全部标记已读
+          items:
+            type: integer
+            format: int64
+    CoursewareNotificationReadResult:
+      type: object
+      additionalProperties: false
+      required: [updated, unreadCount]
+      properties:
+        updated:
+          type: integer
+          minimum: 0
+        unreadCount:
+          type: integer
+          minimum: 0

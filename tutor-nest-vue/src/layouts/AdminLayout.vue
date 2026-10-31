@@ -118,7 +118,8 @@ const navItems = computed(() => {
     { to: '/admin', label: '工作台', icon: 'fas fa-chart-line', exact: true },
     { to: '/admin/learners', label: '学员', icon: 'fas fa-users' },
     { to: '/admin/reviews', label: '批阅', icon: 'fas fa-pen-nib' },
-    { to: '/admin/content', label: '课件', icon: 'fas fa-book-open' }
+    { to: '/admin/content', label: '课件', icon: 'fas fa-book-open' },
+    { to: '/admin/sharing', label: '共享', icon: 'fas fa-share-nodes' }
   ]
   if (authStore.isSuperAdministrator) {
     items.push({ to: '/admin/applications', label: '审核', icon: 'fas fa-user-check' })

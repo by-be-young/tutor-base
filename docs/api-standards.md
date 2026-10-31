@@ -278,6 +278,7 @@
   | `courseware_source_forbidden` | 403 | 来源未开放获取 |
   | `courseware_source_gone` | 404 | 来源已删除/停用 |
   | `courseware_target_exists` | 409 | 目标路径已存在（获取/导入） |
+| `courseware_hash_conflict` | 409 | 应用更新时来源已再次发布，需重新拉取差异 |
   | `courseware_quota_exceeded` | 413 | 超出存储配额 |
 
 - 旧接口：`/admin/courseware-claims*` 已标记 `deprecated`，P4 阶段下线；期间保持只读兼容。
