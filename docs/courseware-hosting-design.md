@@ -713,6 +713,63 @@ Content-Type: application/json
 
 **P1 状态：已完成。** 待实现（P2/P5）：导出导入 zip、Git 工作区、在线编辑器、通知中心独立页面。
 
+### 8.7 P2 已实现（2026-10-31）
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /admin/courseware/layouts` · `GET .../layouts/{id}/skeleton` | 布局注册表（V23 `course_layout`，A 讲义 / B 练习 / C 对比表 / D 图文卡片）与新建骨架 |
+| `GET/POST /admin/courseware/drafts` · `GET/PUT/DELETE .../drafts/{articleId}` | 草稿 CRUD；草稿不出现在学员端，只有发布才生效 |
+| `POST /admin/courseware/drafts/precheck` | 与发布同一套规则（含布局校验）的预检，不阻塞保存 |
+| `POST /admin/courseware/drafts/publish` | 当前版本篇目 + 该科目全部草稿 → 一次 release；未知布局或 `{{…}}` 残留直接 400 |
+| `GET /admin/courseware/export` | zip：`manifest.json` + `articles/<逻辑路径>.md` + `answers.json`（条目数 ≤500、单篇 ≤2 MB） |
+| `POST /admin/courseware/import` | multipart zip → 全部落草稿；同路径默认跳过，`overwrite=true` 覆盖；结果不与任何来源建立 `course_copy` 关系 |
+
+布局指令（`<!-- @layout:A -->`）与 front-matter（`defaultLayout`）都只是 Markdown 注释/元数据，
+`questionText.js` 与 `check-courseware` 的解析不受影响；没有指令的存量课件照旧发布。
+
+前端：`/admin/editor`（左草稿列表 + 中源码 + 右预览，插入布局/题目、校验、保存、发布、导出导入），
+`/admin/sharing`（P1）。
+
+### 8.8 P2 模板库与大纲（2026-10-31）
+
+| 能力 | 实现 |
+| --- | --- |
+| 模板库 | `course_template`（V24）：`subject IS NULL` 为全科通用；内置新授课 / 习题课 / 复习课 / 专题课四套骨架；`GET/POST /admin/courseware/templates`、`GET/DELETE .../templates/{id}` |
+| 新建走模板 | 编辑器选模板 → 取正文作为新草稿；不选则按布局生成骨架 |
+| 存为模板 | 编辑器「存为模板」把当前正文落库（同科目/类型/名字覆盖） |
+| 大纲 | 编辑器左侧按 `# ` 切分 section，显示标题与布局标签，支持上移/下移（连同布局指令一起移动） |
+
+设计稿原本的 `templates/<科目>/<类型>.md` 落库实现的原因：生产容器 `read_only` 且不含仓库文件，
+运行时读不到模板文件；落库后模板与布局注册表同源，可在线维护。
+
+**P2 剩余**：真正的所见即所得、可拖拽排序（当前是上移/下移按钮）。
+
+### 8.9 P3 Git 工作区（2026-10-31）
+
+仓库里只有 Markdown，正文与版本仍由服务端托管：
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /admin/courseware/workspace/manifest?subject=` | 当前版本每篇的 `logicalPath` / `contentHash` / `questionCount`，**不含正文** |
+| `GET /admin/courseware/workspace/files?subject=` | `逻辑路径 → markdown`，供 CLI 落盘 |
+| `POST /admin/courseware/workspace/push` | `files` 覆盖、`deletedPaths` 移除、其余保持；`baseVersion` 乐观锁（过期 409 `courseware_release_conflict`）；一次推送即一个 release |
+
+CLI：`tutor-nest-vue/scripts/courseware-cli.mjs`
+
+```powershell
+$env:TUTOR_SESSION='<cookie 值>'; $env:TUTOR_CSRF='<token>'
+node tutor-nest-vue/scripts/courseware-cli.mjs pull   --subject 高中化学 --dir ./courseware
+node tutor-nest-vue/scripts/courseware-cli.mjs status --subject 高中化学 --dir ./courseware
+node tutor-nest-vue/scripts/courseware-cli.mjs push   --subject 高中化学 --dir ./courseware --dry-run
+```
+
+CLI 行为要点：
+
+- `pull` 只写「缺失或 hash 变了且本地未改动」的文件；本地改过但未 push 的文件**保留并提示冲突**，不静默覆盖；
+- 状态存在 `<dir>/.courseware-state.json`（base 版本 + 每个文件的 hash）；
+- `push` 先比对服务端版本，本地 base 过期直接失败（要求先 pull）；`--dry-run` 只打印计划；
+- 推送走与在线编辑器完全相同的发布路径，因此布局校验、manifest、审计日志口径一致。
+
 ---
 
 ## 9. 前端改造

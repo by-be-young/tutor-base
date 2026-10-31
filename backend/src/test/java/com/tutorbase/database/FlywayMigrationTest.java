@@ -59,7 +59,9 @@ class FlywayMigrationTest {
             "course_draft",
             "course_asset_ref",
             "course_operation_log",
-            "course_notification");
+            "course_notification",
+            "course_layout",
+            "course_template");
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
@@ -81,7 +83,7 @@ class FlywayMigrationTest {
                     .count();
         }
         assertThat(result.migrationsExecuted).isEqualTo((int) expectedMigrations);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("22");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("24");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
         try (Connection connection = POSTGRES.createConnection("")) {
@@ -323,7 +325,7 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(11);
+            assertThat(result.migrationsExecuted).isEqualTo(13);
             try (Connection connection = driftDatabase.createConnection("")) {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.flyway_schema_history
@@ -423,7 +425,7 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(9);
+            assertThat(result.migrationsExecuted).isEqualTo(11);
             try (Connection connection = preV16Database.createConnection("")) {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.student

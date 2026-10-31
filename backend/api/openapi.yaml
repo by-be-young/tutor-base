@@ -1923,6 +1923,493 @@ paths:
         '403':
           $ref: '#/components/responses/Problem'
 
+  /admin/courseware/layouts:
+    get:
+      operationId: listCoursewareLayouts
+      summary: 布局注册表（编辑器与渲染共用）
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 启用中的布局。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoursewareLayout'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/layouts/{layoutId}/skeleton:
+    get:
+      operationId: getCoursewareLayoutSkeleton
+      summary: 某布局的新建课件骨架
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: layoutId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: title
+          in: query
+          schema:
+            type: string
+            default: 新课件
+      responses:
+        '200':
+          description: markdown 骨架。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareSkeleton'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/drafts:
+    get:
+      operationId: listCoursewareDrafts
+      summary: 我的草稿
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 草稿列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoursewareDraftSummary'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: createCoursewareDraft
+      summary: 新建草稿（分配 article_id，不发布）
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareDraftSaveRequest'
+      responses:
+        '200':
+          description: 已保存的草稿。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareDraft'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/drafts/{articleId}:
+    get:
+      operationId: getCoursewareDraft
+      summary: 取草稿（无草稿时回落到已发布正文）
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 草稿内容。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareDraft'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: saveCoursewareDraft
+      summary: 保存草稿（不做发布校验）
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareDraftSaveRequest'
+      responses:
+        '200':
+          description: 已保存的草稿。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareDraft'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: deleteCoursewareDraft
+      summary: 删除草稿
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: 已删除。
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/drafts/precheck:
+    post:
+      operationId: precheckCoursewareDraft
+      summary: 草稿预检（与发布同一套规则）
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareDraftSaveRequest'
+      responses:
+        '200':
+          description: 预检结果（不阻塞保存）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewarePrecheck'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/drafts/publish:
+    post:
+      operationId: publishCoursewareDrafts
+      summary: 把该科目草稿与当前版本合并发布
+      description: >-
+        当前版本的篇目 + 该科目下所有草稿组成新版本；草稿中的布局 id 必须是已注册且启用的布局，
+        且不能残留 `{{…}}` 模板变量。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewarePublishDraftsRequest'
+      responses:
+        '200':
+          description: 新版本。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareReleaseCreated'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/export:
+    get:
+      operationId: exportCourseware
+      summary: 导出 zip（manifest.json + articles/**.md + answers.json）
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: subject
+          in: query
+          schema:
+            type: string
+        - name: articleIds
+          in: query
+          schema:
+            type: array
+            items:
+              type: integer
+              format: int64
+      responses:
+        '200':
+          description: zip 包。
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/import:
+    post:
+      operationId: importCourseware
+      summary: 导入 zip（结果为独立草稿，不建立来源关系）
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: overwrite
+          in: query
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 导入报告。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareImportReport'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+
+  /admin/courseware/templates:
+    get:
+      operationId: listCoursewareTemplates
+      summary: 模板库（通用模板 + 指定科目模板）
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: subject
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 模板列表（不含正文）。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoursewareTemplate'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: saveCoursewareTemplate
+      summary: 把正文存为模板（同科目同类型同名覆盖）
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareTemplateSaveRequest'
+      responses:
+        '200':
+          description: 保存后的模板。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareTemplate'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/templates/{templateId}:
+    get:
+      operationId: getCoursewareTemplate
+      summary: 取模板正文
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: markdown 正文。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareSkeleton'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: deleteCoursewareTemplate
+      summary: 停用模板
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: 已停用。
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+
+  /admin/courseware/workspace/manifest:
+    get:
+      operationId: getCoursewareWorkspaceManifest
+      summary: Git 工作区清单（只含路径与 hash，无正文）
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: subject
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 当前版本清单。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareWorkspaceManifest'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/workspace/files:
+    get:
+      operationId: pullCoursewareWorkspaceFiles
+      summary: 拉取正文（路径 → markdown）
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: subject
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 正文映射。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareWorkspaceFiles'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/workspace/push:
+    post:
+      operationId: pushCoursewareWorkspace
+      summary: 推送变更并发布新版本
+      description: >-
+        `files` 覆盖同路径、`deletedPaths` 移除、其余保持现状。`baseVersion` 与当前版本不一致返回 409；
+        布局 id 未注册或残留模板变量返回 400。一次推送即一个 release，与在线编辑器走同一条发布路径。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareWorkspacePushRequest'
+      responses:
+        '200':
+          description: 推送结果。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareWorkspacePushResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+
 components:
   parameters:
     CsrfHeader:
@@ -3721,3 +4208,267 @@ components:
         unreadCount:
           type: integer
           minimum: 0
+    CoursewareLayout:
+      type: object
+      additionalProperties: false
+      required: [layoutId, name, component, allowedBlocks, version]
+      properties:
+        layoutId:
+          type: string
+        name:
+          type: string
+        component:
+          type: string
+        allowedBlocks:
+          type: array
+          items:
+            type: string
+        version:
+          type: integer
+          minimum: 1
+    CoursewareSkeleton:
+      type: object
+      additionalProperties: false
+      required: [markdown]
+      properties:
+        markdown:
+          type: string
+    CoursewareDraftSaveRequest:
+      type: object
+      additionalProperties: false
+      required: [markdown]
+      properties:
+        legacyArticleId:
+          type: [integer, 'null']
+          format: int64
+        markdown:
+          type: string
+          maxLength: 1048576
+    CoursewareDraft:
+      type: object
+      additionalProperties: false
+      required: [articleId, markdown, hasDraft]
+      properties:
+        articleId:
+          type: integer
+          format: int64
+        markdown:
+          type: string
+        hasDraft:
+          type: boolean
+          description: false 表示当前没有草稿，返回的是已发布正文
+    CoursewareDraftSummary:
+      type: object
+      additionalProperties: false
+      required: [articleId, size, updatedAt, published]
+      properties:
+        articleId:
+          type: integer
+          format: int64
+        title:
+          type: [string, 'null']
+        subject:
+          type: [string, 'null']
+        series:
+          type: [string, 'null']
+        logicalPath:
+          type: [string, 'null']
+        size:
+          type: integer
+          minimum: 0
+        updatedAt:
+          type: string
+          format: date-time
+        published:
+          type: boolean
+    CoursewarePrecheck:
+      type: object
+      additionalProperties: false
+      required: [ok, errors]
+      properties:
+        ok:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+    CoursewarePublishDraftsRequest:
+      type: object
+      additionalProperties: false
+      required: [subject]
+      properties:
+        subject:
+          type: string
+          maxLength: 60
+        expectVersion:
+          type: [integer, 'null']
+    CoursewareImportItem:
+      type: object
+      additionalProperties: false
+      required: [logicalPath, status]
+      properties:
+        logicalPath:
+          type: string
+        articleId:
+          type: [integer, 'null']
+          format: int64
+        status:
+          type: string
+          enum: [imported, overwritten, skipped]
+        message:
+          type: [string, 'null']
+    CoursewareImportReport:
+      type: object
+      additionalProperties: false
+      required: [imported, overwritten, skipped, items]
+      properties:
+        imported:
+          type: integer
+          minimum: 0
+        overwritten:
+          type: integer
+          minimum: 0
+        skipped:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoursewareImportItem'
+    CoursewareTemplate:
+      type: object
+      additionalProperties: false
+      required: [id, kind, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        subject:
+          type: [string, 'null']
+          description: null 表示全科通用
+        kind:
+          type: string
+          enum: [new_lesson, practice, review, topic]
+        name:
+          type: string
+    CoursewareTemplateSaveRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, name, markdown]
+      properties:
+        subject:
+          type: string
+        kind:
+          type: string
+          enum: [new_lesson, practice, review, topic]
+        name:
+          type: string
+          maxLength: 120
+        markdown:
+          type: string
+          maxLength: 1048576
+    CoursewareWorkspaceEntry:
+      type: object
+      additionalProperties: false
+      required: [articleId, title, series, logicalPath, contentHash, questionCount]
+      properties:
+        articleId:
+          type: integer
+          format: int64
+        legacyArticleId:
+          type: [integer, 'null']
+          format: int64
+        title:
+          type: string
+        series:
+          type: string
+        logicalPath:
+          type: string
+        contentHash:
+          type: string
+        questionCount:
+          type: integer
+          minimum: 0
+    CoursewareWorkspaceManifest:
+      type: object
+      additionalProperties: false
+      required: [teacherId, subject, version, contentHash, entries]
+      properties:
+        teacherId:
+          type: integer
+          format: int64
+        subject:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+        contentHash:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoursewareWorkspaceEntry'
+    CoursewareWorkspaceFiles:
+      type: object
+      additionalProperties: false
+      required: [files]
+      properties:
+        files:
+          type: object
+          additionalProperties:
+            type: string
+          description: 逻辑路径 → markdown
+    CoursewareWorkspaceFile:
+      type: object
+      additionalProperties: false
+      required: [logicalPath, markdown]
+      properties:
+        logicalPath:
+          type: string
+          maxLength: 500
+        markdown:
+          type: string
+          maxLength: 1048576
+    CoursewareWorkspacePushRequest:
+      type: object
+      additionalProperties: false
+      required: [subject, baseVersion]
+      properties:
+        subject:
+          type: string
+          maxLength: 60
+        baseVersion:
+          type: integer
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoursewareWorkspaceFile'
+        deletedPaths:
+          type: array
+          items:
+            type: string
+    CoursewareWorkspacePushResult:
+      type: object
+      additionalProperties: false
+      required: [version, articleCount, changedCount, deletedCount, changedPaths, deletedPaths]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        articleCount:
+          type: integer
+          minimum: 0
+        changedCount:
+          type: integer
+          minimum: 0
+        deletedCount:
+          type: integer
+          minimum: 0
+        changedPaths:
+          type: array
+          items:
+            type: string
+        deletedPaths:
+          type: array
+          items:
+            type: string

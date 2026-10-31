@@ -86,6 +86,101 @@ export const coursewareGateway = {
     return Array.isArray(response) ? response.map(normalizeCopyResult) : []
   },
 
+  /** 模板库（新建课件时的骨架来源）。 */
+  async listTemplates(subject) {
+    const query = subject ? `?${new URLSearchParams({ subject })}` : ''
+    const response = await backendClient.request(`/admin/courseware/templates${query}`)
+    return Array.isArray(response) ? response : []
+  },
+
+  async getTemplate(templateId) {
+    const response = await backendClient.request(
+      `/admin/courseware/templates/${encodeURIComponent(templateId)}`
+    )
+    return String(response?.markdown || '')
+  },
+
+  saveTemplate({ subject, kind, name, markdown }) {
+    return backendClient.request('/admin/courseware/templates', {
+      method: 'POST',
+      body: { subject, kind, name, markdown }
+    })
+  },
+
+  /** 布局注册表（编辑器与渲染共用）。 */
+  async listLayouts() {
+    const response = await backendClient.request('/admin/courseware/layouts')
+    return Array.isArray(response) ? response : []
+  },
+
+  async getLayoutSkeleton(layoutId, title) {
+    const parameters = new URLSearchParams({ title })
+    const response = await backendClient.request(
+      `/admin/courseware/layouts/${encodeURIComponent(layoutId)}/skeleton?${parameters}`
+    )
+    return String(response?.markdown || '')
+  },
+
+  async listDrafts() {
+    const response = await backendClient.request('/admin/courseware/drafts')
+    return Array.isArray(response) ? response : []
+  },
+
+  async getDraft(articleId) {
+    return backendClient.request(`/admin/courseware/drafts/${encodeURIComponent(articleId)}`)
+  },
+
+  async saveDraft(articleId, markdown, legacyArticleId) {
+    const body = legacyArticleId == null ? { markdown } : { markdown, legacyArticleId }
+    if (articleId == null) {
+      return backendClient.request('/admin/courseware/drafts', { method: 'POST', body })
+    }
+    return backendClient.request(`/admin/courseware/drafts/${encodeURIComponent(articleId)}`, {
+      method: 'PUT',
+      body
+    })
+  },
+
+  deleteDraft(articleId) {
+    return backendClient.request(`/admin/courseware/drafts/${encodeURIComponent(articleId)}`, {
+      method: 'DELETE'
+    })
+  },
+
+  async precheckDraft(markdown) {
+    const response = await backendClient.request('/admin/courseware/drafts/precheck', {
+      method: 'POST',
+      body: { markdown }
+    })
+    return { ok: Boolean(response?.ok), errors: Array.isArray(response?.errors) ? response.errors : [] }
+  },
+
+  publishDrafts(subject, expectVersion) {
+    const body = { subject }
+    if (expectVersion != null) body.expectVersion = expectVersion
+    return backendClient.request('/admin/courseware/drafts/publish', { method: 'POST', body })
+  },
+
+  /** 导出 zip：返回 blob 供前端触发下载。 */
+  exportZip({ subject, articleIds } = {}) {
+    const parameters = new URLSearchParams()
+    if (subject) parameters.set('subject', subject)
+    for (const id of articleIds || []) parameters.append('articleIds', String(id))
+    const query = parameters.toString() ? `?${parameters}` : ''
+    return backendClient.requestBlob(`/admin/courseware/export${query}`)
+  },
+
+  /** 导入 zip（multipart，结果先落草稿，由老师确认后发布）。 */
+  importZip(file, overwrite = false) {
+    const form = new FormData()
+    form.append('file', file)
+    return backendClient.requestForm(
+      `/admin/courseware/import?overwrite=${overwrite ? 'true' : 'false'}`,
+      form
+    )
+  },
+
+
   async listCopies() {
     const response = await backendClient.request('/admin/courseware/copies')
     return Array.isArray(response) ? response.map(normalizeCopySummary) : []

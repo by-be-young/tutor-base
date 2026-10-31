@@ -65,6 +65,12 @@ const routes = [
         meta: { adminTitle: '共享' }
       },
       {
+        path: 'editor',
+        name: 'AdminEditor',
+        component: () => import('@/views/admin/AdminEditorView.vue'),
+        meta: { adminTitle: '编辑' }
+      },
+      {
         path: 'applications',
         name: 'AdminTeacherApplications',
         component: () => import('@/views/admin/AdminTeacherApplicationsView.vue'),
