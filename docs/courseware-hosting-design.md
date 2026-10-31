@@ -807,7 +807,12 @@ P4 把写入补齐：
 
 内容寻址让配额与 GC 都以「该老师命名空间下 blob 的实际字节数」为口径，同一份正文被多篇/多版本引用时只算一次。
 
-**P5 剩余**：归档导出、监控指标（Prometheus）、导出包过期清理、跨老师共享 blob 的物理去重（当前按老师隔离）。
+| 补充能力 | 实现 |
+| --- | --- |
+| 全站指标 | `GET /admin/courseware/maintenance/metrics`（仅超管）：发布/归档版本数、篇目、生效分享、获取、草稿、模板、未读提醒、待处理更新、blob 总字节、孤儿字节、超配额老师数 |
+| 归档 | `POST /admin/courseware/maintenance/archive?teacherId=`（仅超管）：`course_release.status='archived'` + 清空版本指针，正文与历史版本保留、学员历史仍可查，审计动作 `archive`（V25 扩展 `course_operation_log_action_check`） |
+
+**P5 剩余**：Prometheus 导出（当前用 `/maintenance/metrics` 直读）、导出包过期清理、跨老师共享 blob 的物理去重（当前按老师隔离）。
 
 ---
 

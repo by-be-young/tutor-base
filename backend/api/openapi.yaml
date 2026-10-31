@@ -2504,6 +2504,52 @@ paths:
         '403':
           $ref: '#/components/responses/Problem'
 
+  /admin/courseware/maintenance/metrics:
+    get:
+      operationId: getCoursewareMetrics
+      summary: 全站课件计数指标（仅超级管理员）
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 计数汇总。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareMetrics'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /admin/courseware/maintenance/archive:
+    post:
+      operationId: archiveTeacherCourseware
+      summary: 归档某位老师的全部发布版本（仅超级管理员）
+      description: >-
+        把该老师的 `course_release` 置为 `archived` 并清空当前版本指针，正文与历史版本保留、
+        学员历史记录仍可查；导出仍走 `GET /admin/courseware/export`。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: teacherId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 归档结果。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareArchiveResult'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+
 components:
   parameters:
     CsrfHeader:
@@ -4679,3 +4725,58 @@ components:
           type: array
           items:
             type: string
+    CoursewareMetrics:
+      type: object
+      additionalProperties: false
+      required: [publishedReleases, archivedReleases, articles, activeShares, activeCopies, drafts, activeTemplates, unreadNotifications, pendingUpdates, totalBlobBytes, orphanBlobBytes, teachersOverQuota]
+      properties:
+        publishedReleases:
+          type: integer
+          minimum: 0
+        archivedReleases:
+          type: integer
+          minimum: 0
+        articles:
+          type: integer
+          minimum: 0
+        activeShares:
+          type: integer
+          minimum: 0
+        activeCopies:
+          type: integer
+          minimum: 0
+        drafts:
+          type: integer
+          minimum: 0
+        activeTemplates:
+          type: integer
+          minimum: 0
+        unreadNotifications:
+          type: integer
+          minimum: 0
+        pendingUpdates:
+          type: integer
+          minimum: 0
+        totalBlobBytes:
+          type: integer
+          minimum: 0
+        orphanBlobBytes:
+          type: integer
+          minimum: 0
+        teachersOverQuota:
+          type: integer
+          minimum: 0
+    CoursewareArchiveResult:
+      type: object
+      additionalProperties: false
+      required: [teacherId, archivedReleases, clearedHeads]
+      properties:
+        teacherId:
+          type: integer
+          format: int64
+        archivedReleases:
+          type: integer
+          minimum: 0
+        clearedHeads:
+          type: integer
+          minimum: 0
