@@ -127,7 +127,7 @@
 | GET | `/articles` | account | 管理员返回全部，学习者只返回已授权学习文章 |
 | GET | `/articles/{articleId}/study-state` | content grant | 返回参考答案可见性规则下的作答状态 |
 | GET | `/articles/study-progress` | learner | 返回当前学习者已授权文章的作答进度 |
-| PUT | `/admin/learners/{learnerId}/content-grants` | administrator | 在“我的课件”范围内原子替换科目归属（`enrolledSubjects`）与文章授权（`articleIds`）；范围外既有授权保留；省略 `enrolledSubjects` 时保留旧科目 |
+| PUT | `/admin/learners/{learnerId}/content-grants` | administrator | 增量合并科目归属（`enrolledSubjects`）与文章授权（`articleIds`）：与既有授权取并集，只有显式 `removedSubjects` / `removedArticleIds` 才移除；新增项必须在“我的课件”范围内，范围外既有授权保留 |
 
 ### Learning and Review
 
@@ -235,7 +235,8 @@
 - 放弃记录按管理员隔离；`scope=unclaimed` 扣除当前管理员已放弃的课件，其他管理员仍按其认领状态计算。
 - 重新认领单篇或整科会同时清除排除与放弃记录；仅释放学科不会撤销放弃记录。
 - 业务范围：参考答案读写、学员作答状态、人工批阅、学习者作答进度与内容授权替换都限定在“我的课件”内；未认领、他人认领、被自己排除或已放弃的课件返回 `403 courseware_not_claimed`。
-- 内容授权替换只作用于“我的课件”范围，范围外的既有授权必须保留，避免多名管理员互相覆盖。
+- 内容授权是增量语义：`articleIds` / `enrolledSubjects` 与既有授权取并集，取消必须通过 `removedArticleIds` / `removedSubjects` 显式声明，避免“新增一篇”把学员原有授权冲掉；本管理员范围外的既有授权一律保留。
+- 只校验**新增**项：已在学员授权里的文章即使不属于本管理员范围也接受并保留；新增文章/科目必须落在“我的课件”内，否则 `403 courseware_not_claimed` / 科目未认领错误。
 
 ## 7. System Status contract
 

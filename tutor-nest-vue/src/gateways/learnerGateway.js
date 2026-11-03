@@ -38,10 +38,16 @@ export const learnerGateway = {
     })
   },
 
-  replaceContentGrants(learnerId, articleIds, enrolledSubjects = []) {
+  replaceContentGrants(
+    learnerId,
+    articleIds,
+    enrolledSubjects = [],
+    removedArticleIds = [],
+    removedSubjects = []
+  ) {
     return backendClient.request(`/admin/learners/${encodeURIComponent(learnerId)}/content-grants`, {
       method: 'PUT',
-      body: { articleIds, enrolledSubjects }
+      body: { articleIds, enrolledSubjects, removedArticleIds, removedSubjects }
     })
   },
 

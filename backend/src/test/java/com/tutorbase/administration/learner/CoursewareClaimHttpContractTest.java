@@ -468,13 +468,15 @@ class CoursewareClaimHttpContractTest {
         mockMvc.perform(get("/api/v1/admin/learners/2/study-progress").cookie(adminTwoCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
+        // 增量授权下，已在学员授权里的文章按“保留”处理：adminTwo 没有该科范围也不能改动，
+        // 但重复提交不会报错，也不会新增任何授权。
         mockMvc.perform(put("/api/v1/admin/learners/2/content-grants")
                         .cookie(adminTwoCookie)
                         .header("X-CSRF-TOKEN", adminTwo.csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"articleIds\":[201]}"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("courseware_not_claimed"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contentGrantArticleIds.length()").value(2));
 
         mockMvc.perform(get("/api/v1/admin/learners/2/study-progress").cookie(adminCookie))
                 .andExpect(status().isOk())
@@ -489,7 +491,7 @@ class CoursewareClaimHttpContractTest {
     }
 
     @Test
-    void givenLearnerGrantsOutsideAdministratorScopeWhenReplacingThenForeignGrantsArePreserved()
+    void givenLearnerGrantsOutsideAdministratorScopeWhenAddingThenAllGrantsArePreserved()
             throws Exception {
         Cookie adminCookie = login("admin", "Admin-password-2026");
         BrowserSession admin = csrf(adminCookie);
@@ -499,29 +501,41 @@ class CoursewareClaimHttpContractTest {
                 .andExpect(status().isOk());
 
         // 学员原有授权：101（高中化学，当前管理员可见）与 201（高中英语，当前管理员不可见）。
+        // 只新增 102，既不能吃掉本管理员可见的 101，也不能吃掉别处的 201。
         mockMvc.perform(put("/api/v1/admin/learners/2/content-grants")
                         .cookie(adminCookie)
                         .header("X-CSRF-TOKEN", admin.csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"articleIds\":[102]}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.contentGrantArticleIds.length()").value(2))
-                .andExpect(jsonPath("$.contentGrantArticleIds[0]").value(102))
-                .andExpect(jsonPath("$.contentGrantArticleIds[1]").value(201));
+                .andExpect(jsonPath("$.contentGrantArticleIds.length()").value(3))
+                .andExpect(jsonPath("$.contentGrantArticleIds[0]").value(101))
+                .andExpect(jsonPath("$.contentGrantArticleIds[1]").value(102))
+                .andExpect(jsonPath("$.contentGrantArticleIds[2]").value(201));
         assertThat(jdbc.queryForObject(
                 "SELECT permissions::text FROM public.student WHERE id = 2", String.class))
-                .isEqualTo("{102,201}");
+                .isEqualTo("{101,102,201}");
 
+        // 已在授权里的范围外文章再次出现在 articleIds 中，按“保留”处理，不应报 403。
         mockMvc.perform(put("/api/v1/admin/learners/2/content-grants")
                         .cookie(adminCookie)
                         .header("X-CSRF-TOKEN", admin.csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"articleIds\":[201]}"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("courseware_not_claimed"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contentGrantArticleIds.length()").value(3));
         assertThat(jdbc.queryForObject(
                 "SELECT permissions::text FROM public.student WHERE id = 2", String.class))
-                .isEqualTo("{102,201}");
+                .isEqualTo("{101,102,201}");
+
+        // 真正不属于本管理员的新增授权仍然被拒绝。
+        mockMvc.perform(put("/api/v1/admin/learners/2/content-grants")
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"articleIds\":[301]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("courseware_not_claimed"));
     }
 
     @Test
@@ -598,13 +612,14 @@ class CoursewareClaimHttpContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].articleId").value(CHEMISTRY_ARTICLE_TWO));
+        // 101 已被本人排除，但学员此前已持有该授权：增量语义下重复提交不改变任何授权。
         mockMvc.perform(put("/api/v1/admin/learners/2/content-grants")
                         .cookie(adminCookie)
                         .header("X-CSRF-TOKEN", admin.csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"articleIds\":[101]}"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("courseware_not_claimed"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contentGrantArticleIds.length()").value(3));
     }
 
     @Test

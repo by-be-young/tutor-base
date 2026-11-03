@@ -990,11 +990,14 @@ paths:
   /admin/learners/{learnerId}/content-grants:
     put:
       operationId: replaceLearnerContentGrants
-      summary: 完整替换一个学习者的科目归属与文章授权
+      summary: 增量更新一个学习者的科目归属与文章授权
       description: >-
         `enrolledSubjects` 表示开通的科目，`articleIds` 表示具体文章授权；两者相互独立。
-        开通科目不会自动授权该科目下任何文章。未传 `enrolledSubjects` 时保留既有科目，
-        便于旧客户端只更新文章授权。科目必须在当前管理员“我的课件”范围内。
+        开通科目不会自动授权该科目下任何文章。语义是**增量合并**：请求里的文章/科目与学员
+        既有授权取并集，只有显式写在 `removedArticleIds` / `removedSubjects` 里的项才会被移除，
+        因此“再授权一篇”不会覆盖学员原有的授权。省略 `enrolledSubjects` 时同样只增不减。
+        新增文章与科目必须在当前管理员“我的课件”范围内；学员已有的、属于其他管理员范围的
+        授权保持不变，即使出现在 `articleIds` 里也不会被拒绝。
       security:
         - sessionCookie: []
       parameters:
@@ -2932,12 +2935,32 @@ components:
             format: int64
             minimum: 1
             maximum: 2147483647
+        removedArticleIds:
+          type: array
+          maxItems: 5000
+          description: >-
+            需要移除的文章授权。省略表示不删除任何文章授权；与 `articleIds` 取并集后相减。
+          items:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 2147483647
         enrolledSubjects:
           type: array
           maxItems: 100
           description: >-
-            学员开通的科目。省略时保留既有科目；传入空数组表示取消全部科目。
+            学员开通的科目。与既有科目取并集，不会覆盖；省略表示不新增科目。
             开通科目不会自动授权该科目下的文章。
+          items:
+            type: string
+            minLength: 1
+            maxLength: 50
+        removedSubjects:
+          type: array
+          maxItems: 100
+          description: >-
+            需要取消的科目。省略表示不取消任何科目；取消科目不会自动移除该科文章授权，
+            需要一并列出 `removedArticleIds`。
           items:
             type: string
             minLength: 1

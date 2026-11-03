@@ -6,6 +6,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -61,42 +62,52 @@ public class JdbcLearnerAdministration implements LearnerAdministration {
     @Override
     @Transactional
     public void replaceContentGrants(
-            long learnerId, long administratorAccountId, List<Long> articleIds, List<String> enrolledSubjects) {
+            long learnerId,
+            long administratorAccountId,
+            List<Long> articleIds,
+            List<Long> removedArticleIds,
+            List<String> enrolledSubjects,
+            List<String> removedSubjects) {
+        // 增量授权：请求里的文章/科目与既有授权取并集，只移除显式列在 removed* 里的项。
+        // 这样“再授权一篇”不会把学员原有的授权冲掉；删除必须由调用方明确声明。
         Set<Long> visible = Set.copyOf(coursewareScope.visibleArticleIds(administratorAccountId));
-        List<Long> requested = articleIds.stream()
-                .distinct()
-                .sorted()
-                .toList();
+        List<Long> requested = articleIds == null
+                ? List.of()
+                : articleIds.stream().distinct().sorted().toList();
+        Set<Long> requestedRemovals = removedArticleIds == null
+                ? Set.of()
+                : removedArticleIds.stream().filter(Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+        ContentState state = lockContentState(learnerId);
+        // 只有本管理员范围内的授权允许移除；范围外（别人的授权）静默保留，避免越权删除。
+        Set<Long> removals = requestedRemovals.stream().filter(visible::contains)
+                .collect(java.util.stream.Collectors.toSet());
         for (Long articleId : requested) {
-            if (!visible.contains(articleId)) {
+            // 已授权过的文章可能是其他管理员的授权，原样保留，不再按本管理员范围校验；
+            // 只有“新增”授权才必须落在本管理员的“我的课件”范围内。
+            if (!state.articleIds().contains(articleId) && !visible.contains(articleId)) {
                 throw new LearnerCoursewareNotClaimed(articleId);
             }
         }
-        TreeSet<String> requestedSubjects = new TreeSet<>();
-        if (enrolledSubjects != null) {
-            for (String subject : enrolledSubjects) {
-                String normalized = subject.strip();
-                if (!normalized.isEmpty()) {
-                    requestedSubjects.add(normalized);
-                }
-            }
-            for (String subject : requestedSubjects) {
+        TreeSet<String> requestedSubjects = normalizeSubjects(enrolledSubjects);
+        TreeSet<String> removedSubjectNames = normalizeSubjects(removedSubjects);
+        // 同理：范围外的科目（别人的开通记录）保留，不因本管理员的请求被取消。
+        removedSubjectNames.removeIf(subject -> !isVisibleSubject(administratorAccountId, subject));
+        Set<String> existingSubjects = Set.copyOf(state.subjects());
+        for (String subject : requestedSubjects) {
+            if (!existingSubjects.contains(subject)) {
                 requireVisibleSubject(administratorAccountId, subject);
             }
         }
-        ContentState state = lockContentState(learnerId);
-        TreeSet<Long> finalArticleIds = new TreeSet<>();
-        state.articleIds().stream()
-                .filter(articleId -> !visible.contains(articleId))
-                .forEach(finalArticleIds::add);
+        TreeSet<Long> finalArticleIds = new TreeSet<>(state.articleIds());
         finalArticleIds.addAll(requested);
+        finalArticleIds.removeAll(removals);
+        TreeSet<String> finalSubjects = new TreeSet<>(existingSubjects);
+        finalSubjects.addAll(requestedSubjects);
+        finalSubjects.removeAll(removedSubjectNames);
         Integer[] articleValues = finalArticleIds.stream()
                 .map(Math::toIntExact)
                 .toArray(Integer[]::new);
-        String[] subjectValues = (enrolledSubjects == null
-                ? state.subjects()
-                : List.copyOf(requestedSubjects))
-                .toArray(String[]::new);
+        String[] subjectValues = finalSubjects.toArray(String[]::new);
         int changed = jdbcTemplate.update(connection -> {
             PreparedStatement statement = connection.prepareStatement(
                     "UPDATE public.student SET permissions = ?, subjects = ? WHERE id = ?");
@@ -127,8 +138,22 @@ public class JdbcLearnerAdministration implements LearnerAdministration {
                 .orElseThrow(() -> new LearnerNotFound(learnerId));
     }
 
-    private void requireVisibleSubject(long administratorAccountId, String subject) {
-        boolean visible = jdbc.sql("""
+    private static TreeSet<String> normalizeSubjects(List<String> subjects) {
+        TreeSet<String> normalized = new TreeSet<>();
+        if (subjects == null) {
+            return normalized;
+        }
+        for (String subject : subjects) {
+            String value = subject == null ? "" : subject.strip();
+            if (!value.isEmpty()) {
+                normalized.add(value);
+            }
+        }
+        return normalized;
+    }
+
+    private boolean isVisibleSubject(long administratorAccountId, String subject) {
+        return jdbc.sql("""
                 SELECT EXISTS (
                     SELECT 1
                     FROM public.courseware_catalog AS subject_catalog
@@ -140,7 +165,10 @@ public class JdbcLearnerAdministration implements LearnerAdministration {
                 .param("subject", subject)
                 .query(Boolean.class)
                 .single();
-        if (!visible) {
+    }
+
+    private void requireVisibleSubject(long administratorAccountId, String subject) {
+        if (!isVisibleSubject(administratorAccountId, subject)) {
             throw new LearnerSubjectNotClaimed(subject);
         }
     }

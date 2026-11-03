@@ -55,7 +55,12 @@ public class AdminLearnerController {
             @PathVariable @Positive long learnerId,
             @Valid @RequestBody ReplaceContentGrantsRequest request) {
         learnerAdministration.replaceContentGrants(
-                learnerId, administrator.accountId(), request.articleIds(), request.enrolledSubjects());
+                learnerId,
+                administrator.accountId(),
+                request.articleIds(),
+                request.removedArticleIds(),
+                request.enrolledSubjects(),
+                request.removedSubjects());
         return requireLearner(learnerId);
     }
 
@@ -129,8 +134,12 @@ public class AdminLearnerController {
     record ReplaceContentGrantsRequest(
             @NotNull @Size(max = 5_000)
             List<@NotNull @Positive @Max(Integer.MAX_VALUE) Long> articleIds,
+            @Size(max = 5_000)
+            List<@NotNull @Positive @Max(Integer.MAX_VALUE) Long> removedArticleIds,
             @Size(max = 100)
-            List<@NotBlank @Size(max = 50) String> enrolledSubjects) {
+            List<@NotBlank @Size(max = 50) String> enrolledSubjects,
+            @Size(max = 100)
+            List<@NotBlank @Size(max = 50) String> removedSubjects) {
     }
 
     record LearnerResponse(

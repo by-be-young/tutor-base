@@ -7,7 +7,12 @@ public interface LearnerAdministration {
     long create(String username, long creatorAccountId);
 
     void replaceContentGrants(
-            long learnerId, long administratorAccountId, List<Long> articleIds, List<String> enrolledSubjects);
+            long learnerId,
+            long administratorAccountId,
+            List<Long> articleIds,
+            List<Long> removedArticleIds,
+            List<String> enrolledSubjects,
+            List<String> removedSubjects);
 
     void claim(long learnerId, long administratorAccountId);
 

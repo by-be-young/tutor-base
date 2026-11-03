@@ -193,15 +193,44 @@ class LearnerContentGrantHttpContractTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("courseware_not_claimed"));
 
-        // 取消科目只改归属；具体文章仍由 articleIds 独立决定
+        // 取消科目只改归属（必须显式 removedSubjects）；具体文章仍由 articleIds 独立决定
         mockMvc.perform(put("/api/v1/admin/learners/{learnerId}/content-grants", learnerId)
                         .cookie(adminCookie)
                         .header("X-CSRF-TOKEN", admin.csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"articleIds\":[3,9],\"enrolledSubjects\":[]}"))
+                        .content("{\"articleIds\":[3,9],\"removedSubjects\":[\"数学\"]}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enrolledSubjects").isEmpty())
                 .andExpect(jsonPath("$.contentGrantArticleIds[1]").value(9));
+    }
+
+    @Test
+    void addingOneArticleKeepsExistingGrantsUntilExplicitlyRemoved() throws Exception {
+        Cookie adminCookie = login(csrf(null), "young", "Admin-password-2026");
+        BrowserSession admin = csrf(adminCookie);
+
+        // Alice 初始授权 [3,9]；只提交其中一篇不得覆盖另一篇
+        mockMvc.perform(put("/api/v1/admin/learners/5/content-grants")
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"articleIds\":[3]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contentGrantArticleIds[0]").value(3))
+                .andExpect(jsonPath("$.contentGrantArticleIds[1]").value(9));
+        assertThat(jdbc.queryForObject(
+                "SELECT permissions::text FROM public.student WHERE id = 5", String.class))
+                .isEqualTo("{3,9}");
+
+        // 显式 removedArticleIds 才真正移除
+        mockMvc.perform(put("/api/v1/admin/learners/5/content-grants")
+                        .cookie(adminCookie)
+                        .header("X-CSRF-TOKEN", admin.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"articleIds\":[],\"removedArticleIds\":[3]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contentGrantArticleIds.length()").value(1))
+                .andExpect(jsonPath("$.contentGrantArticleIds[0]").value(9));
     }
 
     @Test

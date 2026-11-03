@@ -12,6 +12,9 @@ function toStudent(learner) {
       ? [...learner.contentGrantArticleIds]
       : [],
     subjects: Array.isArray(learner.enrolledSubjects) ? [...learner.enrolledSubjects] : [],
+    // 本次未保存的“取消授权”改动：后端是增量合并语义，移除必须显式声明，否则新增会覆盖原有。
+    removedArticleIds: [],
+    removedSubjects: [],
     claimedByAccountId: learner.claimedByAccountId ?? null,
     claimedByUsername: learner.claimedByUsername ?? null,
     claimedAt: learner.claimedAt ?? null,
@@ -102,7 +105,9 @@ export const useAdminStore = defineStore('admin', () => {
       ? {
           ...incoming,
           permissions: [...existing.permissions],
-          subjects: [...(existing.subjects || [])]
+          subjects: [...(existing.subjects || [])],
+          removedArticleIds: [...(existing.removedArticleIds || [])],
+          removedSubjects: [...(existing.removedSubjects || [])]
         }
       : incoming
     const next = index === -1
@@ -209,17 +214,22 @@ export const useAdminStore = defineStore('admin', () => {
     if (!student) return
 
     const permissions = [...student.permissions]
+    const removed = new Set(student.removedArticleIds || [])
     const numericId = Number(blogId)
     if (!Number.isFinite(numericId)) return
 
     if (checked) {
       if (!permissions.includes(numericId)) permissions.push(numericId)
+      removed.delete(numericId)
     } else {
       const index = permissions.indexOf(numericId)
       if (index > -1) permissions.splice(index, 1)
+      // 记录“显式移除”，保存时随请求下发；否则后端增量合并会把它当成保留项。
+      removed.add(numericId)
     }
 
     student.permissions = permissions
+    student.removedArticleIds = [...removed]
     markDirty(student.id)
   }
 
@@ -230,17 +240,24 @@ export const useAdminStore = defineStore('admin', () => {
     if (!normalized) return
 
     const subjects = [...(student.subjects || [])]
+    const removedSubjects = new Set(student.removedSubjects || [])
     if (enrolled) {
       if (!subjects.includes(normalized)) subjects.push(normalized)
+      removedSubjects.delete(normalized)
     } else {
       const index = subjects.indexOf(normalized)
       if (index > -1) subjects.splice(index, 1)
+      removedSubjects.add(normalized)
     }
     student.subjects = subjects
+    student.removedSubjects = [...removedSubjects]
 
     if (!enrolled && removeArticleIds.length > 0) {
       const removeIds = new Set(removeArticleIds.map(Number).filter(Number.isFinite))
       student.permissions = student.permissions.filter(id => !removeIds.has(Number(id)))
+      const pendingRemovals = new Set(student.removedArticleIds || [])
+      removeIds.forEach(id => pendingRemovals.add(id))
+      student.removedArticleIds = [...pendingRemovals]
     }
     markDirty(student.id)
   }
@@ -252,7 +269,9 @@ export const useAdminStore = defineStore('admin', () => {
     const saved = await learnerGateway.replaceContentGrants(
       student.id,
       student.permissions,
-      student.subjects || []
+      student.subjects || [],
+      student.removedArticleIds || [],
+      student.removedSubjects || []
     )
     // 后端 LearnerResponse 的字段是 contentGrantArticleIds / enrolledSubjects；取不到时保留本地列表，避免误清空
     student.permissions = Array.isArray(saved.contentGrantArticleIds)
@@ -261,6 +280,9 @@ export const useAdminStore = defineStore('admin', () => {
     student.subjects = Array.isArray(saved.enrolledSubjects)
       ? [...saved.enrolledSubjects]
       : [...(student.subjects || [])]
+    // 移除清单已生效，清空待删除记录
+    student.removedArticleIds = []
+    student.removedSubjects = []
     // 保存响应若带认领/动态字段，一并刷新，保持列表元数据最新。
     if (saved.claimedByAccountId !== undefined) student.claimedByAccountId = saved.claimedByAccountId
     if (saved.claimedByUsername !== undefined) student.claimedByUsername = saved.claimedByUsername
