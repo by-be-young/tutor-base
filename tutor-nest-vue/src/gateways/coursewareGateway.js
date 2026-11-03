@@ -155,6 +155,12 @@ export const coursewareGateway = {
     return Array.isArray(response) ? response : []
   },
 
+  // 「我的课件」全量清单（已发布 + 草稿），编辑页选择器与「课件」页目录共用
+  async listArticles() {
+    const response = await backendClient.request('/admin/courseware/articles')
+    return Array.isArray(response) ? response : []
+  },
+
   async getDraft(articleId) {
     return backendClient.request(`/admin/courseware/drafts/${encodeURIComponent(articleId)}`)
   },

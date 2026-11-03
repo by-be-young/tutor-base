@@ -16,7 +16,7 @@
           <span class="editor__chip">{{ currentSubject }}</span>
           <span v-if="articleId" class="editor__chip">#{{ articleId }}</span>
           <span v-if="currentPath" class="editor__chip editor__chip--path">{{ currentPath }}</span>
-          <span class="editor__chip" :class="currentDraft?.published ? 'is-live' : 'is-draft'">
+          <span class="editor__chip" :class="currentArticle?.published ? 'is-live' : 'is-draft'">
             {{ currentStatus }}
           </span>
         </p>
@@ -25,9 +25,9 @@
         <span>选择要编辑的课件</span>
         <select :value="articleId ?? ''" @change="onPickArticle">
           <option value="">— 从我的课件里选一篇 —</option>
-          <optgroup v-for="group in draftGroups" :key="group.subject" :label="group.subject">
-            <option v-for="draft in group.items" :key="draft.articleId" :value="draft.articleId">
-              {{ draft.title || `课件 ${draft.articleId}` }}{{ draft.published ? ' · 已发布' : '' }}
+          <optgroup v-for="group in articleGroups" :key="group.subject" :label="group.subject">
+            <option v-for="item in group.items" :key="item.articleId" :value="item.articleId">
+              {{ item.title || `课件 ${item.articleId}` }}{{ item.published ? ' · 已发布' : ' · 草稿' }}
             </option>
           </optgroup>
         </select>
@@ -172,6 +172,8 @@ const layouts = ref([])
 const templates = ref([])
 const templateId = ref(null)
 const drafts = ref([])
+// 「我的课件」清单：已发布篇目 + 尚未发布的草稿，作为选择器的唯一数据源
+const articles = ref([])
 const articleId = ref(null)
 const subject = ref('')
 const layoutId = ref('A')
@@ -184,43 +186,47 @@ const precheck = reactive({ checked: false, errors: [] })
 
 const previewHtml = computed(() => renderSections(markdown.value))
 
-/** 当前编辑对象：标题 / 科目 / ID / 发布态都从草稿摘要里取，避免只剩一个裸 ID。 */
-const currentDraft = computed(
-  () => drafts.value.find(draft => Number(draft.articleId) === Number(articleId.value)) || null
+/** 当前编辑对象：标题 / 科目 / ID / 发布态都从「我的课件」清单里取，避免只剩一个裸 ID。 */
+const currentArticle = computed(
+  () => articles.value.find(item => Number(item.articleId) === Number(articleId.value)) || null
 )
 
 const currentTitle = computed(
-  () => currentDraft.value?.title || (articleId.value ? `课件 #${articleId.value}` : '新课件（未命名）')
+  () => currentArticle.value?.title || (articleId.value ? `课件 #${articleId.value}` : '新课件（未命名）')
 )
 
-const currentSubject = computed(() => currentDraft.value?.subject || subject.value || '未归类')
+const currentSubject = computed(() => currentArticle.value?.subject || subject.value || '未归类')
 
-const currentPath = computed(() => currentDraft.value?.logicalPath || '')
+const currentPath = computed(() => currentArticle.value?.logicalPath || '')
 
 const currentStatus = computed(() => {
   if (!articleId.value) return '新草稿 · 尚未保存'
-  if (currentDraft.value?.published) return dirty.value ? '已发布 · 有未保存改动' : '已发布'
+  const published = currentArticle.value?.published
+  if (published) return dirty.value ? '已发布 · 有未保存改动' : '已发布'
   return dirty.value ? '草稿 · 有未保存改动' : '草稿 · 未发布'
 })
 
 /** 选择器按科目分组，跨科目也能直接跳着编辑。 */
-const draftGroups = computed(() => {
+const articleGroups = computed(() => {
   const groups = new Map()
-  for (const draft of [...drafts.value].sort((left, right) => {
+  for (const item of [...articles.value].sort((left, right) => {
     const subjectOrder = String(left.subject || '').localeCompare(String(right.subject || ''), 'zh-Hans-CN')
     if (subjectOrder !== 0) return subjectOrder
-    return String(left.title || '').localeCompare(String(right.title || ''), 'zh-Hans-CN')
+    return String(left.logicalPath || left.title || '').localeCompare(
+      String(right.logicalPath || right.title || ''),
+      'zh-Hans-CN'
+    )
   })) {
-    const key = draft.subject || '未归类'
+    const key = item.subject || '未归类'
     if (!groups.has(key)) groups.set(key, [])
-    groups.get(key).push(draft)
+    groups.get(key).push(item)
   }
   return [...groups.entries()].map(([subjectKey, items]) => ({ subject: subjectKey, items }))
 })
 
 function onPickArticle(event) {
   const value = event.target.value
-  const target = drafts.value.find(draft => String(draft.articleId) === String(value))
+  const target = articles.value.find(item => String(item.articleId) === String(value))
   if (!target) {
     event.target.value = articleId.value ?? ''
     return
@@ -343,6 +349,14 @@ async function loadDrafts() {
   }
 }
 
+async function loadArticles() {
+  try {
+    articles.value = await coursewareGateway.listArticles()
+  } catch (error) {
+    reportError(error)
+  }
+}
+
 async function newDraft() {
   if (!confirmDiscard()) return
   busy.value = true
@@ -388,7 +402,7 @@ async function openDraft(draft) {
     const loaded = await coursewareGateway.getDraft(draft.articleId)
     articleId.value = loaded.articleId
     markdown.value = loaded.markdown
-    subject.value = draft.subject || subject.value
+    if (draft.subject) subject.value = draft.subject
     dirty.value = false
     precheck.checked = false
     precheck.errors = []
@@ -431,7 +445,7 @@ async function save() {
     articleId.value = saved.articleId
     dirty.value = false
     showToast('草稿已保存', 'success')
-    await loadDrafts()
+    await Promise.all([loadDrafts(), loadArticles()])
   } catch (error) {
     reportError(error)
   } finally {
@@ -449,7 +463,7 @@ async function publish() {
     }
     const published = await coursewareGateway.publishDrafts(subject.value)
     showToast(`已发布 v${published.version}（${published.articleCount} 篇）`, 'success')
-    await loadDrafts()
+    await Promise.all([loadDrafts(), loadArticles()])
   } catch (error) {
     reportError(error)
   } finally {
@@ -481,7 +495,7 @@ async function onImportFile(event) {
   try {
     importReport.value = await coursewareGateway.importZip(file, importOverwrite.value)
     showToast(`导入完成：新增 ${importReport.value.imported} 篇`, 'success')
-    await loadDrafts()
+    await Promise.all([loadDrafts(), loadArticles()])
   } catch (error) {
     reportError(error)
   } finally {
@@ -534,13 +548,13 @@ onMounted(async () => {
   } catch (error) {
     reportError(error)
   }
-  await loadDrafts()
-  // 支持从概览页/链接直达某篇课件：?subject=高中化学&articleId=12
+  await Promise.all([loadDrafts(), loadArticles()])
+  // 支持从「课件」页/链接直达某篇课件：?subject=高中化学&articleId=12
   const querySubject = typeof route.query.subject === 'string' ? route.query.subject.trim() : ''
   if (querySubject) subject.value = querySubject
   const queryArticleId = Number(route.query.articleId)
   if (Number.isFinite(queryArticleId) && queryArticleId > 0) {
-    const target = drafts.value.find(draft => Number(draft.articleId) === queryArticleId)
+    const target = articles.value.find(item => Number(item.articleId) === queryArticleId)
     if (target) {
       await openDraft(target)
     } else {

@@ -267,6 +267,7 @@
 
 - 前缀：学员侧 `/courseware`，老师侧 `/admin/courseware`；路径一律带老师维度，`articleId` 只在老师命名空间内唯一。
 - 正文：`GET /courseware/articles/{teacherId}/{articleId}/content` 返回 `text/markdown` 与 `ETag`；未关联/未授权返回 403，确不存在返回 404。
+- 课件清单：`GET /admin/courseware/articles` 返回当前发布版本的全部篇目 + 尚未发布的草稿，作为「课件」页科目目录与在线编辑器选择器的唯一数据源；仅有草稿的篇目 `subject` 为空。不要用 `GET /drafts` 当选择器数据源——通过 CLI 或导入发布、没有草稿行的课件不会出现在其中。
 - 发布：`POST /admin/courseware/releases` 以 `expectVersion` 做乐观锁；与当前指针不一致返回 `409`。
 - 错误码（`Problem.code`）：
 

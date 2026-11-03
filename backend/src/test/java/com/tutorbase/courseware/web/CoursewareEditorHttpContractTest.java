@@ -1,6 +1,7 @@
 package com.tutorbase.courseware.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -188,6 +189,51 @@ class CoursewareEditorHttpContractTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM public.course_article", Long.class)).isEqualTo(1L);
         assertThat(jdbc.queryForObject(
                 "SELECT subject FROM public.course_release_head", String.class)).isEqualTo("高中英语");
+    }
+
+    @Test
+    void articlesListKeepsPublishedCoursewareAfterDraftRemoved() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+
+        String skeleton = objectMapper.readTree(mockMvc.perform(
+                        get("/api/v1/admin/courseware/layouts/B/skeleton").param("title", "口语练习").cookie(cookie))
+                .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+
+        long articleId = objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("markdown", skeleton))))
+                .andReturn().getResponse().getContentAsString()).get("articleId").asLong();
+
+        mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("subject", "高中英语"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articleCount").value(1));
+
+        // 发布后删掉草稿：drafts 列表空了，但已发布课件仍必须可选
+        mockMvc.perform(delete("/api/v1/admin/courseware/drafts/{articleId}", articleId)
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/admin/courseware/drafts").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].articleId").value(articleId))
+                .andExpect(jsonPath("$[0].published").value(true))
+                .andExpect(jsonPath("$[0].hasDraft").value(false))
+                .andExpect(jsonPath("$[0].subject").value("高中英语"))
+                .andExpect(jsonPath("$[0].title").isNotEmpty())
+                .andExpect(jsonPath("$[0].logicalPath").isNotEmpty());
     }
 
     @Test

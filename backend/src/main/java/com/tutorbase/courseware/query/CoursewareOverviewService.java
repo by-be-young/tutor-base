@@ -112,6 +112,112 @@ public class CoursewareOverviewService {
             int shareCount) {
     }
 
+    /**
+     * 「我的课件」清单：已发布篇目（当前生效版本）+ 尚未发布的草稿。
+     *
+     * <p>在线编辑器与「课件」页的科目目录都以它为数据源；只看 course_draft 会因为
+     * 通过 CLI / 导入发布、没有草稿行的课件完全选不到。
+     */
+    @Transactional(readOnly = true)
+    public List<ArticleSummary> articles(long teacherId) {
+        List<ArticleSummary> published = jdbc.sql("""
+                SELECT h.subject, ca.article_id, ca.legacy_article_id, ca.title, ca.series,
+                       ca.logical_path,
+                       d.markdown IS NOT NULL AS has_draft,
+                       COALESCE(length(d.markdown), 0) AS size,
+                       d.updated_at AS draft_updated_at
+                FROM public.course_release_head AS h
+                JOIN public.course_article AS ca
+                  ON ca.release_id = h.release_id
+                 AND ca.teacher_account_id = h.teacher_account_id
+                LEFT JOIN public.course_draft AS d
+                  ON d.teacher_account_id = h.teacher_account_id
+                 AND d.article_id = ca.article_id
+                WHERE h.teacher_account_id = :teacherId
+                ORDER BY h.subject, ca.logical_path
+                """)
+                .param("teacherId", teacherId)
+                .query((rs, rowNum) -> new ArticleSummary(
+                        rs.getLong("article_id"),
+                        rs.getObject("legacy_article_id", Long.class),
+                        rs.getString("title"),
+                        rs.getString("subject"),
+                        rs.getString("series"),
+                        rs.getString("logical_path"),
+                        true,
+                        rs.getBoolean("has_draft"),
+                        rs.getInt("size"),
+                        toInstant(rs, "draft_updated_at")))
+                .list();
+
+        List<ArticleSummary> drafts = jdbc.sql("""
+                SELECT d.article_id, d.markdown, d.updated_at
+                FROM public.course_draft AS d
+                WHERE d.teacher_account_id = :teacherId
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM public.course_release_head AS h
+                      JOIN public.course_article AS ca
+                        ON ca.release_id = h.release_id
+                       AND ca.teacher_account_id = h.teacher_account_id
+                      WHERE h.teacher_account_id = d.teacher_account_id
+                        AND ca.article_id = d.article_id
+                  )
+                ORDER BY d.updated_at DESC
+                """)
+                .param("teacherId", teacherId)
+                .query((rs, rowNum) -> new ArticleSummary(
+                        rs.getLong("article_id"),
+                        null,
+                        firstHeading(rs.getString("markdown")),
+                        null,
+                        null,
+                        null,
+                        false,
+                        true,
+                        rs.getString("markdown").length(),
+                        toInstant(rs, "updated_at")))
+                .list();
+
+        if (drafts.isEmpty()) {
+            return published;
+        }
+        List<ArticleSummary> merged = new java.util.ArrayList<>(published);
+        merged.addAll(drafts);
+        return merged;
+    }
+
+    private static Instant toInstant(java.sql.ResultSet resultSet, String column) throws java.sql.SQLException {
+        java.time.OffsetDateTime value = resultSet.getObject(column, java.time.OffsetDateTime.class);
+        return value == null ? null : value.toInstant();
+    }
+
+    /** 草稿没有 frontmatter 元数据时，用正文第一个一级标题当标题。 */
+    private static String firstHeading(String markdown) {        if (markdown == null) {
+            return "";
+        }
+        for (String line : markdown.split("\n")) {
+            if (line.startsWith("# ")) {
+                return line.substring(2).trim();
+            }
+        }
+        return "";
+    }
+
+    /** 编辑器选择器与「课件」页的一行。 */
+    public record ArticleSummary(
+            long articleId,
+            Long legacyArticleId,
+            String title,
+            String subject,
+            String series,
+            String logicalPath,
+            boolean published,
+            boolean hasDraft,
+            int size,
+            Instant updatedAt) {
+    }
+
     /** 概览。 */
     public record Overview(
             List<SubjectOverview> subjects,

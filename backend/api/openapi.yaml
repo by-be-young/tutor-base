@@ -2024,6 +2024,28 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+  /admin/courseware/articles:
+    get:
+      operationId: listCoursewareArticles
+      summary: 我的课件清单（已发布篇目 + 未发布草稿）
+      description: |
+        科目目录与在线编辑器选择器共用此清单。包含当前发布版本里的全部篇目，
+        以及尚未发布的草稿；仅有草稿、还没发布过的篇目 subject 为空。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 课件清单。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoursewareArticleSummary'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
   /admin/courseware/drafts/{articleId}:
     get:
       operationId: getCoursewareDraft
@@ -4448,6 +4470,38 @@ components:
           format: date-time
         published:
           type: boolean
+    CoursewareArticleSummary:
+      type: object
+      additionalProperties: false
+      required: [articleId, published, hasDraft, size]
+      properties:
+        articleId:
+          type: integer
+          format: int64
+        legacyArticleId:
+          type: [integer, 'null']
+          format: int64
+          description: 旧静态课件编号；仅草稿时为空。
+        title:
+          type: [string, 'null']
+        subject:
+          type: [string, 'null']
+        series:
+          type: [string, 'null']
+        logicalPath:
+          type: [string, 'null']
+        published:
+          type: boolean
+        hasDraft:
+          type: boolean
+        size:
+          type: integer
+          minimum: 0
+          description: 草稿正文长度；无草稿时为 0。
+        updatedAt:
+          type: [string, 'null']
+          format: date-time
+          description: 草稿最后保存时间；无草稿时为空。
     CoursewarePrecheck:
       type: object
       additionalProperties: false

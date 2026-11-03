@@ -156,6 +156,20 @@ test('编辑器草稿与布局接口', async () => {
         return jsonResponse(200, [{ layoutId: 'A', name: '讲义式', component: 'LayoutLecture', allowedBlocks: [], version: 1 }])
       }
       if (url.includes('/drafts/precheck')) return jsonResponse(200, { ok: false, errors: ['布局 Z 未注册或已停用'] })
+      if (url.includes('/courseware/articles')) {
+        return jsonResponse(200, [{
+          articleId: 1000,
+          legacyArticleId: 45,
+          title: '口语训练-1',
+          subject: '高中英语',
+          series: '口语课讲义',
+          logicalPath: '高中英语/口语课讲义/口语训练-1.md',
+          published: true,
+          hasDraft: false,
+          size: 0,
+          updatedAt: null
+        }])
+      }
       if (url.includes('/drafts/publish')) {
         return jsonResponse(200, { teacherId: 7, subject: '高中化学', version: 3, contentHash: 'sha256:x', articleCount: 2, publishedAt: '2026-10-31T00:00:00Z' })
       }
@@ -185,6 +199,14 @@ test('编辑器草稿与布局接口', async () => {
 
       const published = await coursewareGateway.publishDrafts('高中化学')
       assert.equal(published.version, 3)
+
+      // 选择器数据源：已发布但没有草稿行的课件也必须出现在清单里
+      const articles = await coursewareGateway.listArticles()
+      assert.equal(articles.length, 1)
+      assert.equal(articles[0].articleId, 1000)
+      assert.equal(articles[0].published, true)
+      assert.equal(articles[0].hasDraft, false)
+      assert.match(calls.find(call => call.url.includes('/courseware/articles')).url, /\/admin\/courseware\/articles$/)
     }
   )
 })

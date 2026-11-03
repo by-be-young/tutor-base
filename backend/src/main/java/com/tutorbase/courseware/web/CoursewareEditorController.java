@@ -253,6 +253,16 @@ public class CoursewareEditorController {
                 .body(OverviewResponse.from(overview.overview(teacherId(principal))));
     }
 
+    @GetMapping("/articles")
+    ResponseEntity<List<ArticleSummaryResponse>> articles(
+            @AuthenticationPrincipal AccountPrincipal principal) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(overview.articles(teacherId(principal)).stream()
+                        .map(ArticleSummaryResponse::from)
+                        .toList());
+    }
+
     private static long teacherId(AccountPrincipal principal) {
         if (principal == null) {
             throw new CoursewareFailures.Forbidden("未登录");
@@ -398,6 +408,25 @@ public class CoursewareEditorController {
             return new DraftSummaryResponse(summary.articleId(), summary.title(), summary.subject(),
                     summary.series(), summary.logicalPath(), summary.size(), summary.updatedAt(),
                     summary.published());
+        }
+    }
+
+    record ArticleSummaryResponse(
+            long articleId,
+            Long legacyArticleId,
+            String title,
+            String subject,
+            String series,
+            String logicalPath,
+            boolean published,
+            boolean hasDraft,
+            int size,
+            Instant updatedAt) {
+
+        static ArticleSummaryResponse from(CoursewareOverviewService.ArticleSummary summary) {
+            return new ArticleSummaryResponse(summary.articleId(), summary.legacyArticleId(),
+                    summary.title(), summary.subject(), summary.series(), summary.logicalPath(),
+                    summary.published(), summary.hasDraft(), summary.size(), summary.updatedAt());
         }
     }
 
