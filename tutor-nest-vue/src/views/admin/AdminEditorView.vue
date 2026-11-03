@@ -8,6 +8,32 @@
       </p>
     </section>
 
+    <section class="panel panel--tight editor__identity">
+      <div class="editor__identity-main">
+        <p class="eyebrow">正在编辑</p>
+        <h1 class="editor__identity-title">{{ currentTitle }}</h1>
+        <p class="editor__identity-meta">
+          <span class="editor__chip">{{ currentSubject }}</span>
+          <span v-if="articleId" class="editor__chip">#{{ articleId }}</span>
+          <span v-if="currentPath" class="editor__chip editor__chip--path">{{ currentPath }}</span>
+          <span class="editor__chip" :class="currentDraft?.published ? 'is-live' : 'is-draft'">
+            {{ currentStatus }}
+          </span>
+        </p>
+      </div>
+      <label class="editor__field editor__field--picker">
+        <span>选择要编辑的课件</span>
+        <select :value="articleId ?? ''" @change="onPickArticle">
+          <option value="">— 从我的课件里选一篇 —</option>
+          <optgroup v-for="group in draftGroups" :key="group.subject" :label="group.subject">
+            <option v-for="draft in group.items" :key="draft.articleId" :value="draft.articleId">
+              {{ draft.title || `课件 ${draft.articleId}` }}{{ draft.published ? ' · 已发布' : '' }}
+            </option>
+          </optgroup>
+        </select>
+      </label>
+    </section>
+
     <div class="panel panel--tight editor__toolbar">
       <label class="editor__field">
         <span>科目</span>
@@ -105,7 +131,7 @@
       <div class="editor__main">
         <div class="panel panel--tight editor__pane">
           <div class="editor__pane-head">
-            <span>Markdown 源码{{ articleId ? ` · #${articleId}` : ' · 未保存' }}</span>
+            <span>Markdown 源码 · {{ currentTitle }}</span>
             <span v-if="dirty" class="editor__tag">未保存</span>
           </div>
           <textarea v-model="markdown" class="editor__code" spellcheck="false" @input="dirty = true" />
@@ -136,8 +162,11 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { coursewareGateway } from '@/gateways/coursewareGateway'
 import { showToast } from '@/utils/toast'
+
+const route = useRoute()
 
 const layouts = ref([])
 const templates = ref([])
@@ -154,6 +183,58 @@ const importReport = ref(null)
 const precheck = reactive({ checked: false, errors: [] })
 
 const previewHtml = computed(() => renderSections(markdown.value))
+
+/** 当前编辑对象：标题 / 科目 / ID / 发布态都从草稿摘要里取，避免只剩一个裸 ID。 */
+const currentDraft = computed(
+  () => drafts.value.find(draft => Number(draft.articleId) === Number(articleId.value)) || null
+)
+
+const currentTitle = computed(
+  () => currentDraft.value?.title || (articleId.value ? `课件 #${articleId.value}` : '新课件（未命名）')
+)
+
+const currentSubject = computed(() => currentDraft.value?.subject || subject.value || '未归类')
+
+const currentPath = computed(() => currentDraft.value?.logicalPath || '')
+
+const currentStatus = computed(() => {
+  if (!articleId.value) return '新草稿 · 尚未保存'
+  if (currentDraft.value?.published) return dirty.value ? '已发布 · 有未保存改动' : '已发布'
+  return dirty.value ? '草稿 · 有未保存改动' : '草稿 · 未发布'
+})
+
+/** 选择器按科目分组，跨科目也能直接跳着编辑。 */
+const draftGroups = computed(() => {
+  const groups = new Map()
+  for (const draft of [...drafts.value].sort((left, right) => {
+    const subjectOrder = String(left.subject || '').localeCompare(String(right.subject || ''), 'zh-Hans-CN')
+    if (subjectOrder !== 0) return subjectOrder
+    return String(left.title || '').localeCompare(String(right.title || ''), 'zh-Hans-CN')
+  })) {
+    const key = draft.subject || '未归类'
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(draft)
+  }
+  return [...groups.entries()].map(([subjectKey, items]) => ({ subject: subjectKey, items }))
+})
+
+function onPickArticle(event) {
+  const value = event.target.value
+  const target = drafts.value.find(draft => String(draft.articleId) === String(value))
+  if (!target) {
+    event.target.value = articleId.value ?? ''
+    return
+  }
+  if (Number(target.articleId) === Number(articleId.value)) return
+  openDraft(target).then((opened) => {
+    if (!opened) event.target.value = articleId.value ?? ''
+  })
+}
+
+function confirmDiscard() {
+  if (!dirty.value) return true
+  return window.confirm('当前课件有未保存的改动，切换后会丢失，继续切换吗？')
+}
 
 /** 大纲：按 `# ` 切 section，带布局标签与索引，供上移/下移。 */
 const outline = computed(() => splitSections(markdown.value))
@@ -263,6 +344,7 @@ async function loadDrafts() {
 }
 
 async function newDraft() {
+  if (!confirmDiscard()) return
   busy.value = true
   try {
     markdown.value = templateId.value
@@ -300,6 +382,7 @@ async function saveAsTemplate() {
 }
 
 async function openDraft(draft) {
+  if (!confirmDiscard()) return false
   busy.value = true
   try {
     const loaded = await coursewareGateway.getDraft(draft.articleId)
@@ -309,8 +392,10 @@ async function openDraft(draft) {
     dirty.value = false
     precheck.checked = false
     precheck.errors = []
+    return true
   } catch (error) {
     reportError(error)
+    return false
   } finally {
     busy.value = false
   }
@@ -450,6 +535,18 @@ onMounted(async () => {
     reportError(error)
   }
   await loadDrafts()
+  // 支持从概览页/链接直达某篇课件：?subject=高中化学&articleId=12
+  const querySubject = typeof route.query.subject === 'string' ? route.query.subject.trim() : ''
+  if (querySubject) subject.value = querySubject
+  const queryArticleId = Number(route.query.articleId)
+  if (Number.isFinite(queryArticleId) && queryArticleId > 0) {
+    const target = drafts.value.find(draft => Number(draft.articleId) === queryArticleId)
+    if (target) {
+      await openDraft(target)
+    } else {
+      showToast(`没有找到课件 #${queryArticleId}，可从上方选择器切换`, 'warning')
+    }
+  }
 })
 </script>
 
@@ -471,6 +568,67 @@ onMounted(async () => {
   font-size: 0.82rem;
   line-height: 1.6;
   color: var(--text-2);
+}
+
+.editor__identity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.editor__identity-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.editor__identity-title {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.editor__identity-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+
+.editor__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-2);
+  background: var(--paper-2);
+}
+
+.editor__chip--path {
+  border-style: dashed;
+  word-break: break-all;
+}
+
+.editor__chip.is-live {
+  border-color: #2f7a4d;
+  color: #2f7a4d;
+}
+
+.editor__chip.is-draft {
+  border-color: #b07d1f;
+  color: #b07d1f;
+}
+
+.editor__field--picker {
+  min-width: 260px;
+  flex: 0 1 320px;
 }
 
 .editor__toolbar,
