@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { coursewareGateway } from '../src/gateways/coursewareGateway.js'
-import { enrichWithStaticIndex } from '../src/utils/coursewareLibrary.js'
+import { enrichWithStaticIndex, trimStaleStatic } from '../src/utils/coursewareLibrary.js'
 import {
   normalizeCopyResult,
   normalizeCopySummary,
@@ -47,6 +47,21 @@ test('静态课件用 articles.json 补路径与系列，托管篇目保持原�
   assert.equal(legacy.logicalPath, '高中英语/口语课讲义/口语训练-1.md')
   assert.equal(hosted.logicalPath, '高中化学/原电池.md')
   assert.equal(unmatched.logicalPath, null)
+})
+
+test('静态目录里已删掉的静态课件不再列出来，托管篇目不受影响', () => {
+  const staticIndex = [
+    { id: 45, title: '口语训练-1', series: '高中英语', path: '高中英语/口语课讲义/口语训练-1.md' }
+  ]
+  const kept = trimStaleStatic([
+    { articleId: 45, hosted: false },
+    { articleId: 46, hosted: false },
+    { articleId: 47, hosted: false },
+    { articleId: 1001, hosted: true }
+  ], staticIndex)
+  assert.deepEqual(kept.map(item => item.articleId), [45, 1001])
+  // 目录为空时不做裁剪，避免接口异常把清单清空
+  assert.equal(trimStaleStatic([{ articleId: 46, hosted: false }], []).length, 1)
 })
 
 test('分享响应规整：丢弃缺 id 的行，布尔与 scope 归一', () => {

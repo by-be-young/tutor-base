@@ -27,6 +27,16 @@ export function enrichWithStaticIndex(list, staticIndex) {
 }
 
 /**
+ * 丢掉静态目录里已经没有的静态课件（讲义删并后，后端 catalog 还留着旧行）。
+ * 只处理 hosted=false；目录为空时不做判断，避免接口异常时把清单清空。
+ */
+export function trimStaleStatic(list, staticIndex) {
+  if (!staticIndex.length) return list
+  const known = new Set(staticIndex.map(row => Number(row.id)))
+  return list.filter(item => item.hosted !== false || known.has(Number(item.articleId)))
+}
+
+/**
  * 拉「我的课件」清单：先按静态目录同步一次 courseware_catalog，再取后端清单。
  * 同步失败不阻塞——后端已有的目录行仍然可用。
  */
@@ -38,6 +48,9 @@ export async function loadCoursewareLibrary() {
   } catch {
     // 目录同步失败（接口下线/网络异常）时继续读后端清单
   }
-  const articles = enrichWithStaticIndex(await coursewareGateway.listArticles(), staticIndex)
+  const articles = trimStaleStatic(
+    enrichWithStaticIndex(await coursewareGateway.listArticles(), staticIndex),
+    staticIndex
+  )
   return { staticIndex, articles }
 }

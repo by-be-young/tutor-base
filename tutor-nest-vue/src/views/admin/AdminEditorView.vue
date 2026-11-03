@@ -148,6 +148,9 @@
             <span v-else-if="precheck.checked" class="editor__tag is-ok">校验通过</span>
           </div>
           <div class="editor__preview" v-html="previewHtml" />
+          <p v-if="!previewHtml" class="editor__empty">
+            还没有正文。先在左侧选一篇课件，或用「新建草稿」按布局起稿。
+          </p>
           <ul v-if="precheck.errors.length" class="editor__errors">
             <li v-for="(error, index) in precheck.errors" :key="index">{{ error }}</li>
           </ul>
@@ -169,6 +172,7 @@ import { useRoute } from 'vue-router'
 import { coursewareGateway } from '@/gateways/coursewareGateway'
 import { fetchStaticArticle } from '@/utils/articleContent'
 import { loadCoursewareLibrary } from '@/utils/coursewareLibrary'
+import { renderCoursewarePreview } from '@/utils/coursewarePreview'
 import { showToast } from '@/utils/toast'
 
 const route = useRoute()
@@ -189,7 +193,8 @@ const importOverwrite = ref(false)
 const importReport = ref(null)
 const precheck = reactive({ checked: false, errors: [] })
 
-const previewHtml = computed(() => renderSections(markdown.value))
+// 预览按站点正文的渲染方式输出（marked + 章节/双栏/占位符），不显示原始 Markdown
+const previewHtml = computed(() => renderCoursewarePreview(markdown.value))
 
 /** 当前编辑对象：标题 / 科目 / ID / 发布态都从「我的课件」清单里取，避免只剩一个裸 ID。 */
 const currentArticle = computed(
@@ -314,37 +319,6 @@ function moveSection(index, delta) {
   }
   markdown.value = rebuilt.join('\n')
   dirty.value = true
-}
-
-/** 按 `# ` 切 section，把布局指令显示成小标签；题目占位符显示成卡片占位。 */
-function renderSections(source) {
-  const escape = (text) => String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-  const sections = []
-  let current = { layout: null, lines: [] }
-  for (const line of (source || '').split('\n')) {
-    const directive = line.match(/<!--\s*@layout:\s*([A-Za-z0-9_-]+)\s*-->/)
-    if (directive) {
-      if (current.lines.length || current.layout) sections.push(current)
-      current = { layout: directive[1], lines: [] }
-      continue
-    }
-    current.lines.push(line)
-  }
-  if (current.lines.length || current.layout) sections.push(current)
-
-  return sections
-    .map(section => {
-      const body = section.lines
-        .join('\n')
-        .replace(/【题干\s*(\d+)\s*】/g, '<mark>题干$1</mark>')
-        .replace(/【@(\d*)】/g, '<span class="slot">答题卡</span>')
-      const label = section.layout ? `<div class="layout">布局 ${section.layout}</div>` : ''
-      return `<section>${label}<pre>${escape(body)}</pre></section>`
-    })
-    .join('')
 }
 
 function reportError(error) {
@@ -820,10 +794,84 @@ onMounted(async () => {
   color: var(--text-2);
 }
 
-.editor__preview :deep(pre) {
-  white-space: pre-wrap;
+.editor__preview :deep(.preview-section) {
+  margin-bottom: 18px;
+}
+
+.editor__preview :deep(.preview-section h1) {
+  font-size: 1.05rem;
+  line-height: 1.4;
+  margin: 0 0 8px;
+  color: var(--ink);
+}
+
+.editor__preview :deep(.preview-section h2) {
+  font-size: 0.95rem;
+  margin: 14px 0 6px;
+  color: var(--ink);
+}
+
+.editor__preview :deep(.preview-section h3) {
+  font-size: 0.88rem;
+  margin: 10px 0 4px;
+  color: var(--ink);
+}
+
+.editor__preview :deep(p) {
+  margin: 0 0 10px;
+  white-space: normal;
   word-break: break-word;
+}
+
+.editor__preview :deep(strong) {
+  color: var(--ink);
+}
+
+.editor__preview :deep(ul),
+.editor__preview :deep(ol) {
+  margin: 0 0 10px;
+  padding-left: 18px;
+}
+
+.editor__preview :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
   margin: 0 0 12px;
+  font-size: 0.78rem;
+}
+
+.editor__preview :deep(th),
+.editor__preview :deep(td) {
+  border: 1px solid var(--line, #d8d8d8);
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.editor__preview :deep(th) {
+  background: var(--paper-2);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.editor__preview :deep(.preview-columns) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.editor__preview :deep(.preview-side) {
+  border-left: 1.5px dashed var(--ink);
+  padding-left: 10px;
+}
+
+.editor__preview :deep(.preview-stem) {
+  background: var(--lime);
+  color: var(--ink);
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.74rem;
 }
 
 .editor__preview :deep(.layout) {
