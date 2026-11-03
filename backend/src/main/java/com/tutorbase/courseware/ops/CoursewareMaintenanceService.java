@@ -27,6 +27,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CoursewareMaintenanceService {
 
+    /** 容量水位阈值：达到即视为需要提醒/告警。 */
+    private static final double WARN_RATIO = 0.8;
+    private static final double CRITICAL_RATIO = 0.95;
+
     private final JdbcClient jdbc;
     private final CoursewareStorage storage;
     private final CoursewareProperties properties;
@@ -47,8 +51,17 @@ public class CoursewareMaintenanceService {
         orphans.removeAll(referenced);
         long orphanBytes = orphans.stream().mapToLong(hash -> blobs.getOrDefault(hash, 0L)).sum();
         long quota = properties.quotaBytes();
+        double ratio = quota > 0 ? (double) totalBytes / quota : 0d;
         return new Usage(teacherId, blobs.size(), totalBytes, referenced.size(), orphans.size(),
-                orphanBytes, quota, quota > 0 && totalBytes > quota);
+                orphanBytes, quota, quota > 0 && totalBytes > quota, ratio, level(ratio));
+    }
+
+    /** 水位档位：`ok` / `warn`（≥80%） / `critical`（≥95%）。 */
+    static String level(double ratio) {
+        if (ratio >= CRITICAL_RATIO) {
+            return "critical";
+        }
+        return ratio >= WARN_RATIO ? "warn" : "ok";
     }
 
     /** 发布/获取/导入前的配额检查；超限抛 413。 */
@@ -173,8 +186,13 @@ public class CoursewareMaintenanceService {
         long totalBytes = usage.stream().mapToLong(TeacherUsage::totalBytes).sum();
         long orphanBytes = usage.stream().mapToLong(TeacherUsage::orphanBytes).sum();
         int overQuota = (int) usage.stream().filter(TeacherUsage::overQuota).count();
+        int teacherCount = usage.size();
+        long quotaPerTeacher = properties.quotaBytes();
+        long capacityBytes = quotaPerTeacher > 0 ? quotaPerTeacher * Math.max(1, teacherCount) : 0;
+        double capacityRatio = capacityBytes > 0 ? (double) totalBytes / capacityBytes : 0d;
         return new Metrics(releases, archivedReleases, articles, activeShares, copies, drafts, templates,
-                unreadNotifications, pendingUpdates, totalBytes, orphanBytes, overQuota);
+                unreadNotifications, pendingUpdates, totalBytes, orphanBytes, overQuota,
+                teacherCount, quotaPerTeacher, capacityBytes, capacityRatio, level(capacityRatio));
     }
 
     /**
@@ -223,7 +241,12 @@ public class CoursewareMaintenanceService {
             int pendingUpdates,
             long totalBlobBytes,
             long orphanBlobBytes,
-            int teachersOverQuota) {
+            int teachersOverQuota,
+            int teacherCount,
+            long quotaPerTeacherBytes,
+            long capacityBytes,
+            double capacityUsageRatio,
+            String capacityLevel) {
     }
 
     /** 归档结果。 */
@@ -239,7 +262,9 @@ public class CoursewareMaintenanceService {
             int orphanCount,
             long orphanBytes,
             long quotaBytes,
-            boolean overQuota) {
+            boolean overQuota,
+            double usageRatio,
+            String level) {
     }
 
     /** GC 结果。 */

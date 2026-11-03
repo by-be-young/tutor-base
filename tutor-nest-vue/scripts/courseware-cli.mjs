@@ -3,6 +3,7 @@
  * 课件 Git 工作区 CLI。
  *
  * 仓库里只有 Markdown，正文与版本仍托管在服务端：
+ *   node scripts/courseware-cli.mjs doctor                            # 自检环境与会话
  *   node scripts/courseware-cli.mjs pull --subject 高中化学 --dir ./courseware
  *   node scripts/courseware-cli.mjs status --subject 高中化学 --dir ./courseware
  *   node scripts/courseware-cli.mjs push --subject 高中化学 --dir ./courseware [--dry-run]
@@ -239,6 +240,57 @@ async function push(options) {
   console.log(`✓ 已发布 v${result.version}：共 ${result.articleCount} 篇，变更 ${result.changedCount}，删除 ${result.deletedCount}`)
 }
 
+async function doctor(options) {
+  const checks = []
+  const nodeMajor = Number(process.versions.node.split('.')[0])
+  checks.push({
+    ok: nodeMajor >= 18,
+    label: `Node.js ${process.versions.node}`,
+    hint: '需要 18 或更高版本：https://nodejs.org/'
+  })
+  const base = apiBase()
+  checks.push({ ok: true, label: `接口地址 ${base}`, hint: '' })
+  const cookie = process.env.TUTOR_SESSION
+  checks.push({
+    ok: Boolean(cookie),
+    label: cookie ? '已设置 TUTOR_SESSION' : '未设置 TUTOR_SESSION',
+    hint: '登录后从浏览器开发者工具复制 TUTOR_SESSION cookie 值'
+  })
+  if (cookie) {
+    try {
+      const health = await fetch(`${base}/system/status`, { headers: { Accept: 'application/json' } })
+      checks.push({ ok: health.ok, label: `接口连通（HTTP ${health.status}）`, hint: '检查 TUTOR_API_BASE 与网络' })
+      if (health.ok) {
+        const manifests = await call('/courseware/manifests')
+        const count = Array.isArray(manifests?.items) ? manifests.items.length : 0
+        checks.push({
+          ok: true,
+          label: `会话有效，可见 ${count} 个发布科目`,
+          hint: '会话过期请重新登录并更新 cookie'
+        })
+      }
+    } catch (error) {
+      checks.push({ ok: false, label: `会话/连通性检查失败：${error.message}`, hint: '重新登录后更新 TUTOR_SESSION' })
+    }
+  }
+  if (options.subject) {
+    const dir = resolve(options.dir || './courseware')
+    checks.push({
+      ok: existsSync(dir),
+      label: existsSync(dir) ? `工作区存在 ${dir}` : `工作区尚未创建 ${dir}（先执行 pull）`,
+      hint: 'node scripts/courseware-cli.mjs pull --subject <科目>'
+    })
+  }
+  for (const check of checks) {
+    console.log(`${check.ok ? '✓' : '✗'} ${check.label}${check.ok || !check.hint ? '' : `\n    → ${check.hint}`}`)
+  }
+  if (checks.some(check => !check.ok)) {
+    console.error('\n有检查未通过，按上面的提示处理后重试。')
+    process.exit(1)
+  }
+  console.log('\n✓ 环境就绪：可以执行 pull / status / push 了。')
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2))
   switch (options._) {
@@ -248,8 +300,11 @@ async function main() {
       return status(options)
     case 'push':
       return push(options)
+    case 'doctor':
+      return doctor(options)
     default:
       console.log(`用法：
+  node scripts/courseware-cli.mjs doctor                            # 自检：Node / 接口 / 会话 / 工作区
   node scripts/courseware-cli.mjs pull   --subject <科目> [--dir ./courseware]
   node scripts/courseware-cli.mjs status --subject <科目> [--dir ./courseware]
   node scripts/courseware-cli.mjs push   --subject <科目> [--dir ./courseware] [--dry-run]

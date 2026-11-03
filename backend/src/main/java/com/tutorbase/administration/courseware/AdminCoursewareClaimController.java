@@ -50,6 +50,7 @@ public class AdminCoursewareClaimController {
 
     @PostMapping("/courseware-catalog/sync")
     SyncCatalogResponse syncCatalog(@Valid @RequestBody SyncCatalogRequest request) {
+        requireLegacyClaimsEnabled();
         List<CoursewareClaimAdministration.CatalogEntry> entries = request.items().stream()
                 .map(item -> new CoursewareClaimAdministration.CatalogEntry(
                         item.articleId(),

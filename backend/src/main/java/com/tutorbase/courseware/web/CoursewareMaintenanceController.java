@@ -104,12 +104,14 @@ public class CoursewareMaintenanceController {
             int orphanCount,
             long orphanBytes,
             long quotaBytes,
-            boolean overQuota) {
+            boolean overQuota,
+            double usageRatio,
+            String level) {
 
         static UsageResponse from(CoursewareMaintenanceService.Usage usage) {
             return new UsageResponse(usage.teacherId(), usage.blobCount(), usage.totalBytes(),
                     usage.referencedCount(), usage.orphanCount(), usage.orphanBytes(),
-                    usage.quotaBytes(), usage.overQuota());
+                    usage.quotaBytes(), usage.overQuota(), usage.usageRatio(), usage.level());
         }
     }
 
@@ -147,13 +149,20 @@ public class CoursewareMaintenanceController {
             int pendingUpdates,
             long totalBlobBytes,
             long orphanBlobBytes,
-            int teachersOverQuota) {
+            int teachersOverQuota,
+            int teacherCount,
+            long quotaPerTeacherBytes,
+            long capacityBytes,
+            double capacityUsageRatio,
+            String capacityLevel) {
 
         static MetricsResponse from(CoursewareMaintenanceService.Metrics metrics) {
             return new MetricsResponse(metrics.publishedReleases(), metrics.archivedReleases(),
                     metrics.articles(), metrics.activeShares(), metrics.activeCopies(), metrics.drafts(),
                     metrics.activeTemplates(), metrics.unreadNotifications(), metrics.pendingUpdates(),
-                    metrics.totalBlobBytes(), metrics.orphanBlobBytes(), metrics.teachersOverQuota());
+                    metrics.totalBlobBytes(), metrics.orphanBlobBytes(), metrics.teachersOverQuota(),
+                    metrics.teacherCount(), metrics.quotaPerTeacherBytes(), metrics.capacityBytes(),
+                    metrics.capacityUsageRatio(), metrics.capacityLevel());
         }
     }
 

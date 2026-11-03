@@ -182,10 +182,11 @@ class AdminAnalyticsService {
 
     private CoursewareStats coursewareStats(long administratorAccountId) {
         String visiblePredicate = coursewareScope.visibleArticlePredicate("catalog.article_id");
+        // 用 (article_id, subject) 去重：V26 换主键后同一 legacy id 可能出现在多位老师的目录里。
         VisibleCourseware visible = jdbc.sql("""
                 SELECT count(*) AS visible,
                        count(DISTINCT catalog.subject) AS subjects
-                FROM public.courseware_catalog AS catalog
+                FROM (SELECT DISTINCT article_id, subject FROM public.courseware_catalog) AS catalog
                 WHERE %s
                 """.formatted(visiblePredicate))
                 .param("administratorAccountId", administratorAccountId)
@@ -195,7 +196,7 @@ class AdminAnalyticsService {
                 .single();
         long unclaimed = jdbc.sql("""
                 SELECT count(*)
-                FROM public.courseware_catalog AS catalog
+                FROM (SELECT DISTINCT article_id, subject FROM public.courseware_catalog) AS catalog
                 WHERE NOT EXISTS (
                           SELECT 1
                           FROM public.admin_subject_claim AS subject_claim
@@ -334,6 +335,8 @@ class AdminAnalyticsService {
                  AND answer.blog_id = ANY (learner.permissions::bigint[])
                 JOIN public.courseware_catalog AS catalog
                   ON catalog.article_id = answer.blog_id
+                 AND (answer.teacher_account_id IS NULL
+                      OR catalog.teacher_account_id = answer.teacher_account_id)
                 LEFT JOIN public.article_question_submissions AS submission
                   ON submission.blog_id = answer.blog_id
                  AND submission.question_id = answer.question_id

@@ -792,7 +792,8 @@ P4 把写入补齐：
 | 项 | 实现 |
 | --- | --- |
 | 认领写入下线开关 | `tutor.courseware.legacy-claims-enabled`（默认 `true`）：设 `false` 后 `PUT/DELETE /admin/courseware-claims/**` 与放弃接口返回 **410 `courseware_claims_retired`**，读接口（`GET /courseware-claims`、`/catalog`）保留，旧页面不至于整页报错 |
-| 平滑切换 | 一旦线上确认没有认领入口在用，把环境变量 `TUTOR_COURSEWARE_LEGACY_CLAIMS` 设为 `false` 即可；`CoursewareScope` 仍按 `courseware_catalog` 读，不影响批阅与授权 |
+| 平滑切换 | 一旦线上确认没有认领入口在用，把环境变量 `TUTOR_COURSEWARE_LEGACY_CLAIMS` 设为 `false` 即可；`POST /admin/courseware-catalog/sync` 同样返回 410（属于认领写入链路） |
+| 可见范围去依赖 | `CoursewareScope` 增加「发布归属」判定：当前生效版本（`course_release_head`）+ `course_article.legacy_article_id` 属于该管理员即可见。旧认领分支（科目/单篇认领、排除、放弃）保留直到认领链路删除；两条分支取并集，因此 V26 换主键后不会因为旧表外键被删而失去可见性 |
 | 多老师分组 | `blogStore` 新增 `teacherGroups` / `multipleTeachers`（纯函数 `groupByTeacher`），按后端顺序给出「老师 → 科目 → 课件」，供首页与目录区分归属 |
 | 「我的课件」入口 | 新增 `GET /admin/courseware/overview`（每科目版本、篇数、草稿、被获取、分享数与待处理汇总）与 `/admin/courseware` 页面；管理端导航「课件」指向新页，旧认领页更名「旧版认领」并在新页里标注即将下线 |
 
@@ -810,9 +811,20 @@ P4 把写入补齐：
 | 补充能力 | 实现 |
 | --- | --- |
 | 全站指标 | `GET /admin/courseware/maintenance/metrics`（仅超管）：发布/归档版本数、篇目、生效分享、获取、草稿、模板、未读提醒、待处理更新、blob 总字节、孤儿字节、超配额老师数 |
+| 容量水位 | 用量与指标都带 `usageRatio`/`level`（`ok`、`warn ≥80%`、`critical ≥95%`）；指标另给 `teacherCount`、`quotaPerTeacherBytes`、`capacityBytes`、`capacityUsageRatio`、`capacityLevel`，即「配额 × 老师数」的全站口径，达到 80% 即可直接告警 |
 | 归档 | `POST /admin/courseware/maintenance/archive?teacherId=`（仅超管）：`course_release.status='archived'` + 清空版本指针，正文与历史版本保留、学员历史仍可查，审计动作 `archive`（V25 扩展 `course_operation_log_action_check`） |
 
-**P5 剩余**：Prometheus 导出（当前用 `/maintenance/metrics` 直读）、导出包过期清理、跨老师共享 blob 的物理去重（当前按老师隔离）。
+前端：`/admin/courseware` 概览页顶部显示「存储空间」进度条 + 水位标签（余量充足 / 接近上限 / 容量告急），数据来自 `GET /maintenance/usage`；加载失败只降级该卡片，不影响概览。
+
+### 8.13 Git 零基础向导（2026-10-31）
+
+| 能力 | 实现 |
+| --- | --- |
+| `doctor` 自检 | `node scripts/courseware-cli.mjs doctor`：检查 Node 版本、`TUTOR_API_BASE`、`TUTOR_SESSION`、接口连通性（`GET /system/status`）、会话是否有效（`GET /courseware/manifests`）、工作区目录是否存在；未通过时给出中文原因与修复命令 |
+| 页面内引导 | `/admin/editor` 侧栏「Git 工作区（可选）」四步：装 Node/Git → 填 `TUTOR_SESSION` → `doctor` → `pull/push`；命令按当前科目生成，可一键复制，不阻塞日常网页编辑 |
+| 失败语义 | `push` 的 409 表示服务端版本已变（需先 `pull`），401 表示会话失效（重新登录取 cookie）；`pull` 不覆盖本地已改但未推送的文件 |
+
+**P5 剩余**：Prometheus 导出（当前用 `/maintenance/metrics` 直读）、跨老师共享 blob 的物理去重（当前按老师隔离）。导出 zip 是流式生成、不落盘，因此不需要「导出包过期清理」。
 
 ---
 
@@ -995,6 +1007,11 @@ ALTER TABLE public.courseware_catalog
 - 建议把这次迁移拆成两个 Flyway 脚本：`V21` 加列/回填，`V22` 换主键/建新表，便于失败回退（Flyway 版本号只允许数字与点/下划线，不要用 `V21a` 这类字母后缀）。
 - 同步提供 `database/reconciliation/2026-11-xx_teacher_scoped_courseware.sql`（幂等版），与现有仓库惯例一致。
 
+**执行状态（2026-10-31）**：加列/回填已由 `V21` 完成；换主键拆到 **V26**
+（`database/planned/V26__teacher_scoped_courseware_keys.sql` + `.rollback.sql`），已在临时
+PostgreSQL 容器演练通过（正向/回滚/重复执行/断言拦截均实测），**尚未纳入 Flyway**。
+执行前置条件、验收清单与回滚流程见 [`docs/courseware-v26-migration-runbook.md`](./courseware-v26-migration-runbook.md)。
+
 ### 11.3 存量数据映射
 
 | 存量 | 迁移后 |
@@ -1011,6 +1028,9 @@ ALTER TABLE public.courseware_catalog
 
 - 迁移前：`pg_dump` 全库 + 对象存储清单（hash 列表）。
 - 迁移脚本幂等，可重复执行。
+- **V26（换主键）单独提供回滚脚本**：`database/planned/V26__teacher_scoped_courseware_keys.rollback.sql`，
+  只在该迁移之前不存在"跨老师重复 `article_id`"时能成功，脚本会先断言。详见
+  [`docs/courseware-v26-migration-runbook.md`](./courseware-v26-migration-runbook.md)。
 - 应用侧保留双读开关（`COURSEWARE_SOURCE=static|storage`），出问题可切回静态索引。
 - 内容层：blob 内容寻址，不会因迁移丢失；旧 `public/articles` 在一个发布周期内保留在仓库中作为兜底。
 
