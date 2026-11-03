@@ -1,6 +1,7 @@
 package com.tutorbase.courseware.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -234,6 +235,77 @@ class CoursewareEditorHttpContractTest {
                 .andExpect(jsonPath("$[0].subject").value("高中英语"))
                 .andExpect(jsonPath("$[0].title").isNotEmpty())
                 .andExpect(jsonPath("$[0].logicalPath").isNotEmpty());
+    }
+
+    @Test
+    void legacyStaticCoursewareIsListedAndPublishesBackToItsOwnArticle() throws Exception {
+        long alphaId = jdbc.queryForObject(
+                "SELECT id FROM public.account WHERE username = 'alpha'", Long.class);
+        long legacyId = 901L;
+        String subject = "高中日语";
+        jdbc.update("DELETE FROM public.course_draft WHERE teacher_account_id = ? AND article_id = ?",
+                alphaId, legacyId);
+        // 口语训练-1 这类旧静态课件：只在 courseware_catalog 里有行，从未发布过
+        jdbc.update("INSERT INTO public.courseware_catalog (article_id, subject, title) VALUES (?, ?, ?)",
+                legacyId, subject, "口语训练-1");
+        jdbc.update("INSERT INTO public.admin_subject_claim (admin_account_id, subject) VALUES (?, ?)",
+                alphaId, subject);
+
+        try {
+            Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+            String csrf = csrf(cookie).csrfToken();
+
+            mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.articleId == 901)].title", contains("口语训练-1")))
+                    .andExpect(jsonPath("$[?(@.articleId == 901)].subject", contains(subject)))
+                    .andExpect(jsonPath("$[?(@.articleId == 901)].published", contains(true)))
+                    .andExpect(jsonPath("$[?(@.articleId == 901)].hosted", contains(false)))
+                    .andExpect(jsonPath("$[?(@.articleId == 901)].hasDraft", contains(false)));
+
+            String skeleton = objectMapper.readTree(mockMvc.perform(
+                            get("/api/v1/admin/courseware/layouts/A/skeleton")
+                                    .param("title", "口语训练-1").cookie(cookie))
+                    .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+
+            mockMvc.perform(put("/api/v1/admin/courseware/drafts/{articleId}", legacyId)
+                            .cookie(cookie)
+                            .header("X-CSRF-TOKEN", csrf)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("markdown", skeleton))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.hasDraft").value(true));
+
+            mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.articleId == 901)].hasDraft", contains(true)));
+
+            mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")
+                            .cookie(cookie)
+                            .header("X-CSRF-TOKEN", csrf)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("subject", subject))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.articleCount").value(1));
+
+            // 发布后仍挂回 legacy 篇目：学员端看到的是原篇目的新版本，而不是凭空多出一篇
+            Long publishedLegacyId = jdbc.queryForObject("""
+                    SELECT ca.legacy_article_id
+                    FROM public.course_article AS ca
+                    JOIN public.course_release_head AS h
+                      ON h.release_id = ca.release_id AND h.teacher_account_id = ca.teacher_account_id
+                    WHERE ca.teacher_account_id = ? AND ca.article_id = ?
+                    """, Long.class, alphaId, legacyId);
+            assertThat(publishedLegacyId).isEqualTo(legacyId);
+        } finally {
+            jdbc.update("DELETE FROM public.course_release WHERE teacher_account_id = ? AND subject = ?",
+                    alphaId, subject);
+            jdbc.update("DELETE FROM public.course_draft WHERE teacher_account_id = ? AND article_id = ?",
+                    alphaId, legacyId);
+            jdbc.update("DELETE FROM public.admin_subject_claim WHERE admin_account_id = ? AND subject = ?",
+                    alphaId, subject);
+            jdbc.update("DELETE FROM public.courseware_catalog WHERE article_id = ?", legacyId);
+        }
     }
 
     @Test

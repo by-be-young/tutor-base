@@ -2027,10 +2027,11 @@ paths:
   /admin/courseware/articles:
     get:
       operationId: listCoursewareArticles
-      summary: 我的课件清单（已发布篇目 + 未发布草稿）
+      summary: 我的课件清单（已发布篇目 + 未发布草稿 + 站内静态课件）
       description: |
-        科目目录与在线编辑器选择器共用此清单。包含当前发布版本里的全部篇目，
-        以及尚未发布的草稿；仅有草稿、还没发布过的篇目 subject 为空。
+        科目目录与在线编辑器选择器共用此清单。包含当前发布版本里的全部篇目、
+        尚未发布的草稿，以及当前管理员可见、但从未发布过的站内静态课件
+        （`hosted=false`，articleId 即旧静态编号）。仅有草稿、还没发布过的篇目 subject 为空。
       security:
         - sessionCookie: []
       responses:
@@ -4473,7 +4474,7 @@ components:
     CoursewareArticleSummary:
       type: object
       additionalProperties: false
-      required: [articleId, published, hasDraft, size]
+      required: [articleId, published, hasDraft, size, hosted]
       properties:
         articleId:
           type: integer
@@ -4481,7 +4482,7 @@ components:
         legacyArticleId:
           type: [integer, 'null']
           format: int64
-          description: 旧静态课件编号；仅草稿时为空。
+          description: 旧静态课件编号；站内静态课件的 articleId 即等于该值。
         title:
           type: [string, 'null']
         subject:
@@ -4502,6 +4503,11 @@ components:
           type: [string, 'null']
           format: date-time
           description: 草稿最后保存时间；无草稿时为空。
+        hosted:
+          type: boolean
+          description: >-
+            true = 正文已在服务端托管（当前发布版本或草稿）；false = 站内静态课件，
+            正文仍在 `public/articles` 下，未发布过，编辑时由前端读静态文件，保存后才落成在线草稿。
     CoursewarePrecheck:
       type: object
       additionalProperties: false

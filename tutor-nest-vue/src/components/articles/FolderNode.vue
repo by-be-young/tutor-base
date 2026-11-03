@@ -39,8 +39,8 @@
     <div v-show="isExpanded" class="tree-children">
       <template v-for="child in node.children" :key="child.isFile ? `file-${child.blogId}` : `dir-${child.name}`">
         <FolderNode v-if="!child.isFile" :node="child" :depth="depth + 1" :status-map="statusMap" :accent="accent"
-          :expand-token="expandToken" :expand-to="expandTo" @file-click="$emit('file-click', $event)" />
-        <FileNode v-else :node="child" :depth="depth + 1" :status-map="statusMap" :accent="accent"
+          :mode="mode" :expand-token="expandToken" :expand-to="expandTo" @file-click="$emit('file-click', $event)" />
+        <FileNode v-else :node="child" :depth="depth + 1" :status-map="statusMap" :accent="accent" :mode="mode"
           @click="$emit('file-click', child.blogId)" />
       </template>
     </div>
@@ -77,6 +77,11 @@ const props = defineProps({
   expandTo: {
     type: Boolean,
     default: false
+  },
+  /** learner = 学员端目录；admin = 管理端课件目录（叶子行显示状态与路径） */
+  mode: {
+    type: String,
+    default: 'learner'
   }
 })
 

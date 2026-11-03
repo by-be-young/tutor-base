@@ -15,6 +15,19 @@ export async function fetchStaticArticle(path) {
   }
 }
 
+/** 静态目录索引 `data/articles.json`（`id/title/series/date/path`），用于补齐旧静态课件的路径与系列。 */
+export async function fetchStaticIndex() {
+  const baseUrl = import.meta.env?.BASE_URL || ''
+  try {
+    const response = await fetch(`${baseUrl}data/articles.json`)
+    if (!response.ok) return []
+    const data = await response.json()
+    return Array.isArray(data) ? data : []
+  } catch {
+    return []
+  }
+}
+
 export async function loadArticleMarkdown(blog) {
   if (!blog) return null
   if (blog.teacherId != null && blog.teacherArticleId != null) {

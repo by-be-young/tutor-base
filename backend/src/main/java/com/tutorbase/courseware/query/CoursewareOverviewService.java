@@ -17,9 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class CoursewareOverviewService {
 
     private final JdbcClient jdbc;
+    private final com.tutorbase.administration.courseware.CoursewareScope scope;
 
-    CoursewareOverviewService(JdbcClient jdbc) {
+    CoursewareOverviewService(JdbcClient jdbc, com.tutorbase.administration.courseware.CoursewareScope scope) {
         this.jdbc = jdbc;
+        this.scope = scope;
     }
 
     @Transactional(readOnly = true)
@@ -147,7 +149,54 @@ public class CoursewareOverviewService {
                         true,
                         rs.getBoolean("has_draft"),
                         rs.getInt("size"),
-                        toInstant(rs, "draft_updated_at")))
+                        toInstant(rs, "draft_updated_at"),
+                        true))
+                .list();
+
+        // 旧静态课件：正文仍在 public/articles 下，从未走过发布，因此不在 course_release_head 里。
+        // 它们的身份是 courseware_catalog 的 article_id（= legacy_article_id），本地固定 id 可直接当
+        // 草稿主键，编辑后发布即可带上 legacy 映射，学员端仍按原篇目看到这份内容。
+        // 可见性两条路：旧的学科/单篇认领范围，或本管理员已经发布过同一科目（V26 之后没有认领也能看到）。
+        List<ArticleSummary> legacy = jdbc.sql("""
+                SELECT c.article_id, c.subject, c.title,
+                       d.markdown IS NOT NULL AS has_draft,
+                       COALESCE(length(d.markdown), 0) AS size,
+                       d.updated_at AS draft_updated_at
+                FROM public.courseware_catalog AS c
+                LEFT JOIN public.course_draft AS d
+                  ON d.teacher_account_id = :teacherId
+                 AND d.article_id = c.article_id
+                WHERE (%s
+                       OR EXISTS (
+                           SELECT 1 FROM public.course_release_head AS sub_head
+                           WHERE sub_head.teacher_account_id = :teacherId
+                             AND sub_head.subject = c.subject
+                       ))
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM public.course_release_head AS h
+                      JOIN public.course_article AS ca
+                        ON ca.release_id = h.release_id
+                       AND ca.teacher_account_id = h.teacher_account_id
+                      WHERE h.teacher_account_id = :teacherId
+                        AND ca.legacy_article_id = c.article_id
+                  )
+                ORDER BY c.subject, c.article_id
+                """.formatted(scope.visibleArticlePredicate("c.article_id")))
+                .param("teacherId", teacherId)
+                .param("administratorAccountId", teacherId)
+                .query((rs, rowNum) -> new ArticleSummary(
+                        rs.getLong("article_id"),
+                        rs.getLong("article_id"),
+                        rs.getString("title"),
+                        rs.getString("subject"),
+                        null,
+                        null,
+                        true,
+                        rs.getBoolean("has_draft"),
+                        rs.getInt("size"),
+                        toInstant(rs, "draft_updated_at"),
+                        false))
                 .list();
 
         List<ArticleSummary> drafts = jdbc.sql("""
@@ -163,6 +212,10 @@ public class CoursewareOverviewService {
                       WHERE h.teacher_account_id = d.teacher_account_id
                         AND ca.article_id = d.article_id
                   )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM public.courseware_catalog AS cc
+                      WHERE cc.article_id = d.article_id
+                  )
                 ORDER BY d.updated_at DESC
                 """)
                 .param("teacherId", teacherId)
@@ -176,13 +229,12 @@ public class CoursewareOverviewService {
                         false,
                         true,
                         rs.getString("markdown").length(),
-                        toInstant(rs, "updated_at")))
+                        toInstant(rs, "updated_at"),
+                        true))
                 .list();
 
-        if (drafts.isEmpty()) {
-            return published;
-        }
         List<ArticleSummary> merged = new java.util.ArrayList<>(published);
+        merged.addAll(legacy);
         merged.addAll(drafts);
         return merged;
     }
@@ -215,7 +267,9 @@ public class CoursewareOverviewService {
             boolean published,
             boolean hasDraft,
             int size,
-            Instant updatedAt) {
+            Instant updatedAt,
+            /** false = 旧静态课件：正文仍在 public/articles 下，编辑需先取静态文件再存成草稿。 */
+            boolean hosted) {
     }
 
     /** 概览。 */

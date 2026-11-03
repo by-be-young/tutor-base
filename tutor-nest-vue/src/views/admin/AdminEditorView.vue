@@ -20,6 +20,9 @@
             {{ currentStatus }}
           </span>
         </p>
+        <p v-if="currentArticle && currentArticle.hosted === false" class="editor__identity-hint">
+          站内静态课件：正文在 <code>public/articles</code> 下。保存会生成在线草稿，发布后仍按原篇目生效。
+        </p>
       </div>
       <label class="editor__field editor__field--picker">
         <span>选择要编辑的课件</span>
@@ -27,7 +30,7 @@
           <option value="">— 从我的课件里选一篇 —</option>
           <optgroup v-for="group in articleGroups" :key="group.subject" :label="group.subject">
             <option v-for="item in group.items" :key="item.articleId" :value="item.articleId">
-              {{ item.title || `课件 ${item.articleId}` }}{{ item.published ? ' · 已发布' : ' · 草稿' }}
+              {{ item.title || `课件 ${item.articleId}` }}{{ item.hosted === false ? ' · 静态课件' : item.published ? ' · 已发布' : ' · 草稿' }}
             </option>
           </optgroup>
         </select>
@@ -164,6 +167,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { coursewareGateway } from '@/gateways/coursewareGateway'
+import { fetchStaticArticle } from '@/utils/articleContent'
+import { loadCoursewareLibrary } from '@/utils/coursewareLibrary'
 import { showToast } from '@/utils/toast'
 
 const route = useRoute()
@@ -172,7 +177,7 @@ const layouts = ref([])
 const templates = ref([])
 const templateId = ref(null)
 const drafts = ref([])
-// 「我的课件」清单：已发布篇目 + 尚未发布的草稿，作为选择器的唯一数据源
+// 「我的课件」清单：已发布篇目 + 尚未发布的草稿 + 站内静态课件，作为选择器的唯一数据源
 const articles = ref([])
 const articleId = ref(null)
 const subject = ref('')
@@ -201,6 +206,11 @@ const currentPath = computed(() => currentArticle.value?.logicalPath || '')
 
 const currentStatus = computed(() => {
   if (!articleId.value) return '新草稿 · 尚未保存'
+  const current = currentArticle.value
+  if (current && current.hosted === false) {
+    if (dirty.value) return '静态课件 · 有未保存改动'
+    return current.hasDraft ? '静态课件 · 已有草稿' : '静态课件 · 已上线'
+  }
   const published = currentArticle.value?.published
   if (published) return dirty.value ? '已发布 · 有未保存改动' : '已发布'
   return dirty.value ? '草稿 · 有未保存改动' : '草稿 · 未发布'
@@ -351,7 +361,8 @@ async function loadDrafts() {
 
 async function loadArticles() {
   try {
-    articles.value = await coursewareGateway.listArticles()
+    const { articles: list } = await loadCoursewareLibrary()
+    articles.value = list
   } catch (error) {
     reportError(error)
   }
@@ -399,9 +410,18 @@ async function openDraft(draft) {
   if (!confirmDiscard()) return false
   busy.value = true
   try {
-    const loaded = await coursewareGateway.getDraft(draft.articleId)
-    articleId.value = loaded.articleId
-    markdown.value = loaded.markdown
+    let body
+    if (draft.hosted === false && !draft.hasDraft) {
+      // 站内静态课件还没托管过：直接从 public/articles 读正文，保存时才落成在线草稿
+      body = await fetchStaticArticle(draft.logicalPath)
+      if (body == null) {
+        throw new Error(`取不到这篇静态课件的正文：${draft.logicalPath || draft.articleId}`)
+      }
+    } else {
+      body = (await coursewareGateway.getDraft(draft.articleId)).markdown
+    }
+    articleId.value = draft.articleId
+    markdown.value = body
     if (draft.subject) subject.value = draft.subject
     dirty.value = false
     precheck.checked = false
@@ -611,6 +631,17 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 6px;
   margin: 0;
+}
+
+.editor__identity-hint {
+  margin: 2px 0 0;
+  font-size: 0.72rem;
+  color: var(--text-2);
+}
+
+.editor__identity-hint code {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
 }
 
 .editor__chip {

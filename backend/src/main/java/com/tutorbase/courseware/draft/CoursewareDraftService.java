@@ -218,12 +218,26 @@ public class CoursewareDraftService {
             if (containsArticle(articles, draft.articleId())) {
                 continue;
             }
-            String title = draft.title() == null ? "草稿 " + draft.articleId() : draft.title();
+            // 旧静态课件（courseware_catalog 有行、本地 id 就是 legacy id）：只随它自己的科目发布，
+            // 发布后仍按 legacy_article_id 归属，学员端看到的就是这一篇，不会变成新课件。
+            CatalogRow catalog = catalogOf(draft.articleId());
+            if (catalog != null && !subject.equals(catalog.subject())) {
+                continue;
+            }
+            String title = draft.title() != null
+                    ? draft.title()
+                    : catalog != null && catalog.title() != null
+                            ? catalog.title()
+                            : "草稿 " + draft.articleId();
             String series = draft.series() == null ? subject : draft.series();
             String path = draft.logicalPath() == null
                     ? subject + "/" + title + ".md"
                     : draft.logicalPath();
-            articles.add(new CoursewareArticleInput(draft.articleId(), draft.legacyArticleId(), title,
+            Long legacyArticleId = draft.legacyArticleId();
+            if (legacyArticleId == null && catalog != null) {
+                legacyArticleId = draft.articleId();
+            }
+            articles.add(new CoursewareArticleInput(draft.articleId(), legacyArticleId, title,
                     series, path, draft.markdown(), answersFor(draft.articleId(), draft.markdown())));
         }
 
@@ -242,6 +256,22 @@ public class CoursewareDraftService {
     private boolean containsArticle(List<CoursewareArticleInput> articles, long articleId) {
         return articles.stream().anyMatch(article ->
                 article.articleId() != null && article.articleId() == articleId);
+    }
+
+    /** 旧静态课件目录行；新课件（id ≥ 1000）没有对应行。 */
+    private CatalogRow catalogOf(long articleId) {
+        return jdbc.sql("""
+                SELECT subject, title
+                FROM public.courseware_catalog
+                WHERE article_id = :articleId
+                """)
+                .param("articleId", articleId)
+                .query((rs, rowNum) -> new CatalogRow(rs.getString("subject"), rs.getString("title")))
+                .optional()
+                .orElse(null);
+    }
+
+    private record CatalogRow(String subject, String title) {
     }
 
     private String draftMarkdownOf(List<DraftRow> drafts, long articleId) {

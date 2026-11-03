@@ -21,7 +21,11 @@
 
     <span class="file-row__body">
       <span class="file-row__name">{{ node.name }}</span>
-      <span class="file-row__meta">
+      <span v-if="isAdmin" class="file-row__meta">
+        <span v-if="node.meta" class="file-row__meta-text">{{ node.meta }}</span>
+        <span v-if="node.path" class="file-row__path mono">{{ node.path }}</span>
+      </span>
+      <span v-else class="file-row__meta">
         <span v-if="formattedDate" class="file-row__date mono">{{ formattedDate }}</span>
         <span v-if="pendingCount > 0" class="file-row__pending">
           <span class="badge">{{ pendingCount }}</span>
@@ -57,6 +61,11 @@ const props = defineProps({
   accent: {
     type: String,
     default: 'violet'
+  },
+  /** learner = 学员端（日期 + 待提交）；admin = 管理端目录（状态与路径） */
+  mode: {
+    type: String,
+    default: 'learner'
   }
 })
 
@@ -64,6 +73,7 @@ defineEmits(['click'])
 
 const ACCENTS = ['cyan', 'violet', 'amber', 'coral', 'pink', 'lime']
 const accentClass = computed(() => `accent--${ACCENTS.includes(props.accent) ? props.accent : 'violet'}`)
+const isAdmin = computed(() => props.mode === 'admin')
 
 const pendingCount = computed(() => {
   return props.statusMap.get(Number(props.node.blogId)) || 0
@@ -196,6 +206,18 @@ const formattedDate = computed(() => {
 
 .file-row__ok {
   color: var(--text-3);
+}
+
+/* 管理端目录行：状态说明 + 逻辑路径 */
+.file-row__meta-text {
+  color: var(--text-2);
+  font-size: 0.74rem;
+}
+
+.file-row__path {
+  color: var(--text-3);
+  font-size: 0.7rem;
+  word-break: break-all;
 }
 
 .file-row__arrow {

@@ -13,7 +13,7 @@
       <div class="stat-card">
         <span class="stat-label">科目</span>
         <span class="stat-value">{{ subjects.length }}</span>
-        <span class="stat-sub">已发布版本</span>
+        <span class="stat-sub">已发布版本 + 站内静态课件</span>
       </div>
       <div class="stat-card stat-card--amber">
         <span class="stat-label">待发布草稿</span>
@@ -60,61 +60,39 @@
     <div v-else-if="!subjects.length" class="empty">
       <i class="fas fa-folder-open empty__icon" aria-hidden="true"></i>
       <p class="empty__title">还没有发布任何科目</p>
-      <p class="empty__text">到「编辑」页新建草稿并发布；或到「共享」页从其他老师那里获取课件。</p>
+      <p class="empty__text">
+        到「编辑」页新建草稿并发布；`public/articles` 下的静态课件也会出现在科目目录里，可直接打开编辑。
+      </p>
       <div class="empty__actions">
         <router-link class="btn btn--primary btn--sm" to="/admin/editor">去新建课件</router-link>
         <router-link class="btn btn--ghost btn--sm" to="/admin/sharing">去共享页</router-link>
       </div>
     </div>
 
-    <div v-else class="grid--3 overview__grid">
-      <article v-for="item in subjects" :key="item.subject" class="panel overview__card">
-        <header class="overview__card-head">
-          <h2 class="overview__card-title">{{ item.subject }}</h2>
+    <div v-else class="overview__subjects">
+      <section v-for="(item, index) in subjects" :key="item.subject" class="overview__subject">
+        <!-- 科目目录直接复用站内的文件夹树（与学员端知识地图同一套 FolderNode/FileNode） -->
+        <FolderNode
+          :node="treeOf(item.subject)"
+          :accent="accentFor(index)"
+          :status-map="emptyStatus"
+          mode="admin"
+          @file-click="openArticle(item.subject, $event)"
+        />
+        <p class="overview__subject-meta">
           <span v-if="item.version" class="chip chip--lime mono">v{{ item.version }}</span>
           <span v-else class="chip chip--amber mono">未发布</span>
-        </header>
-        <dl class="overview__meta">
-          <div><dt>篇数</dt><dd class="mono">{{ item.articleCount }}</dd></div>
-          <div><dt>草稿</dt><dd class="mono">{{ item.draftCount }}</dd></div>
-          <div><dt>被获取</dt><dd class="mono">{{ item.copiedCount }}</dd></div>
-          <div><dt>分享</dt><dd class="mono">{{ item.shareCount }}</dd></div>
-        </dl>
-        <p v-if="item.publishedAt" class="overview__published text-dim">发布于 {{ formatDate(item.publishedAt) }}</p>
-        <div class="row overview__actions">
-          <router-link
-            class="btn btn--soft btn--sm"
-            :to="{ path: '/admin/editor', query: { subject: item.subject } }"
-          >编辑</router-link>
-          <router-link class="btn btn--ghost btn--sm" to="/admin/sharing">共享</router-link>
-          <button
-            type="button"
-            class="btn btn--ghost btn--sm overview__toggle"
-            :aria-expanded="isExpanded(item.subject)"
-            @click="toggleSubject(item.subject)"
-          >
-            {{ isExpanded(item.subject) ? '收起目录' : `展开目录 · ${articlesOf(item.subject).length} 篇` }}
-          </button>
-        </div>
-        <ul v-if="isExpanded(item.subject)" class="overview__articles">
-          <li v-if="!articlesOf(item.subject).length" class="overview__articles-empty">
-            该科目下还没有课件，可在编辑页新建草稿后发布。
-          </li>
-          <li v-for="article in articlesOf(item.subject)" :key="article.articleId">
-            <router-link
-              class="overview__article"
-              :to="{ path: '/admin/editor', query: { subject: item.subject, articleId: article.articleId } }"
-            >
-              <span class="overview__article-title">{{ article.title || `课件 ${article.articleId}` }}</span>
-              <span class="overview__article-path mono">{{ article.logicalPath || `#${article.articleId}` }}</span>
-              <span
-                class="overview__article-chip"
-                :class="article.published ? 'is-live' : 'is-draft'"
-              >{{ article.published ? (article.hasDraft ? '已发布 · 有草稿' : '已发布') : '草稿' }}</span>
-            </router-link>
-          </li>
-        </ul>
-      </article>
+          <span class="overview__subject-stat">草稿 {{ item.draftCount }}</span>
+          <span class="overview__subject-stat">被获取 {{ item.copiedCount }}</span>
+          <span class="overview__subject-stat">分享 {{ item.shareCount }}</span>
+          <span v-if="item.publishedAt" class="overview__subject-stat">
+            发布于 {{ formatDate(item.publishedAt) }}
+          </span>
+          <router-link class="btn btn--soft btn--sm" :to="{ path: '/admin/editor', query: { subject: item.subject } }">
+            新建 / 继续编辑
+          </router-link>
+        </p>
+      </section>
     </div>
 
     <section class="panel panel--tight overview__legacy">
@@ -130,10 +108,14 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import FolderNode from '@/components/articles/FolderNode.vue'
 import { coursewareGateway } from '@/gateways/coursewareGateway'
+import { loadCoursewareLibrary } from '@/utils/coursewareLibrary'
 import { showToast } from '@/utils/toast'
 
 const loading = ref(true)
+const router = useRouter()
 const data = reactive({
   subjects: [],
   pendingDrafts: 0,
@@ -150,9 +132,9 @@ const usage = reactive({
   level: 'ok'
 })
 
-// 展开的科目目录：数据来自「我的课件」全量清单，含已发布篇目与草稿
+// 科目目录：数据来自「我的课件」全量清单，含已发布篇目、草稿与站内静态课件
 const articles = ref([])
-const expandedSubjects = ref({})
+const emptyStatus = new Map()
 const articlesBySubject = computed(() => {
   const groups = new Map()
   for (const article of articles.value) {
@@ -167,15 +149,36 @@ function articlesOf(subjectValue) {
   return articlesBySubject.value.get(subjectValue) || []
 }
 
-function isExpanded(subjectValue) {
-  return Boolean(expandedSubjects.value[subjectValue])
+const ACCENTS = ['cyan', 'violet', 'amber', 'coral', 'pink', 'lime']
+
+function accentFor(index) {
+  return ACCENTS[index % ACCENTS.length]
 }
 
-function toggleSubject(subjectValue) {
-  expandedSubjects.value = {
-    ...expandedSubjects.value,
-    [subjectValue]: !expandedSubjects.value[subjectValue]
+function statusOf(article) {
+  if (article.hosted === false) {
+    return article.hasDraft ? '静态课件 · 有草稿' : '静态课件 · 已上线'
   }
+  if (!article.published) return '草稿 · 未发布'
+  return article.hasDraft ? '已发布 · 有草稿' : '已发布'
+}
+
+/** 交给 FolderNode 的目录树：科目是文件夹，课件是文件行。 */
+function treeOf(subjectValue) {
+  return {
+    name: subjectValue,
+    children: articlesOf(subjectValue).map(article => ({
+      isFile: true,
+      blogId: article.articleId,
+      name: article.title || `课件 ${article.articleId}`,
+      meta: statusOf(article),
+      path: article.logicalPath || (article.hosted === false ? '' : `#${article.articleId}`)
+    }))
+  }
+}
+
+function openArticle(subjectValue, articleId) {
+  router.push({ path: '/admin/editor', query: { subject: subjectValue, articleId } })
 }
 
 /** 概览给的科目 + 只在「我的课件」清单里出现的科目（例如只有草稿、还没发布） */
@@ -255,7 +258,8 @@ async function loadOverview() {
 
 async function loadArticles() {
   try {
-    articles.value = await coursewareGateway.listArticles()
+    const { articles: list } = await loadCoursewareLibrary()
+    articles.value = list
   } catch (error) {
     showToast(error?.message || '加载课件目录失败', 'error')
   }
@@ -303,137 +307,30 @@ onMounted(async () => {
   color: var(--text-2);
 }
 
-.overview__grid {
-  align-items: stretch;
-}
-
-.overview__card {
+.overview__subjects {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px;
+  gap: 14px;
 }
 
-.overview__card-head {
+.overview__subject {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 8px;
 }
 
-.overview__card-title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  color: var(--ink);
-}
-
-.overview__meta {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin: 0;
-}
-
-.overview__meta dt {
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-
-.overview__meta dd {
-  margin: 2px 0 0;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--ink);
-}
-
-.overview__published {
-  margin: 0;
-  font-size: 0.76rem;
-}
-
-.overview__actions {
-  margin-top: auto;
-  gap: 8px;
+.overview__subject-meta {
+  display: flex;
   flex-wrap: wrap;
-}
-
-.overview__toggle {
-  margin-left: auto;
-}
-
-.overview__articles {
-  list-style: none;
-  margin: 4px 0 0;
-  padding: 10px 0 0;
-  border-top: 1px dashed var(--line, rgba(0, 0, 0, 0.12));
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.overview__articles-empty {
-  font-size: 0.76rem;
-  color: var(--text-3);
-}
-
-.overview__article {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 4px 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
-  border-radius: var(--r-sm, 8px);
-  color: inherit;
-  text-decoration: none;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  gap: 10px;
+  margin: 0 0 0 12px;
+  font-size: 0.76rem;
+  color: var(--text-2);
 }
 
-.overview__article:hover {
-  border-color: var(--ink);
-  background: rgba(0, 0, 0, 0.03);
-}
-
-.overview__article-title {
-  font-size: 0.84rem;
-  font-weight: 700;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.overview__article-path {
-  grid-column: 1;
-  font-size: 0.72rem;
-  color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.overview__article-chip {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  justify-self: end;
-  font-size: 0.7rem;
-  padding: 3px 8px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-
-.overview__article-chip.is-live {
-  color: #2f7a4d;
-  background: rgba(47, 122, 77, 0.12);
-}
-
-.overview__article-chip.is-draft {
-  color: #b07d1f;
-  background: rgba(176, 125, 31, 0.14);
+.overview__subject-stat {
+  font-variant-numeric: tabular-nums;
 }
 
 .overview__legacy {
@@ -450,8 +347,8 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
-  .overview__meta {
-    grid-template-columns: repeat(2, 1fr);
+  .overview__subject-meta {
+    margin-left: 6px;
   }
 }
 </style>
