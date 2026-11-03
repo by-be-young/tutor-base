@@ -68,6 +68,14 @@ class CoursewareHttpExceptionHandler {
         return problem;
     }
 
+    /** 课件存储（本地卷/对象存储）不可用：属于运行环境问题，按依赖不可用返回 503。 */
+    @ExceptionHandler(CoursewareFailures.StorageUnavailable.class)
+    ProblemDetail storageUnavailable(CoursewareFailures.StorageUnavailable exception,
+                                     HttpServletRequest request) {
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "courseware_storage_unavailable",
+                "课件存储不可用", exception.getMessage(), request);
+    }
+
     private static ProblemDetail problem(
             HttpStatus status,
             String code,

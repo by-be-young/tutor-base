@@ -10,6 +10,8 @@ import com.tutorbase.courseware.layout.CoursewareLayoutService;
 import com.tutorbase.courseware.publish.CoursewareArticleInput;
 import com.tutorbase.courseware.publish.CoursewarePublisher;
 import com.tutorbase.courseware.publish.CoursewareValidator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CoursewareDraftService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(CoursewareDraftService.class);
     private static final long FIRST_ARTICLE_ID = 1000;
 
     private final JdbcClient jdbc;
@@ -155,7 +158,8 @@ public class CoursewareDraftService {
     @Transactional
     public CoursewarePublisher.Published publish(long teacherId, String subject, Integer expectVersion) {
         List<PublishedRow> current = jdbc.sql("""
-                SELECT ca.article_id, ca.legacy_article_id, ca.title, ca.series, ca.logical_path, ca.content_hash
+                SELECT ca.article_id, ca.legacy_article_id, ca.title, ca.series, ca.logical_path,
+                       ca.content_hash, ca.answer_hash, ca.question_count
                 FROM public.course_release_head AS h
                 JOIN public.course_article AS ca
                   ON ca.release_id = h.release_id AND ca.teacher_account_id = h.teacher_account_id
@@ -170,7 +174,9 @@ public class CoursewareDraftService {
                         rs.getString("title"),
                         rs.getString("series"),
                         rs.getString("logical_path"),
-                        rs.getString("content_hash")))
+                        rs.getString("content_hash"),
+                        rs.getString("answer_hash"),
+                        rs.getObject("question_count", Integer.class)))
                 .list();
 
         List<DraftRow> drafts = jdbc.sql("""
@@ -209,6 +215,13 @@ public class CoursewareDraftService {
                 markdown = publishedMarkdown(teacherId, row.articleId());
             }
             if (markdown == null) {
+                // 正文 blob 不在本机（换机、容器重建、卷未挂载）：按上一版哈希结转，
+                // 不能丢掉这篇，否则一次发布就把整个科目的课件清空。
+                LOGGER.warn("发布结转：teacher={} subject={} articleId={} 的正文 blob 缺失，沿用 contentHash={}",
+                        teacherId, subject, row.articleId(), row.contentHash());
+                articles.add(CoursewareArticleInput.carried(row.articleId(), row.legacyArticleId(),
+                        row.title(), row.series(), row.logicalPath(), row.contentHash(),
+                        row.answerHash(), row.questionCount()));
                 continue;
             }
             articles.add(new CoursewareArticleInput(row.articleId(), row.legacyArticleId(), row.title(),
@@ -243,6 +256,9 @@ public class CoursewareDraftService {
 
         List<String> layoutErrors = new ArrayList<>();
         for (CoursewareArticleInput article : articles) {
+            if (article.carryOver()) {
+                continue;
+            }
             for (String error : layouts.validate(article.markdown())) {
                 layoutErrors.add(article.logicalPath() + " → " + error);
             }
@@ -357,7 +373,7 @@ public class CoursewareDraftService {
 
     private record PublishedRow(
             long articleId, Long legacyArticleId, String title, String series,
-            String logicalPath, String contentHash) {
+            String logicalPath, String contentHash, String answerHash, Integer questionCount) {
     }
 
     private record DraftRow(

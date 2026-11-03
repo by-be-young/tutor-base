@@ -65,6 +65,16 @@ public final class CoursewareValidator {
         }
 
         String markdown = article.markdown() == null ? "" : article.markdown();
+        if (article.carryOver()) {
+            // 结转载荷没有正文：不校验正文内容，但必须带上上一版的哈希，否则学员端会读到空文件。
+            if (article.contentHash() == null || article.contentHash().isBlank()) {
+                errors.add(path + " 缺少已发布正文（contentHash），无法结转");
+            }
+            if (article.answerHash() == null || article.answerHash().isBlank()) {
+                errors.add(path + " 缺少已发布答案哈希（answerHash），无法结转");
+            }
+            return errors;
+        }
         if (markdown.isBlank()) {
             errors.add("正文不能为空");
             return errors;

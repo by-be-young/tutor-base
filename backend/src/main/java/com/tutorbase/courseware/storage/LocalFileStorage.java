@@ -8,6 +8,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
+import com.tutorbase.courseware.CoursewareFailures;
+
 /**
  * 本地文件实现：{@code <root>/<teacherId>/blobs/<sha256>.md} 与
  * {@code <root>/<teacherId>/manifests/<subject>/v<version>.json}。
@@ -34,7 +36,7 @@ public class LocalFileStorage implements CoursewareStorage {
                 Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException exception) {
-            throw new IllegalStateException("写入课件正文失败", exception);
+            throw new CoursewareFailures.StorageUnavailable("写入课件正文失败：" + target, exception);
         }
         return hash;
     }
@@ -48,7 +50,7 @@ public class LocalFileStorage implements CoursewareStorage {
         try {
             return Files.readAllBytes(path);
         } catch (IOException exception) {
-            throw new IllegalStateException("读取课件正文失败", exception);
+            throw new CoursewareFailures.StorageUnavailable("读取课件正文失败：" + path, exception);
         }
     }
 
@@ -61,7 +63,7 @@ public class LocalFileStorage implements CoursewareStorage {
             Files.write(temporary, json);
             Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException exception) {
-            throw new IllegalStateException("写入发布清单失败", exception);
+            throw new CoursewareFailures.StorageUnavailable("写入发布清单失败：" + target, exception);
         }
     }
 
@@ -83,7 +85,7 @@ public class LocalFileStorage implements CoursewareStorage {
                 }
             });
         } catch (IOException exception) {
-            throw new IllegalStateException("列出课件正文失败", exception);
+            throw new CoursewareFailures.StorageUnavailable("列出课件正文失败：" + directory, exception);
         }
         return blobs;
     }
@@ -126,3 +128,4 @@ public class LocalFileStorage implements CoursewareStorage {
                 .normalize();
     }
 }
+

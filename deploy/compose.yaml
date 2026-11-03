@@ -25,8 +25,14 @@ services:
     restart: unless-stopped
     env_file:
       - backend.env
+    environment:
+      # 课件正文与发布清单的落盘根目录：必须落在可写且持久化的卷上，
+      # 否则 read_only 容器里每次发布都会写盘失败（500）。
+      TUTOR_COURSEWARE_ROOT: /var/lib/tutor-base/courseware
     ports:
       - "127.0.0.1:8080:8080"
+    volumes:
+      - courseware-data:/var/lib/tutor-base/courseware
     security_opt:
       - no-new-privileges:true
     read_only: true
@@ -46,3 +52,7 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+
+volumes:
+  # 持久化课件正文（blob）与版本清单（manifest）；容器重建/重新部署不丢已发布内容。
+  courseware-data:

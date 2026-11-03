@@ -75,4 +75,15 @@ public final class CoursewareFailures {
             super(message);
         }
     }
+
+    /** 课件存储不可用：落盘目录不可写、磁盘满等，属于环境问题而非内容问题。 */
+    public static final class StorageUnavailable extends RuntimeException {
+        public StorageUnavailable(String message) {
+            super(message);
+        }
+
+        public StorageUnavailable(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
 }

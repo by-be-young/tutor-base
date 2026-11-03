@@ -924,6 +924,8 @@ public interface CoursewareStorage {
 ```
 
 - 本地开发用 `LocalFileStorage`（落 `var/courseware/`），生产用 `SupabaseStorage`。
+- 现阶段生产仍走 `LocalFileStorage`：根目录固定为 `/var/lib/tutor-base/courseware`（`TUTOR_COURSEWARE_ROOT` 可覆盖），由 `deploy/compose.yaml` 的 `courseware-data` 命名卷持久化，镜像启动前已创建该目录并 `chown` 给 `app`（uid 10001）。**不要**把根目录放在容器可写层或 `/tmp`：backend 以 `read_only: true` 运行，相对路径 `./var/courseware` 无法创建，任何发布都会写盘失败。
+- 卷缺失或不可写时写盘抛 `StorageUnavailable`，HTTP 返回 `503 courseware_storage_unavailable`；相对地，已发布篇目 blob 丢失时发布按上一版哈希结转（见 `docs/api-standards.md` 第 9 节），不会把整科课件清空。
 - 所有读写走该接口，换云厂商只改实现。
 
 ### 10.3 服务要点

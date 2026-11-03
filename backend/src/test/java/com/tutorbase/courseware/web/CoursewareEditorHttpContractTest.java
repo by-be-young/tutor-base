@@ -308,9 +308,77 @@ class CoursewareEditorHttpContractTest {
         }
     }
 
+    /**
+     * 已发布篇目的正文 blob 丢失（换机、容器重建、课件卷未挂载）时，发布必须按上一版哈希结转，
+     * 既不能 500，也不能把整个科目的课件清空。
+     */
     @Test
-    void publishRejectsUnregisteredLayoutAndTemplateResidue() throws Exception {
+    void publishCarriesOverArticlesWhoseBlobsAreLost() throws Exception {
         Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+        String subject = "高中化学";
+
+        mockMvc.perform(post("/api/v1/admin/courseware/releases")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "subject", subject,
+                                "articles", List.of(
+                                        Map.of("articleId", 3, "legacyArticleId", 3,
+                                                "title", "3-1 原电池", "series", subject,
+                                                "logicalPath", subject + "/理论课讲义/3-1 原电池.md",
+                                                "markdown", "【题干1】旧\n\n【@1】\n",
+                                                "answers", List.of(Map.of(
+                                                        "questionId", "1", "answer", "A", "autoGrade", true))),
+                                        Map.of("articleId", 9, "legacyArticleId", 9,
+                                                "title", "3-2 电解池", "series", subject,
+                                                "logicalPath", subject + "/理论课讲义/3-2 电解池.md",
+                                                "markdown", "【题干1】电解\n\n【@1】\n",
+                                                "answers", List.of(Map.of(
+                                                        "questionId", "1", "answer", "B", "autoGrade", true))))))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.version").value(1));
+
+        List<String> hashesBefore = jdbc.queryForList("""
+                SELECT ca.content_hash
+                FROM public.course_release_head AS h
+                JOIN public.course_article AS ca
+                  ON ca.release_id = h.release_id AND ca.teacher_account_id = h.teacher_account_id
+                WHERE h.subject = ? ORDER BY ca.logical_path
+                """, String.class, subject);
+        assertThat(hashesBefore).hasSize(2);
+
+        // 模拟正文文件丢失：删掉该老师 blobs 目录下的全部正文
+        Path blobs = STORAGE_ROOT.resolve("2").resolve("blobs");
+        if (Files.isDirectory(blobs)) {
+            try (var paths = Files.list(blobs)) {
+                for (Path path : paths.toList()) {
+                    Files.deleteIfExists(path);
+                }
+            }
+        }
+
+        mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("subject", subject))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.articleCount").value(2));
+
+        assertThat(jdbc.queryForList("""
+                SELECT ca.content_hash
+                FROM public.course_release_head AS h
+                JOIN public.course_article AS ca
+                  ON ca.release_id = h.release_id AND ca.teacher_account_id = h.teacher_account_id
+                WHERE h.subject = ? ORDER BY ca.logical_path
+                """, String.class, subject)).isEqualTo(hashesBefore);
+    }
+
+    @Test
+    void publishRejectsUnregisteredLayoutAndTemplateResidue() throws Exception {        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
         String csrf = csrf(cookie).csrfToken();
 
         MvcResult created = mockMvc.perform(post("/api/v1/admin/courseware/drafts")

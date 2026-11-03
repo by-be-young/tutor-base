@@ -9,7 +9,9 @@ FROM eclipse-temurin:21-jre
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 10001 --create-home app
+    && useradd --system --uid 10001 --create-home app \
+    && mkdir -p /var/lib/tutor-base/courseware \
+    && chown -R app:app /var/lib/tutor-base
 WORKDIR /app
 COPY --from=build --chown=app:app /workspace/target/tutor-base-backend-*.jar app.jar
 USER app

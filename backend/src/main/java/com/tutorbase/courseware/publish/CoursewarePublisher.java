@@ -17,6 +17,8 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 发布：校验 → 计算哈希 → 写 blob 与不可变 manifest → 落库并切换当前版本指针。
@@ -27,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CoursewarePublisher {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(CoursewarePublisher.class);
     private static final int FIRST_ARTICLE_ID = 1000;
 
     private final JdbcClient jdbc;
@@ -95,9 +98,21 @@ public class CoursewarePublisher {
 
         for (CoursewareArticleInput article : articles) {
             long articleId = article.articleId() != null ? article.articleId() : nextArticleId++;
-            byte[] markdown = article.markdown().getBytes(StandardCharsets.UTF_8);
-            String contentHash = storage.putBlob(teacherAccountId, markdown);
-            String answerHash = LocalFileStorage.sha256(answerBytes(article));
+            String contentHash;
+            String answerHash;
+            int questionCount;
+            if (article.carryOver()) {
+                contentHash = article.contentHash();
+                answerHash = article.answerHash();
+                questionCount = article.questionCount() == null ? 0 : article.questionCount();
+                LOGGER.warn("发布结转：articleId={} 的正文 blob 缺失，按上一版哈希 {} 保留篇目（不重算正文）",
+                        articleId, contentHash);
+            } else {
+                byte[] markdown = article.markdown().getBytes(StandardCharsets.UTF_8);
+                contentHash = storage.putBlob(teacherAccountId, markdown);
+                answerHash = LocalFileStorage.sha256(answerBytes(article));
+                questionCount = answerCount(article);
+            }
 
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("articleId", articleId);
@@ -107,11 +122,11 @@ public class CoursewarePublisher {
             entry.put("logicalPath", CoursewareValidator.normalizePath(article.logicalPath()));
             entry.put("contentHash", contentHash);
             entry.put("answerHash", answerHash);
-            entry.put("questionCount", answerCount(article));
+            entry.put("questionCount", questionCount);
             manifestArticles.add(entry);
             prepared.add(new PreparedArticle(articleId, article.legacyArticleId(), article.title(),
                     article.series(), CoursewareValidator.normalizePath(article.logicalPath()),
-                    contentHash, answerHash, answerCount(article)));
+                    contentHash, answerHash, questionCount));
         }
 
         String contentHash = LocalFileStorage.sha256(writeJson(manifestArticles));
