@@ -7,7 +7,6 @@ import {
   articleStatus,
   buildCoursewareTree,
   flattenTree,
-  markActiveArticle,
   pathSegments
 } from '../src/utils/coursewareTree.js'
 
@@ -63,13 +62,13 @@ test('状态文案区分已发布、草稿、静态讲义与正文缺失', () =>
   })
 })
 
-test('选中篇目在树里被标记，其他篇目不受影响', () => {
+test('篇目按路径顺序展开为叶子节点', () => {
   const tree = buildCoursewareTree('高中英语', [
     { articleId: 1, title: '一', logicalPath: '高中英语/一.md', published: true },
     { articleId: 2, title: '二', logicalPath: '高中英语/二.md', published: true }
   ])
-  markActiveArticle(tree, 2)
   const files = flattenTree(tree)
-  assert.equal(files.find(node => node.blogId === 1).active, false)
-  assert.equal(files.find(node => node.blogId === 2).active, true)
+  assert.equal(files.length, 2)
+  assert.deepEqual(files.map(node => node.blogId).sort(), [1, 2])
+  assert.ok(files.every(node => node.isFile))
 })

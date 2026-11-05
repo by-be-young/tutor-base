@@ -103,14 +103,3 @@ export function flattenTree(node, result = []) {
   for (const child of node.children || []) flattenTree(child, result)
   return result
 }
-
-/** 给树里选中的篇目打上 active 标记（FileNode 据此高亮）。 */
-export function markActiveArticle(node, activeArticleId) {
-  if (!node) return node
-  if (node.isFile) {
-    node.active = activeArticleId != null && Number(node.blogId) === Number(activeArticleId)
-    return node
-  }
-  for (const child of node.children || []) markActiveArticle(child, activeArticleId)
-  return node
-}

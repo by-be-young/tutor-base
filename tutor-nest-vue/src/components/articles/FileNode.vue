@@ -10,7 +10,7 @@
     emits  : click
 -->
 <template>
-  <button type="button" class="file-row" :class="[accentClass, { 'has-pending': pendingCount > 0, 'is-selected': node.active }]"
+  <button type="button" class="file-row" :class="[accentClass, { 'has-pending': pendingCount > 0 }]"
     :style="{ '--depth': depth }" :aria-label="`打开文档 ${node.name}`" @click="$emit('click')">
     <!-- 状态点：有待提交 = 朱红，无待提交 = 墨绿 -->
     <span class="file-row__dot" aria-hidden="true"></span>
@@ -218,18 +218,6 @@ const formattedDate = computed(() => {
   color: var(--text-3);
   font-size: 0.7rem;
   word-break: break-all;
-}
-
-.file-row.is-selected {
-  background: var(--lime, #e6f5c9);
-  border-color: var(--ink);
-  color: var(--text-1);
-  box-shadow: 2px 2px 0 var(--ink);
-}
-
-.file-row.is-selected .file-row__arrow {
-  opacity: 1;
-  color: var(--ink);
 }
 
 .file-row__arrow {

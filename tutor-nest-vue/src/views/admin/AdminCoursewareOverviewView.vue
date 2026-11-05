@@ -5,7 +5,7 @@
       <p class="eyebrow">课件托管</p>
       <p class="overview__lead-text">
         每个科目一个发布版本：草稿只有你自己能看到，点「发布」才生效；删除草稿不会影响已发布内容。
-        点目录里的篇目可以按学员看到的样子预览，需要改内容再点「去编辑」。
+        点目录里的篇目会在新页面里用学员阅读器完整预览（草稿会标注「学员还看不到」），要改内容再点「去编辑」。
         获取他人的课件、分享自己的课件都在「共享」页。
       </p>
     </section>
@@ -74,9 +74,12 @@
       <section class="panel panel--pad overview__tree">
         <header class="panel-head overview__tree-head">
           <h2 class="panel-title">课件目录</h2>
-          <button type="button" class="btn btn--ghost btn--sm" @click="toggleAll">
-            {{ expanded ? '全部收起' : '全部展开' }}
-          </button>
+          <div class="overview__tree-actions">
+            <span class="overview__tree-hint">点篇目打开学员视角预览</span>
+            <button type="button" class="btn btn--ghost btn--sm" @click="toggleAll">
+              {{ expanded ? '全部收起' : '全部展开' }}
+            </button>
+          </div>
         </header>
         <div class="panel-body overview__subjects">
           <section v-for="(item, index) in subjects" :key="item.subject" class="overview__subject">
@@ -89,7 +92,7 @@
               :expand-token="expandToken"
               :expand-to="expanded"
               mode="admin"
-              @file-click="selectArticle"
+              @file-click="openPreview(item.subject, $event)"
             />
             <p class="overview__subject-meta">
               <span v-if="item.version" class="chip chip--lime mono">v{{ item.version }}</span>
@@ -107,33 +110,6 @@
           </section>
         </div>
       </section>
-
-      <aside class="panel panel--pad overview__preview">
-        <CoursewarePreviewPane
-          :markdown="previewMarkdown"
-          :title="previewTitle"
-          :subtitle="previewPath"
-          :status="previewStatus.label"
-          :status-tone="previewStatus.tone"
-          :loading="previewLoading"
-          empty-text="从左侧目录点一篇课件，这里按学员看到的样子预览；需要改内容再点「去编辑」。"
-        >
-          <template #actions>
-            <div v-if="previewArticle" class="overview__preview-actions">
-              <router-link
-                class="btn btn--soft btn--sm"
-                :to="{ path: '/admin/editor', query: { subject: previewArticle.subject || undefined, articleId: previewArticle.articleId } }"
-              >
-                去编辑
-              </router-link>
-              <span v-if="previewStatus.tone === 'missing'" class="overview__preview-hint">
-                已发布正文文件丢了：去编辑页保存草稿并发布即可恢复。
-              </span>
-              <span v-else-if="previewNote" class="overview__preview-hint">{{ previewNote }}</span>
-            </div>
-          </template>
-        </CoursewarePreviewPane>
-      </aside>
     </div>
 
     <section class="panel panel--tight overview__legacy">
@@ -149,14 +125,15 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import FolderNode from '@/components/articles/FolderNode.vue'
-import CoursewarePreviewPane from '@/components/admin/CoursewarePreviewPane.vue'
 import { coursewareGateway } from '@/gateways/coursewareGateway'
-import { loadArticleMarkdownForEditing, loadCoursewareLibrary } from '@/utils/coursewareLibrary'
-import { articleStatus, buildCoursewareTree, markActiveArticle } from '@/utils/coursewareTree'
+import { loadCoursewareLibrary } from '@/utils/coursewareLibrary'
+import { buildCoursewareTree } from '@/utils/coursewareTree'
 import { showToast } from '@/utils/toast'
 
 const loading = ref(true)
+const router = useRouter()
 const data = reactive({
   subjects: [],
   pendingDrafts: 0,
@@ -205,65 +182,18 @@ function toggleAll() {
   expandToken.value += 1
 }
 
-// 预览：选中哪篇、正文、读取状态
-const selectedId = ref(null)
-const previewMarkdown = ref('')
-const previewLoading = ref(false)
-const previewNote = ref('')
-const previewStatus = reactive({ label: '', tone: 'live' })
-
-const previewArticle = computed(
-  () => articles.value.find(item => Number(item.articleId) === Number(selectedId.value)) || null
-)
-const previewTitle = computed(() => previewArticle.value?.title || '')
-const previewPath = computed(() => previewArticle.value?.logicalPath || '')
+// 预览：跳到完整的学员阅读页（/admin/preview/:id），不在本页内嵌近似效果
+function openPreview(subjectValue, articleId) {
+  const article = articles.value.find(item => Number(item.articleId) === Number(articleId))
+  const query = { mode: 'preview', subject: subjectValue }
+  if (article?.title) query.title = article.title
+  if (article?.logicalPath) query.path = article.logicalPath
+  router.push({ name: 'CoursewarePreview', params: { id: articleId }, query })
+}
 
 /** 交给 FolderNode 的目录树：科目是根文件夹，logicalPath 的层级是多级子目录。 */
 function treeOf(subjectValue) {
-  return markActiveArticle(
-    buildCoursewareTree(subjectValue, articlesOf(subjectValue)),
-    selectedId.value
-  )
-}
-
-const PREVIEW_NOTES = {
-  draft: '这是草稿预览：学员现在看到的还是上一版，点「发布」才生效。',
-  static: '这篇还是站内静态讲义，正文在 public/articles 下；保存草稿并发布后由服务端托管。'
-}
-
-const PREVIEW_LABELS = {
-  draft: { label: '草稿预览 · 学员看不到', tone: 'draft' },
-  published: { label: '已发布 · 学员看到的就是这版', tone: 'live' },
-  static: { label: '站内讲义 · 未托管', tone: 'static' },
-  recovered: { label: '正文缺失 · 需重新发布', tone: 'missing' }
-}
-
-async function selectArticle(articleId) {
-  const article = articles.value.find(item => Number(item.articleId) === Number(articleId))
-  if (!article) return
-  selectedId.value = article.articleId
-  previewMarkdown.value = ''
-  previewNote.value = ''
-  previewLoading.value = true
-  try {
-    const loaded = await loadArticleMarkdownForEditing(article)
-    if (Number(selectedId.value) !== Number(article.articleId)) return
-    previewMarkdown.value = loaded.markdown
-    const status = PREVIEW_LABELS[loaded.contentMissing ? 'recovered' : loaded.source]
-      || { label: articleStatus(article).label, tone: articleStatus(article).tone }
-    previewStatus.label = status.label
-    previewStatus.tone = status.tone
-    previewNote.value = loaded.contentMissing
-      ? ''
-      : PREVIEW_NOTES[loaded.source] || ''
-  } catch (error) {
-    previewStatus.label = '读取失败'
-    previewStatus.tone = 'missing'
-    previewNote.value = ''
-    showToast(error?.message || '读取课件正文失败', 'error')
-  } finally {
-    previewLoading.value = false
-  }
+  return buildCoursewareTree(subjectValue, articlesOf(subjectValue))
 }
 
 /** 概览给的科目 + 只在「我的课件」清单里出现的科目（例如只有草稿、还没发布） */
@@ -400,7 +330,7 @@ onMounted(async () => {
 
 .overview__workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -415,41 +345,20 @@ onMounted(async () => {
   gap: 10px;
 }
 
-.overview__preview {
-  min-width: 0;
-  position: sticky;
-  top: 16px;
-  max-height: calc(100vh - 120px);
+.overview__tree-actions {
   display: flex;
-  flex-direction: column;
-}
-
-.overview__preview :deep(.preview-pane) {
-  flex: 1;
-  min-height: 0;
-}
-
-.overview__preview-actions {
-  display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
 
-.overview__preview-hint {
+.overview__tree-hint {
   font-size: 0.74rem;
-  line-height: 1.5;
-  color: var(--text-2);
+  color: var(--text-3);
 }
 
-@media (max-width: 1080px) {
-  .overview__workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .overview__preview {
-    position: static;
-    max-height: none;
+@media (max-width: 720px) {
+  .overview__tree-hint {
+    display: none;
   }
 }
 

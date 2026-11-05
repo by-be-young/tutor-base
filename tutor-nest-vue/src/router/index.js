@@ -29,6 +29,14 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    // 管理端课件预览：复用学员阅读器（同一套渲染/布局/题目卡片），只读且有返回入口。
+    // 放在 /admin 外壳之外，才能拿到和学员端一模一样的全屏阅读体验。
+    path: '/admin/preview/:id',
+    name: 'CoursewarePreview',
+    component: () => import('@/views/ArticleDetailView.vue'),
+    meta: { requiresAuth: true, requiredRole: 'ADMINISTRATOR' }
+  },
+  {
     // 管理端独立外壳：左侧导航 + 顶部管理栏 + 内容区，不再复用学员端布局。
     path: '/admin',
     component: AdminLayout,
@@ -177,7 +185,7 @@ router.beforeEach(async (to) => {
     return { name: 'Home', query: { redirect: to.fullPath } }
   }
   const requiresAdministrator = to.meta.requiredRole === 'ADMINISTRATOR'
-    || (to.name === 'ArticleDetail' && ['answer', 'review'].includes(to.query.mode))
+    || (to.name === 'ArticleDetail' && ['answer', 'review', 'preview'].includes(to.query.mode))
   if (requiresAdministrator && !authStore.isAdministrator) {
     return { name: 'Home' }
   }

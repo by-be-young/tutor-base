@@ -11,7 +11,15 @@
             <header class="reader-hero panel panel--glow">
                 <div class="reader-hero__halftone" aria-hidden="true"></div>
                 <div class="reader-hero__top">
-                    <span class="eyebrow">NEST / 学巢阅读</span>
+                    <span v-if="isPreviewMode" class="reader-preview-nav">
+                        <button type="button" class="reader-preview-back" @click="closePreview">
+                            <i class="fas fa-arrow-left"></i><span>返回课件</span>
+                        </button>
+                        <button type="button" class="reader-preview-back" @click="openPreviewEditor">
+                            <i class="fas fa-pen"></i><span>编辑这篇</span>
+                        </button>
+                    </span>
+                    <span v-else class="eyebrow">NEST / 学巢阅读</span>
                     <span class="chip reader-mode" :class="modeChipClass">
                         <i class="fas" :class="modeIcon"></i>{{ modeLabel }}
                     </span>
@@ -26,6 +34,9 @@
                     </span>
                     <span v-if="questionCount" class="chip chip--violet">
                         <i class="fas fa-list-ol"></i>{{ questionCount }} 道题
+                    </span>
+                    <span v-if="isPreviewMode && previewNote" class="chip chip--amber">
+                        <i class="fas fa-circle-info"></i>{{ previewNote }}
                     </span>
                     <span v-if="currentMode === 'study' && questionCount" class="chip chip--lime">
                         <i class="fas fa-book-medical"></i>错题可归档
@@ -219,6 +230,7 @@ import { useDrawingInDetail } from '@/composables/useDrawing'
 import { learningGateway } from '@/gateways/learningGateway'
 import { showToast } from '@/utils/toast'
 import { loadArticleMarkdown } from '@/utils/articleContent'
+import { loadArticleMarkdownForEditing, loadCoursewareLibrary } from '@/utils/coursewareLibrary'
 import { ANSWER_TOKEN, STEM_TOKEN, STEM_TOKEN_ONE, buildQuestionTextMap, normalizeMarkerIndentation } from '@/utils/questionText'
 import { marked } from 'marked'
 
@@ -335,6 +347,38 @@ const currentArticle = computed(() => {
     return blogStore.blogData.find(b => b.id === blogId.value)
 })
 
+// ---- 管理端预览（mode=preview）：完全复用学员阅读器，只换正文来源 ----
+// 正文按「草稿 → 已发布 → 站内静态讲义」取，只读展示，不写任何学习数据。
+const previewArticle = ref(null)
+const previewSource = ref('')
+
+const isPreviewMode = computed(() => currentMode.value === 'preview')
+
+const activeArticle = computed(() => (isPreviewMode.value ? previewArticle.value : currentArticle.value))
+
+const previewNote = computed(() => {
+    if (!isPreviewMode.value) return ''
+    if (previewSource.value === 'draft') return '草稿预览 · 学员还看不到'
+    if (previewSource.value === 'recovered') return '正文文件缺失 · 已用站内讲义'
+    if (previewSource.value === 'static') return '站内讲义 · 尚未托管'
+    return '已发布 · 学员看到的就是这版'
+})
+
+function closePreview() {
+    router.push('/admin/courseware')
+}
+
+/** 预览里直接跳到编辑器改这一篇。 */
+function openPreviewEditor() {
+    router.push({
+        path: '/admin/editor',
+        query: {
+            subject: previewArticle.value?.series || undefined,
+            articleId: blogId.value
+        }
+    })
+}
+
 const showFab = computed(() => {
     return currentMode.value === 'study' || currentMode.value === 'answer'
 })
@@ -409,25 +453,28 @@ const layoutToggleTitle = computed(() => {
 
 // ========== 阅读页展示信息 ==========
 const modeLabel = computed(() => {
+    if (currentMode.value === 'preview') return '预览模式'
     if (currentMode.value === 'review') return '批阅模式'
     if (currentMode.value === 'answer') return '答案设置'
     return '学习模式'
 })
 
 const modeIcon = computed(() => {
+    if (currentMode.value === 'preview') return 'fa-eye'
     if (currentMode.value === 'review') return 'fa-clipboard-check'
     if (currentMode.value === 'answer') return 'fa-key'
     return 'fa-book-open'
 })
 
 const modeChipClass = computed(() => {
+    if (currentMode.value === 'preview') return 'chip--lime'
     if (currentMode.value === 'review') return 'chip--amber'
     if (currentMode.value === 'answer') return 'chip--violet'
     return 'chip--cyan'
 })
 
 const subjectMeta = computed(() => {
-    const series = currentArticle.value?.series || ''
+    const series = activeArticle.value?.series || ''
     if (series.includes('高中化学')) return { label: series, tone: 'cyan', icon: 'fa-flask' }
     if (series.includes('初中英语')) return { label: series, tone: 'amber', icon: 'fa-language' }
     if (series.includes('高中英语')) return { label: series, tone: 'violet', icon: 'fa-language' }
@@ -435,7 +482,7 @@ const subjectMeta = computed(() => {
 })
 
 const dateLabel = computed(() => {
-    const date = currentArticle.value?.date || ''
+    const date = activeArticle.value?.date || ''
     return date ? date.replace(/-/g, '.') : ''
 })
 
@@ -739,6 +786,7 @@ function createPill(text, className = '') {
 }
 
 function renderStudySlot(questionId, index) {
+    const isPreview = currentMode.value === 'preview'
     const wrapper = document.createElement('div')
     wrapper.className = 'question-card question-card-study'
     wrapper.dataset.questionId = questionId
@@ -746,7 +794,7 @@ function renderStudySlot(questionId, index) {
     const textarea = document.createElement('textarea')
     textarea.className = 'question-textarea question-textarea-study'
     textarea.rows = 2
-    textarea.placeholder = '在这里填写答案'
+    textarea.placeholder = isPreview ? '学员在这里作答（预览不可编辑）' : '在这里填写答案'
 
     const submission = submissionMap.value.get(questionId)
     const answerKey = answerKeyMap.value.get(questionId)
@@ -759,6 +807,10 @@ function renderStudySlot(questionId, index) {
             textarea.readOnly = true
             textarea.classList.add('is-locked')
         }
+    }
+    if (isPreview) {
+        // 预览：保留学员端卡片外观，但不允许输入，也不提供错题本等学员专属动作
+        textarea.readOnly = true
     }
 
     // 题号角标（左上角，显示顺序号，与实际 id 无关）
@@ -773,22 +825,24 @@ function renderStudySlot(questionId, index) {
 
     wrapper.appendChild(textarea)
 
-    // 卡片操作栏：加入错题本（总是显示）+ 查看答案（仅已批阅）
+    // 卡片操作栏：加入错题本（总是显示）+ 查看答案（仅已批阅）；预览模式不显示
     const footer = document.createElement('div')
     footer.className = 'question-card-footer'
 
     // 加入错题本按钮
-    const wrongBtn = document.createElement('button')
-    wrongBtn.type = 'button'
-    wrongBtn.className = 'question-action-btn'
-    wrongBtn.innerHTML = '<i class="fas fa-book-medical"></i><span>加入错题本</span>'
-    wrongBtn.addEventListener('click', function (e) {
-        e.preventDefault()
-        handleAddToWrongBook(questionId, this)
-    })
-    footer.appendChild(wrongBtn)
+    if (!isPreview) {
+        const wrongBtn = document.createElement('button')
+        wrongBtn.type = 'button'
+        wrongBtn.className = 'question-action-btn'
+        wrongBtn.innerHTML = '<i class="fas fa-book-medical"></i><span>加入错题本</span>'
+        wrongBtn.addEventListener('click', function (e) {
+            e.preventDefault()
+            handleAddToWrongBook(questionId, this)
+        })
+        footer.appendChild(wrongBtn)
+    }
 
-    if (isReviewed) {
+    if (isReviewed && !isPreview) {
         const actionBtn = document.createElement('button')
         actionBtn.type = 'button'
         actionBtn.className = 'question-action-btn'
@@ -1318,7 +1372,7 @@ function initializeQuestionSlots() {
         if (!questionId) return
 
         let node = null
-        if (currentMode.value === 'study') {
+        if (currentMode.value === 'study' || currentMode.value === 'preview') {
             node = renderStudySlot(questionId, index + 1)
         } else if (currentMode.value === 'review') {
             node = renderReviewSlot(questionId, index + 1)
@@ -1360,16 +1414,43 @@ function resetDetailState() {
 // ========== 加载内容 ==========
 let isRendering = false
 
+/**
+ * 管理端预览：从「我的课件」清单找到这一篇，按草稿 → 已发布 → 站内讲义取正文。
+ * 清单里没有时（例如刚导入还没刷新）用路由 query 里的元信息兜底。
+ */
+async function loadPreviewArticle() {
+    const { articles } = await loadCoursewareLibrary()
+    const found = (articles || []).find(item => Number(item.articleId) === Number(blogId.value)) || null
+    const query = route.query
+    const target = found || {
+        articleId: blogId.value,
+        title: typeof query.title === 'string' ? query.title : '',
+        series: typeof query.subject === 'string' ? query.subject : '',
+        logicalPath: typeof query.path === 'string' ? query.path : '',
+        hosted: false,
+        hasDraft: false
+    }
+
+    const loaded = await loadArticleMarkdownForEditing(target)
+    previewSource.value = loaded.contentMissing ? 'recovered' : loaded.source
+    previewArticle.value = {
+        id: blogId.value,
+        title: target.title || `课件 ${blogId.value}`,
+        series: target.series || '',
+        date: ''
+    }
+    return { article: previewArticle.value, markdown: loaded.markdown }
+}
+
 async function loadContent() {
     if (isRendering) return
     isRendering = true
-
     try {
         resetDetailState()
 
         // 确定模式
         const mode = route.query.mode || 'study'
-        currentMode.value = ['study', 'review', 'answer'].includes(mode) ? mode : 'study'
+        currentMode.value = ['study', 'review', 'answer', 'preview'].includes(mode) ? mode : 'study'
 
         if (!blogId.value) {
             renderedContent.value = '<p>文章不存在。</p>'
@@ -1378,26 +1459,41 @@ async function loadContent() {
             return
         }
 
-        const blog = currentArticle.value
-        if (!blog) {
-            renderedContent.value = '<p>文章未找到。</p>'
-            blogTitle.value = '未找到'
-            isRendering = false
-            return
-        }
+        let blog = currentArticle.value
+        let content = null
 
-        // 检查权限（学习模式）
-        if (currentMode.value === 'study') {
-            if (!authStore.isLoggedIn) {
-                renderedContent.value = '<p>请先登录后查看。</p>'
-                blogTitle.value = '请登录'
+        if (currentMode.value === 'preview') {
+            // 管理端预览：正文按「草稿 → 已发布 → 站内讲义」取，不依赖学员可见清单
+            const preview = await loadPreviewArticle()
+            if (!preview) {
+                renderedContent.value = '<p>课件不存在或没有可读正文。</p>'
+                blogTitle.value = '未找到课件'
                 isRendering = false
                 return
             }
-        }
+            blog = preview.article
+            content = preview.markdown
+        } else {
+            if (!blog) {
+                renderedContent.value = '<p>文章未找到。</p>'
+                blogTitle.value = '未找到'
+                isRendering = false
+                return
+            }
 
-        // 加载 Markdown 内容：优先托管接口，回退静态文件
-        let content = await loadArticleMarkdown(blog)
+            // 检查权限（学习模式）
+            if (currentMode.value === 'study') {
+                if (!authStore.isLoggedIn) {
+                    renderedContent.value = '<p>请先登录后查看。</p>'
+                    blogTitle.value = '请登录'
+                    isRendering = false
+                    return
+                }
+            }
+
+            // 加载 Markdown 内容：优先托管接口，回退静态文件
+            content = await loadArticleMarkdown(blog)
+        }
         if (!content) throw new Error('文件加载失败')
 
         // 1. 处理图片嵌入语法
@@ -1416,7 +1512,10 @@ async function loadContent() {
         hasSidebar.value = sections.some(s => s.sidebarContent.join('').trim().length > 0)
         renderedContent.value = renderMarkdownWithSidebar(slotResult.markdown)
         blogTitle.value = blog.title
-        document.title = `${blog.title}${currentMode.value === 'study' ? '' : ` · ${currentMode.value === 'review' ? '批阅' : '答案设置'}`}`
+        const suffix = currentMode.value === 'study' ? ''
+            : currentMode.value === 'review' ? ' · 批阅'
+                : currentMode.value === 'answer' ? ' · 答案设置' : ' · 预览'
+        document.title = `${blog.title}${suffix}`
 
         // 4. 等待 DOM 更新
         await nextTick()
@@ -1426,12 +1525,14 @@ async function loadContent() {
             await renderMath(detailBodyRef.value)
         }
 
-        // 6. 加载答案和提交数据
-        answerKeyMap.value = await loadQuestionAnswerKeys(blogId.value)
+        // 6. 加载答案和提交数据（预览模式不写也不读任何学习数据）
+        if (currentMode.value !== 'preview') {
+            answerKeyMap.value = await loadQuestionAnswerKeys(blogId.value)
 
-        if (currentMode.value === 'study' || currentMode.value === 'review') {
-            if (studentId.value) {
-                submissionMap.value = await loadQuestionSubmissions(blogId.value, studentId.value)
+            if (currentMode.value === 'study' || currentMode.value === 'review') {
+                if (studentId.value) {
+                    submissionMap.value = await loadQuestionSubmissions(blogId.value, studentId.value)
+                }
             }
         }
 
@@ -1535,7 +1636,9 @@ watch(() => authStore.isLoggedIn, (loggedIn) => {
 
 // ========== 生命周期 ==========
 onMounted(async () => {
-    await blogStore.loadArticleData()
+    if (route.query.mode !== 'preview') {
+        await blogStore.loadArticleData()
+    }
     await loadContent()
     breakpointMql.addEventListener('change', handleBreakpointChange)
     window.addEventListener('pagehide', handlePageHide)
@@ -1635,6 +1738,34 @@ onUnmounted(() => {
 .reader-mode {
     font-family: var(--font-mono);
     letter-spacing: 0.06em;
+}
+
+.reader-preview-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.reader-preview-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-full);
+    background: var(--paper-1);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 var(--ink);
+    transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.reader-preview-back:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
 }
 
 .reader-title {

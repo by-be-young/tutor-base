@@ -158,28 +158,15 @@
         <div class="panel panel--tight editor__pane">
           <div class="editor__pane-head">
             <span>Markdown 源码 · {{ currentTitle }}</span>
-            <span v-if="dirty" class="editor__tag">未保存</span>
+            <span class="editor__pane-actions">
+              <span v-if="dirty" class="editor__tag">未保存</span>
+              <button type="button" class="editor__ghost editor__preview-btn" :disabled="busy || !markdown"
+                @click="openPreview">
+                <i class="fas fa-eye" aria-hidden="true"></i> 学员样式预览
+              </button>
+            </span>
           </div>
           <textarea v-model="markdown" class="editor__code" spellcheck="false" @input="dirty = true" />
-        </div>
-        <div class="panel panel--tight editor__pane">
-          <div class="editor__pane-head">
-            <span>预览</span>
-            <span v-if="precheck.errors.length" class="editor__tag is-error">
-              {{ precheck.errors.length }} 个问题
-            </span>
-            <span v-else-if="precheck.checked" class="editor__tag is-ok">校验通过</span>
-          </div>
-          <div class="editor__preview">
-            <CoursewarePreviewPane
-              :markdown="markdown"
-              :title="currentTitle"
-              :subtitle="currentPath"
-              :status="currentStatus"
-              :status-tone="currentStatusTone"
-              empty-text="还没有正文。先在左侧选一篇课件，或用「新建草稿」按布局起稿。"
-            />
-          </div>
           <ul v-if="precheck.errors.length" class="editor__errors">
             <li v-for="(error, index) in precheck.errors" :key="index">{{ error }}</li>
           </ul>
@@ -189,6 +176,9 @@
 
     <footer class="panel panel--tight editor__footer">
       <button type="button" class="editor__ghost" :disabled="busy" @click="runPrecheck">校验</button>
+      <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="openPreview">
+        学员样式预览
+      </button>
       <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="save">保存草稿</button>
       <button type="button" class="editor__ghost" :disabled="busy || !canDeleteDraft" @click="deleteCurrentDraft">
         删除草稿
@@ -200,14 +190,14 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { coursewareGateway } from '@/gateways/coursewareGateway'
-import CoursewarePreviewPane from '@/components/admin/CoursewarePreviewPane.vue'
 import { loadArticleMarkdownForEditing, loadCoursewareLibrary } from '@/utils/coursewareLibrary'
 import { articleStatus } from '@/utils/coursewareTree'
 import { showToast } from '@/utils/toast'
 
 const route = useRoute()
+const router = useRouter()
 
 const layouts = ref([])
 const templates = ref([])
@@ -507,6 +497,39 @@ async function runPrecheck() {
     showToast(result.ok ? '校验通过' : `发现 ${result.errors.length} 个问题`, result.ok ? 'success' : 'warning')
   } catch (error) {
     reportError(error)
+  }
+}
+
+/** 打开学员视角预览：先落一次草稿，再在新标签页打开完整的学员阅读器。 */
+async function openPreview() {
+  if (!markdown.value.trim()) {
+    showToast('正文还是空的，先写点内容再预览', 'warning')
+    return
+  }
+  busy.value = true
+  try {
+    let id = articleId.value
+    if (dirty.value || id == null) {
+      const saved = await coursewareGateway.saveDraft(id, markdown.value)
+      id = saved.articleId
+      articleId.value = id
+      currentHasDraft.value = true
+      recoveredFromStatic.value = false
+      dirty.value = false
+      await Promise.all([loadDrafts(), loadArticles()])
+    }
+    const query = { mode: 'preview' }
+    const course = subject.value || currentArticle.value?.subject
+    if (course) query.subject = course
+    if (currentTitle.value) query.title = currentTitle.value
+    if (currentPath.value) query.path = currentPath.value
+    const target = router.resolve({ name: 'CoursewarePreview', params: { id }, query })
+    window.open(target.href, '_blank', 'noopener')
+    showToast('已保存草稿，并在新标签页打开学员视角预览', 'success')
+  } catch (error) {
+    reportError(error)
+  } finally {
+    busy.value = false
   }
 }
 
@@ -872,7 +895,7 @@ onMounted(async () => {
 
 .editor__main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -886,6 +909,7 @@ onMounted(async () => {
 
 .editor__pane-head {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   font-family: var(--font-mono);
@@ -910,16 +934,23 @@ onMounted(async () => {
   line-height: 1.75;
 }
 
-.editor__preview {
-  flex: 1;
-  min-height: 0;
+.editor__pane-actions {
   display: flex;
-  overflow: auto;
+  align-items: center;
+  gap: 8px;
 }
 
-.editor__preview > * {
-  flex: 1;
-  min-height: 0;
+.editor__preview-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  letter-spacing: 0;
+  text-transform: none;
+  font-family: var(--font-body);
+  color: var(--ink);
+  cursor: pointer;
 }
 
 .editor__help {
