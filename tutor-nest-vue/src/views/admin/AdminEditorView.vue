@@ -1,21 +1,13 @@
 <template>
   <div class="editor">
     <section class="panel panel--tight editor__lead">
-      <p class="eyebrow">课件托管</p>
-      <p class="editor__lead-text">
-        草稿保存后学员端看不到，点「发布」才生效。布局指令写在 <code>&lt;!-- @layout:X --&gt;</code> 注释里，
-        不影响题干与作答占位符解析。
-      </p>
-      <details class="editor__help">
-        <summary>草稿是什么？为什么会多出来？怎么删除？</summary>
-        <ul class="editor__help-list">
-          <li><strong>草稿</strong>＝只在这里保存、还没有上线的正文。点「保存草稿」或「发布」前自动保存都会生成一条，
-            学员端看不到，所以列表里会突然多出草稿。</li>
-          <li><strong>发布</strong>＝把该科目当前所有草稿合并成新的发布版本，学员端从这一刻看到新内容。</li>
-          <li><strong>删除草稿</strong>＝丢掉这份未上线的改动。已经发布过的版本不受影响，学员看到的还是上一版。</li>
-          <li>站内静态课件（<code>public/articles</code> 下的讲义）第一次编辑时也会先生成草稿，发布后仍挂回原篇目，不会多出一篇。</li>
-        </ul>
-      </details>
+      <div class="editor__lead-main">
+        <p class="eyebrow">课件托管</p>
+        <h1 class="editor__lead-title">在线编辑器</h1>
+      </div>
+      <button type="button" class="btn btn--soft btn--sm" @click="guideOpen = true">
+        <i class="fas fa-circle-question" aria-hidden="true"></i> 发布教程
+      </button>
     </section>
 
     <section class="panel panel--tight editor__identity">
@@ -134,24 +126,6 @@
         <p v-if="importReport" class="editor__report">
           导入 {{ importReport.imported }} · 覆盖 {{ importReport.overwritten }} · 跳过 {{ importReport.skipped }}
         </p>
-
-        <h2 class="editor__list-title">Git 工作区（可选）</h2>
-        <p class="editor__report">
-          习惯本地编辑时用：仓库里只有 Markdown，发布仍走服务端校验。
-        </p>
-        <ol class="editor__wizard">
-          <li v-for="(step, index) in gitSteps" :key="index">
-            <span class="editor__wizard-step">{{ index + 1 }}</span>
-            <span class="editor__wizard-body">
-              <strong>{{ step.title }}</strong>
-              <code v-if="step.command" class="editor__wizard-cmd">{{ step.command }}</code>
-              <em v-if="step.hint">{{ step.hint }}</em>
-            </span>
-            <button v-if="step.command" type="button" class="editor__ghost editor__copy" @click="copyCommand(step.command)">
-              复制
-            </button>
-          </li>
-        </ol>
       </aside>
 
       <div class="editor__main">
@@ -185,12 +159,15 @@
       </button>
       <button type="button" class="editor__primary" :disabled="busy || !subject" @click="publish">发布</button>
     </footer>
+
+    <CoursewarePublishGuide :open="guideOpen" @close="guideOpen = false" />
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import CoursewarePublishGuide from '@/components/admin/CoursewarePublishGuide.vue'
 import { coursewareGateway } from '@/gateways/coursewareGateway'
 import { loadArticleMarkdownForEditing, loadCoursewareLibrary } from '@/utils/coursewareLibrary'
 import { articleStatus } from '@/utils/coursewareTree'
@@ -213,6 +190,7 @@ const dirty = ref(false)
 const busy = ref(false)
 const importOverwrite = ref(false)
 const importReport = ref(null)
+const guideOpen = ref(false)
 const precheck = reactive({ checked: false, errors: [] })
 
 // 当前这篇在服务端有没有草稿行：决定「删除草稿」是否可用
@@ -603,42 +581,6 @@ async function onImportFile(event) {
   }
 }
 
-/** 零基础 Git 向导：三步走，命令可一键复制，不需要记参数。 */
-const gitSteps = computed(() => {
-  const target = subject.value ? ` --subject ${subject.value}` : ' --subject <科目>'
-  return [
-    {
-      title: '安装 Node.js 18+ 与 Git',
-      command: '',
-      hint: 'https://nodejs.org/ 与 https://git-scm.com/ ，Windows 默认选项即可'
-    },
-    {
-      title: '登录后取会话 cookie，填进环境变量',
-      command: "$env:TUTOR_SESSION='<浏览器 cookie 值>'",
-      hint: '开发者工具 → Application → Cookies → TUTOR_SESSION'
-    },
-    {
-      title: '自检环境',
-      command: 'node scripts/courseware-cli.mjs doctor',
-      hint: '未通过时会直接告诉你缺什么'
-    },
-    {
-      title: '拉取 → 本地编辑 → 推送',
-      command: `node scripts/courseware-cli.mjs pull${target} --dir ./courseware`,
-      hint: '改完用同样的 --subject 执行 push；冲突会提示先 pull，不会覆盖你的改动'
-    }
-  ]
-})
-
-async function copyCommand(command) {
-  try {
-    await navigator.clipboard.writeText(command)
-    showToast('命令已复制', 'success')
-  } catch {
-    showToast('复制失败，请手动选择命令文本', 'warn')
-  }
-}
-
 onMounted(async () => {
   try {
     layouts.value = await coursewareGateway.listLayouts()
@@ -672,15 +614,22 @@ onMounted(async () => {
 
 .editor__lead {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.editor__lead-text {
+.editor__lead-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.editor__lead-title {
   margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.6;
-  color: var(--text-2);
+  font-size: 1.05rem;
+  color: var(--ink);
 }
 
 .editor__identity {
@@ -953,31 +902,6 @@ onMounted(async () => {
   cursor: pointer;
 }
 
-.editor__help {
-  margin: 8px 0 0;
-  font-size: 0.78rem;
-  color: var(--text-2);
-}
-
-.editor__help summary {
-  cursor: pointer;
-  font-weight: 700;
-  color: var(--ink);
-}
-
-.editor__help-list {
-  margin: 8px 0 0;
-  padding-left: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  line-height: 1.65;
-}
-
-.editor__help-list strong {
-  color: var(--ink);
-}
-
 .editor__errors {
   margin: 0;
   padding-left: 18px;
@@ -1073,79 +997,6 @@ onMounted(async () => {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   color: var(--text-2);
-}
-
-.editor__wizard {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.editor__wizard li {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px;
-  border: 1.5px solid var(--paper-2);
-  background: var(--paper-2);
-  border-radius: var(--r-sm);
-}
-
-.editor__wizard-step {
-  flex: 0 0 18px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1.5px solid var(--ink);
-  border-radius: var(--r-full);
-  background: var(--lime);
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  font-weight: 700;
-  color: var(--ink);
-}
-
-.editor__wizard-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.editor__wizard-body strong {
-  font-size: 0.76rem;
-  color: var(--ink);
-}
-
-.editor__wizard-body em {
-  font-style: normal;
-  font-size: 0.68rem;
-  line-height: 1.5;
-  color: var(--text-3);
-}
-
-.editor__wizard-cmd {
-  display: block;
-  overflow-x: auto;
-  padding: 4px 6px;
-  border: 1px dashed var(--ink);
-  border-radius: 4px;
-  background: var(--paper-1);
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  color: var(--ink);
-  white-space: pre;
-}
-
-.editor__copy {
-  flex: 0 0 auto;
-  padding: 4px 10px;
-  font-size: 0.68rem;
 }
 
 .editor__upload {
