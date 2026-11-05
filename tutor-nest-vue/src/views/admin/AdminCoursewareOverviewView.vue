@@ -6,6 +6,7 @@
       <p class="overview__lead-text">
         每个科目一个发布版本：草稿只有你自己能看到，点「发布」才生效；删除草稿不会影响已发布内容。
         点目录里的篇目会在新页面里用学员阅读器完整预览（草稿会标注「学员还看不到」），要改内容再点「去编辑」。
+        标着「静态讲义」的篇目正文还在 <code>public/articles</code>，可用右上角「一键接管静态课件」批量转成服务端托管。
         获取他人的课件、分享自己的课件都在「共享」页。
       </p>
     </section>
@@ -76,6 +77,12 @@
           <h2 class="panel-title">课件目录</h2>
           <div class="overview__tree-actions">
             <span class="overview__tree-hint">点篇目打开学员视角预览</span>
+            <button v-if="staticPending.length" type="button" class="btn btn--soft btn--sm"
+              :disabled="takeover.running" @click="runTakeover">
+              {{ takeover.running
+                ? `接管中 ${takeover.done}/${takeover.total}…`
+                : `一键接管静态课件（${staticPending.length}）` }}
+            </button>
             <button type="button" class="btn btn--ghost btn--sm" @click="toggleAll">
               {{ expanded ? '全部收起' : '全部展开' }}
             </button>
@@ -128,8 +135,10 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import FolderNode from '@/components/articles/FolderNode.vue'
 import { coursewareGateway } from '@/gateways/coursewareGateway'
-import { loadCoursewareLibrary } from '@/utils/coursewareLibrary'
+import { fetchStaticArticle } from '@/utils/articleContent'
+import { loadCoursewareLibrary, loadStaticIndex, staticPathFor } from '@/utils/coursewareLibrary'
 import { buildCoursewareTree } from '@/utils/coursewareTree'
+import { pendingStaticArticles, takeOverStaticCourseware, takeoverBySubject } from '@/utils/coursewareTakeover'
 import { showToast } from '@/utils/toast'
 
 const loading = ref(true)
@@ -194,6 +203,57 @@ function openPreview(subjectValue, articleId) {
 /** 交给 FolderNode 的目录树：科目是根文件夹，logicalPath 的层级是多级子目录。 */
 function treeOf(subjectValue) {
   return buildCoursewareTree(subjectValue, articlesOf(subjectValue))
+}
+
+// ---- 一键接管站内静态课件 ----
+// 按原编号写成草稿，再按科目整科发布；学员授权用的是旧编号，所以原编号必须保留。
+const takeover = reactive({ running: false, done: 0, total: 0 })
+const staticPending = computed(() => pendingStaticArticles(articles.value))
+
+async function runTakeover() {
+  const targets = staticPending.value
+  if (!targets.length || takeover.running) return
+
+  const groups = takeoverBySubject(targets)
+  const detail = groups.map(group => `${group.subject} ${group.count} 篇`).join('、')
+  const confirmed = window.confirm(
+    `把 ${targets.length} 篇静态讲义接管到服务端？\n\n${detail}\n\n` +
+    '做法：按原编号保存为草稿，然后逐个科目「整科发布」。注意该科目下其它尚未发布的草稿会一起上线。' +
+    '\n静态文件（public/articles）保持不动，继续作为兜底。'
+  )
+  if (!confirmed) return
+
+  takeover.running = true
+  takeover.done = 0
+  takeover.total = targets.length
+  try {
+    const result = await takeOverStaticCourseware(targets, {
+      loadMarkdown: async (article) => {
+        const index = await loadStaticIndex()
+        return fetchStaticArticle(staticPathFor(article, index))
+      },
+      saveDraft: (articleId, markdown, legacyArticleId) =>
+        coursewareGateway.saveDraft(articleId, markdown, legacyArticleId),
+      publish: (subject) => coursewareGateway.publishDrafts(subject),
+      onProgress: ({ done }) => { takeover.done = done }
+    })
+
+    await Promise.all([loadArticles(), loadOverview()])
+
+    const versions = result.published.map(item => `v${item.release?.version ?? '?'}`)
+    const summary = [`已接管 ${result.saved.length} 篇`]
+    if (versions.length) summary.push(`发布 ${versions.join('/')}`)
+    if (result.skipped.length) summary.push(`无正文跳过 ${result.skipped.length}`)
+    if (result.failed.length) summary.push(`失败 ${result.failed.length}`)
+    if (result.errors.length) summary.push(`发布失败 ${result.errors.length} 个科目`)
+    const hasProblem = result.failed.length > 0 || result.errors.length > 0
+    showToast(summary.join(' · '), hasProblem ? 'warning' : 'success')
+    if (hasProblem) console.warn('静态课件接管未完全成功', result)
+  } catch (error) {
+    showToast(error?.message || '接管静态课件失败', 'error')
+  } finally {
+    takeover.running = false
+  }
 }
 
 /** 概览给的科目 + 只在「我的课件」清单里出现的科目（例如只有草稿、还没发布） */
