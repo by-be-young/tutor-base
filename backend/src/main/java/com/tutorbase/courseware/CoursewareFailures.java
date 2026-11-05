@@ -29,6 +29,18 @@ public final class CoursewareFailures {
         }
     }
 
+    /**
+     * 课件在版本清单里存在，但正文文件（blob）不在存储里。
+     *
+     * <p>典型成因：发布时正文没落到持久卷、卷被重建，或历史环境的临时目录被清空。
+     * 与"课件不存在"区分开，前端才能提示重新导入/发布而不是报"草稿与发布版本都不存在"。
+     */
+    public static final class ContentMissing extends RuntimeException {
+        public ContentMissing(String message) {
+            super(message);
+        }
+    }
+
     /** 未授权：未关联该老师，或未被授权该课件。 */
     public static final class Forbidden extends RuntimeException {
         public Forbidden(String message) {

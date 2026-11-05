@@ -87,11 +87,18 @@ public class CoursewareDraftService {
         if (markdown != null) {
             return new Draft(articleId, markdown, true);
         }
-        String published = publishedMarkdown(teacherId, articleId);
-        if (published == null) {
-            throw new CoursewareFailures.NotFound("草稿与已发布版本都不存在：" + articleId);
+        String hash = publishedHash(teacherId, articleId);
+        if (hash == null) {
+            throw new CoursewareFailures.NotFound("课件不存在：" + articleId);
         }
-        return new Draft(articleId, published, false);
+        byte[] bytes = storage.getBlob(teacherId, hash);
+        if (bytes == null) {
+            // 清单里还在，但正文文件丢了：明确告诉前端"缺文件"，让它回退到静态讲义恢复，
+            // 而不是含糊地说"草稿与发布版本都不存在"。
+            throw new CoursewareFailures.ContentMissing(
+                    "课件 " + articleId + " 的正文文件缺失（" + hash + "），请重新导入或以新正文重新发布这一篇");
+        }
+        return new Draft(articleId, new String(bytes, StandardCharsets.UTF_8), false);
     }
 
     /** 新建课件骨架（不落库，rticleId=0 表示尚未分配；前端保存时走 POST）。 */
@@ -321,8 +328,8 @@ public class CoursewareDraftService {
         return answers;
     }
 
-    private String publishedMarkdown(long teacherId, long articleId) {
-        String hash = jdbc.sql("""
+    private String publishedHash(long teacherId, long articleId) {
+        return jdbc.sql("""
                 SELECT ca.content_hash
                 FROM public.course_release_head AS h
                 JOIN public.course_article AS ca
@@ -334,6 +341,10 @@ public class CoursewareDraftService {
                 .query(String.class)
                 .optional()
                 .orElse(null);
+    }
+
+    private String publishedMarkdown(long teacherId, long articleId) {
+        String hash = publishedHash(teacherId, articleId);
         if (hash == null) {
             return null;
         }

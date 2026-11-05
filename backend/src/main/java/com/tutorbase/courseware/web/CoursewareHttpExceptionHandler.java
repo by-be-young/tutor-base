@@ -19,6 +19,12 @@ class CoursewareHttpExceptionHandler {
         return problem(HttpStatus.NOT_FOUND, "courseware_not_found", "课件不存在", exception.getMessage(), request);
     }
 
+    @ExceptionHandler(CoursewareFailures.ContentMissing.class)
+    ProblemDetail contentMissing(CoursewareFailures.ContentMissing exception, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, "courseware_content_missing", "课件正文文件缺失",
+                exception.getMessage(), request);
+    }
+
     @ExceptionHandler(CoursewareFailures.Forbidden.class)
     ProblemDetail forbidden(CoursewareFailures.Forbidden exception, HttpServletRequest request) {
         return problem(HttpStatus.FORBIDDEN, "courseware_forbidden", "无权访问课件", exception.getMessage(), request);

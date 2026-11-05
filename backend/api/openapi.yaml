@@ -2051,6 +2051,10 @@ paths:
     get:
       operationId: getCoursewareDraft
       summary: 取草稿（无草稿时回落到已发布正文）
+      description: |
+        有草稿返回草稿；否则返回当前发布版本里的正文。
+        已发布篇目的正文文件缺失时返回 409 `courseware_content_missing`（不是 404），
+        以便客户端区分"这篇不存在"和"这篇的正文文件丢了"。
       security:
         - sessionCookie: []
       parameters:
@@ -2072,6 +2076,8 @@ paths:
         '403':
           $ref: '#/components/responses/Problem'
         '404':
+          $ref: '#/components/responses/Problem'
+        '409':
           $ref: '#/components/responses/Problem'
     put:
       operationId: saveCoursewareDraft
@@ -4476,7 +4482,7 @@ components:
     CoursewareArticleSummary:
       type: object
       additionalProperties: false
-      required: [articleId, published, hasDraft, size, hosted]
+      required: [articleId, published, hasDraft, size, hosted, contentMissing]
       properties:
         articleId:
           type: integer
@@ -4510,6 +4516,12 @@ components:
           description: >-
             true = 正文已在服务端托管（当前发布版本或草稿）；false = 站内静态课件，
             正文仍在 `public/articles` 下，未发布过，编辑时由前端读静态文件，保存后才落成在线草稿。
+        contentMissing:
+          type: boolean
+          description: >-
+            true = 该篇在版本清单里，但正文文件（blob）不在存储中（存储卷重建、历史临时目录被清空等）。
+            此时 `GET /admin/courseware/drafts/{articleId}` 返回 409 `courseware_content_missing`，
+            客户端应回退到站内静态讲义恢复正文后重新发布。草稿与静态课件恒为 false。
     CoursewarePrecheck:
       type: object
       additionalProperties: false

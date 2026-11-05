@@ -238,6 +238,59 @@ class CoursewareEditorHttpContractTest {
     }
 
     @Test
+    void publishedArticleWithMissingBlobReportsContentMissing() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+
+        String skeleton = objectMapper.readTree(mockMvc.perform(
+                        get("/api/v1/admin/courseware/layouts/B/skeleton").param("title", "口语练习").cookie(cookie))
+                .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+
+        long articleId = objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("markdown", skeleton))))
+                .andReturn().getResponse().getContentAsString()).get("articleId").asLong();
+
+        mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("subject", "高中英语"))))
+                .andExpect(status().isOk());
+
+        long alphaId = jdbc.queryForObject(
+                "SELECT id FROM public.account WHERE username = 'alpha'", Long.class);
+        String hash = jdbc.queryForObject("""
+                SELECT content_hash FROM public.course_article
+                WHERE teacher_account_id = ? AND article_id = ?
+                """, String.class, alphaId, articleId);
+
+        // 删掉草稿，让读取回落到已发布正文
+        mockMvc.perform(delete("/api/v1/admin/courseware/drafts/{articleId}", articleId)
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/v1/admin/courseware/drafts/{articleId}", articleId).cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasDraft").value(false));
+
+        // 模拟存储卷重建：正文文件不在本机。清单要标出来，读取要给出可区分的 409。
+        Files.delete(STORAGE_ROOT.resolve(Long.toString(alphaId))
+                .resolve("blobs")
+                .resolve(hash.substring("sha256:".length()) + ".md"));
+
+        mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].contentMissing", contains(true)));
+
+        mockMvc.perform(get("/api/v1/admin/courseware/drafts/{articleId}", articleId).cookie(cookie))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("courseware_content_missing"));
+    }
+
+    @Test
     void legacyStaticCoursewareIsListedAndPublishesBackToItsOwnArticle() throws Exception {
         long alphaId = jdbc.queryForObject(
                 "SELECT id FROM public.account WHERE username = 'alpha'", Long.class);

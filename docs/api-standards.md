@@ -272,11 +272,13 @@
 - 发布：`POST /admin/courseware/releases` 以 `expectVersion` 做乐观锁；与当前指针不一致返回 `409`。
 - 正文存储：正文 blob 与版本 manifest 落在 `tutor.courseware.root`（生产默认 `/var/lib/tutor-base/courseware`，由 `deploy/compose.yaml` 的 `courseware-data` 卷挂载）。卷不可写时写盘失败，返回 `503 courseware_storage_unavailable`。
 - 结转：已发布篇目的正文 blob 不在本机（换机、卷未挂载、容器重建）时，`POST /admin/courseware/drafts/publish` 仍按上一版 `content_hash`/`answer_hash` 结转该篇，服务端打 `WARN` 日志，不重算正文、不清空科目；恢复 blob 后再次发布即回到正常路径。
+- 正文缺失：清单里仍在、但 blob 已丢失的已发布篇目，`GET /admin/courseware/articles` 会给出 `contentMissing=true`；`GET /admin/courseware/drafts/{articleId}` 对其返回 `409 courseware_content_missing`（区别于"课件不存在"的 404），前端据此回退到站内静态讲义（`public/articles`）恢复正文，保存草稿后重新发布即可把 blob 写回。
 - 错误码（`Problem.code`）：
 
   | code | HTTP | 含义 |
   | --- | --- | --- |
   | `courseware_not_found` | 404 | 老师或课件不存在 |
+  | `courseware_content_missing` | 409 | 已发布篇目的正文 blob 缺失，需重新导入或重新发布 |
   | `courseware_forbidden` | 403 | 未授权或未关联该老师 |
   | `courseware_validation_failed` | 400 | 发布校验失败，`errors[]` 逐条说明 |
   | `courseware_release_conflict` | 409 | `expectVersion` 过期 |
