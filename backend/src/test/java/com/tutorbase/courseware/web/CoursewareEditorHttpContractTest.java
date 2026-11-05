@@ -216,12 +216,7 @@ class CoursewareEditorHttpContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.articleCount").value(1));
 
-        // 发布后删掉草稿：drafts 列表空了，但已发布课件仍必须可选
-        mockMvc.perform(delete("/api/v1/admin/courseware/drafts/{articleId}", articleId)
-                        .cookie(cookie)
-                        .header("X-CSRF-TOKEN", csrf))
-                .andExpect(status().isNoContent());
-
+        // 发布成功后草稿自动清空：drafts 列表空，已发布课件仍必须可选
         mockMvc.perform(get("/api/v1/admin/courseware/drafts").cookie(cookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
@@ -267,11 +262,7 @@ class CoursewareEditorHttpContractTest {
                 WHERE teacher_account_id = ? AND article_id = ?
                 """, String.class, alphaId, articleId);
 
-        // 删掉草稿，让读取回落到已发布正文
-        mockMvc.perform(delete("/api/v1/admin/courseware/drafts/{articleId}", articleId)
-                        .cookie(cookie)
-                        .header("X-CSRF-TOKEN", csrf))
-                .andExpect(status().isNoContent());
+        // 发布后草稿会被清掉，读取直接回落到已发布正文
         mockMvc.perform(get("/api/v1/admin/courseware/drafts/{articleId}", articleId).cookie(cookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.hasDraft").value(false));
@@ -288,6 +279,49 @@ class CoursewareEditorHttpContractTest {
         mockMvc.perform(get("/api/v1/admin/courseware/drafts/{articleId}", articleId).cookie(cookie))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("courseware_content_missing"));
+    }
+
+    @Test
+    void draftListHasOneRowPerDraftEvenWithMultipleSubjects() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+        String skeleton = objectMapper.readTree(mockMvc.perform(
+                        get("/api/v1/admin/courseware/layouts/A/skeleton").param("title", "多科目").cookie(cookie))
+                .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+
+        // 先造两个科目的发布版本（course_release_head 每个科目一行）
+        for (String subject : List.of("高中英语", "高中化学")) {
+            String markdown = skeleton.replace("# 新课件", "# " + subject + " 新课件");
+            mockMvc.perform(post("/api/v1/admin/courseware/drafts")
+                            .cookie(cookie)
+                            .header("X-CSRF-TOKEN", csrf)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("markdown", markdown))))
+                    .andExpect(status().isOk());
+            mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")
+                            .cookie(cookie)
+                            .header("X-CSRF-TOKEN", csrf)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("subject", subject))))
+                    .andExpect(status().isOk());
+        }
+        // 发布后草稿应被清空
+        mockMvc.perform(get("/api/v1/admin/courseware/drafts").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        long articleId = objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("markdown", skeleton))))
+                .andReturn().getResponse().getContentAsString()).get("articleId").asLong();
+
+        // 两个科目各有一份 release head，草稿列表也不能因此把同一条草稿列两遍
+        mockMvc.perform(get("/api/v1/admin/courseware/drafts").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].articleId").value(articleId));
     }
 
     @Test

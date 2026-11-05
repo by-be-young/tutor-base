@@ -45,17 +45,24 @@ public class CoursewareDraftService {
     /** 我的草稿列表（含未发布的新建篇目）。 */
     @Transactional(readOnly = true)
     public List<DraftSummary> list(long teacherId) {
+        // 一个老师有多份 release head（每科目一份），直接 join head 会让同一条草稿按科目数重复；
+        // 这里用 LATERAL 只取这篇所在的那一份，保证草稿列表一篇一行。
         return jdbc.sql("""
                 SELECT d.article_id, d.updated_at, length(d.markdown) AS size,
                        ca.title, ca.series, ca.logical_path, ca.subject,
-                       h.release_id IS NOT NULL AS published
+                       ca.article_id IS NOT NULL AS published
                 FROM public.course_draft AS d
-                LEFT JOIN public.course_release_head AS h
-                  ON h.teacher_account_id = d.teacher_account_id
-                LEFT JOIN public.course_article AS ca
-                  ON ca.release_id = h.release_id
-                 AND ca.teacher_account_id = d.teacher_account_id
-                 AND ca.article_id = d.article_id
+                LEFT JOIN LATERAL (
+                    SELECT article.article_id, article.title, article.series,
+                           article.logical_path, article.subject
+                    FROM public.course_release_head AS h
+                    JOIN public.course_article AS article
+                      ON article.release_id = h.release_id
+                     AND article.teacher_account_id = h.teacher_account_id
+                    WHERE h.teacher_account_id = d.teacher_account_id
+                      AND article.article_id = d.article_id
+                    LIMIT 1
+                ) AS ca ON TRUE
                 WHERE d.teacher_account_id = :teacherId
                 ORDER BY d.updated_at DESC
                 """)
@@ -273,7 +280,24 @@ public class CoursewareDraftService {
         if (!layoutErrors.isEmpty()) {
             throw new CoursewareFailures.Validation(layoutErrors);
         }
-        return publisher.publish(teacherId, subject, expectVersion, articles);
+        CoursewarePublisher.Published published = publisher.publish(teacherId, subject, expectVersion, articles);
+        // 本次并入版本的草稿已完成使命：内容已经写进新 release，草稿表里的副本删掉，
+        // 免得「发布完还挂着一堆草稿」。未参与本次发布的草稿（别的科目、被跳过的）保持不动。
+        List<Long> mergedArticleIds = articles.stream()
+                .map(CoursewareArticleInput::articleId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (!mergedArticleIds.isEmpty()) {
+            jdbc.sql("""
+                    DELETE FROM public.course_draft
+                    WHERE teacher_account_id = :teacherId AND article_id IN (:articleIds)
+                    """)
+                    .param("teacherId", teacherId)
+                    .param("articleIds", mergedArticleIds)
+                    .update();
+        }
+        return published;
     }
 
     private boolean containsArticle(List<CoursewareArticleInput> articles, long articleId) {

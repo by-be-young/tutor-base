@@ -539,7 +539,9 @@ async function publish() {
     }
     const published = await coursewareGateway.publishDrafts(subject.value)
     recoveredFromStatic.value = false
-    showToast(`已发布 v${published.version}（${published.articleCount} 篇）`, 'success')
+    // 发布成功后服务端会清掉本次并入版本的草稿，编辑器随之回到"已发布正文"状态
+    currentHasDraft.value = false
+    showToast(`已发布 v${published.version}（${published.articleCount} 篇），草稿已自动清空`, 'success')
     await Promise.all([loadDrafts(), loadArticles()])
   } catch (error) {
     reportError(error)
