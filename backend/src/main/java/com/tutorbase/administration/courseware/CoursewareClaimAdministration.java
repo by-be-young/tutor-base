@@ -13,7 +13,7 @@ import java.util.List;
  */
 public interface CoursewareClaimAdministration {
 
-    int syncCatalog(List<CatalogEntry> entries);
+    int syncCatalog(long administratorAccountId, List<CatalogEntry> entries);
 
     Claims claims(long administratorAccountId);
 

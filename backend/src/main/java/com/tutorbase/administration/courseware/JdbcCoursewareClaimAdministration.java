@@ -42,15 +42,44 @@ class JdbcCoursewareClaimAdministration implements CoursewareClaimAdministration
 
     @Override
     @Transactional
-    public int syncCatalog(List<CatalogEntry> entries) {
+    public int syncCatalog(long administratorAccountId, List<CatalogEntry> entries) {
         for (CatalogEntry entry : entries) {
+            // 先按本管理员自己的目录行更新：V26 之后 courseware_catalog 的主键是
+            // (teacher_account_id, article_id)，只按 article_id 写入会命中别人的行。
+            int updated = jdbc.sql("""
+                    UPDATE public.courseware_catalog
+                    SET subject = :subject, title = :title, legacy_article_id = :articleId, updated_at = now()
+                    WHERE teacher_account_id = :teacherId AND article_id = :articleId
+                    """)
+                    .param("teacherId", administratorAccountId)
+                    .param("articleId", entry.articleId())
+                    .param("subject", entry.subject())
+                    .param("title", entry.title())
+                    .update();
+            if (updated > 0) {
+                continue;
+            }
+            // 没有自己的行就插入；V26 前主键仍是全局 article_id，冲突时退化为刷新公共元数据。
+            // 这里不用 ON CONFLICT (article_id)：换主键后该推断不再命中任何唯一约束，
+            // 会直接抛 DataAccessException 变成 503。
+            int inserted = jdbc.sql("""
+                    INSERT INTO public.courseware_catalog
+                        (article_id, teacher_account_id, legacy_article_id, subject, title, updated_at)
+                    VALUES (:articleId, :teacherId, :articleId, :subject, :title, now())
+                    ON CONFLICT DO NOTHING
+                    """)
+                    .param("teacherId", administratorAccountId)
+                    .param("articleId", entry.articleId())
+                    .param("subject", entry.subject())
+                    .param("title", entry.title())
+                    .update();
+            if (inserted > 0) {
+                continue;
+            }
             jdbc.sql("""
-                    INSERT INTO public.courseware_catalog (article_id, subject, title, updated_at)
-                    VALUES (:articleId, :subject, :title, now())
-                    ON CONFLICT (article_id) DO UPDATE
-                        SET subject = EXCLUDED.subject,
-                            title = EXCLUDED.title,
-                            updated_at = now()
+                    UPDATE public.courseware_catalog
+                    SET subject = :subject, title = :title, updated_at = now()
+                    WHERE article_id = :articleId
                     """)
                     .param("articleId", entry.articleId())
                     .param("subject", entry.subject())

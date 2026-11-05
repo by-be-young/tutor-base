@@ -49,7 +49,9 @@ public class AdminCoursewareClaimController {
     }
 
     @PostMapping("/courseware-catalog/sync")
-    SyncCatalogResponse syncCatalog(@Valid @RequestBody SyncCatalogRequest request) {
+    SyncCatalogResponse syncCatalog(
+            @AuthenticationPrincipal AccountPrincipal administrator,
+            @Valid @RequestBody SyncCatalogRequest request) {
         requireLegacyClaimsEnabled();
         List<CoursewareClaimAdministration.CatalogEntry> entries = request.items().stream()
                 .map(item -> new CoursewareClaimAdministration.CatalogEntry(
@@ -57,7 +59,7 @@ public class AdminCoursewareClaimController {
                         item.subject().strip(),
                         item.title() == null ? null : item.title().strip()))
                 .toList();
-        return new SyncCatalogResponse(administration.syncCatalog(entries));
+        return new SyncCatalogResponse(administration.syncCatalog(administrator.accountId(), entries));
     }
 
     @GetMapping("/courseware-claims")
