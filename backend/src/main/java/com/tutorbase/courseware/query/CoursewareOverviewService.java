@@ -18,10 +18,16 @@ public class CoursewareOverviewService {
 
     private final JdbcClient jdbc;
     private final com.tutorbase.administration.courseware.CoursewareScope scope;
+    private final com.tutorbase.courseware.storage.CoursewareStorage storage;
+    private final com.tutorbase.courseware.CoursewareProperties properties;
 
-    CoursewareOverviewService(JdbcClient jdbc, com.tutorbase.administration.courseware.CoursewareScope scope) {
+    CoursewareOverviewService(JdbcClient jdbc, com.tutorbase.administration.courseware.CoursewareScope scope,
+            com.tutorbase.courseware.storage.CoursewareStorage storage,
+            com.tutorbase.courseware.CoursewareProperties properties) {
         this.jdbc = jdbc;
         this.scope = scope;
+        this.storage = storage;
+        this.properties = properties;
     }
 
     @Transactional(readOnly = true)
@@ -122,9 +128,15 @@ public class CoursewareOverviewService {
      */
     @Transactional(readOnly = true)
     public List<ArticleSummary> articles(long teacherId) {
+        // 已发布篇目的正文是否存在：卷重建/历史环境临时目录被清空后会丢 blob，
+        // 清单必须如实标出来，否则点开只会得到一句"课件不存在"。
+        // 静态模式下正文不在服务端托管，不做这个判断（避免整片误报）。
+        java.util.Set<String> storedHashes = "storage".equals(properties.source())
+                ? storage.listBlobs(teacherId).keySet()
+                : null;
         List<ArticleSummary> published = jdbc.sql("""
                 SELECT h.subject, ca.article_id, ca.legacy_article_id, ca.title, ca.series,
-                       ca.logical_path,
+                       ca.logical_path, ca.content_hash,
                        d.markdown IS NOT NULL AS has_draft,
                        COALESCE(length(d.markdown), 0) AS size,
                        d.updated_at AS draft_updated_at
@@ -150,7 +162,8 @@ public class CoursewareOverviewService {
                         rs.getBoolean("has_draft"),
                         rs.getInt("size"),
                         toInstant(rs, "draft_updated_at"),
-                        true))
+                        true,
+                        storedHashes != null && !storedHashes.contains(rs.getString("content_hash"))))
                 .list();
 
         // 旧静态课件：正文仍在 public/articles 下，从未走过发布，因此不在 course_release_head 里。
@@ -196,6 +209,7 @@ public class CoursewareOverviewService {
                         rs.getBoolean("has_draft"),
                         rs.getInt("size"),
                         toInstant(rs, "draft_updated_at"),
+                        false,
                         false))
                 .list();
 
@@ -230,7 +244,8 @@ public class CoursewareOverviewService {
                         true,
                         rs.getString("markdown").length(),
                         toInstant(rs, "updated_at"),
-                        true))
+                        true,
+                        false))
                 .list();
 
         List<ArticleSummary> merged = new java.util.ArrayList<>(published);
@@ -269,7 +284,9 @@ public class CoursewareOverviewService {
             int size,
             Instant updatedAt,
             /** false = 旧静态课件：正文仍在 public/articles 下，编辑需先取静态文件再存成草稿。 */
-            boolean hosted) {
+            boolean hosted,
+            /** true = 已发布篇目的正文文件（blob）不在了：编辑器会回退到静态讲义并提示重新发布。 */
+            boolean contentMissing) {
     }
 
     /** 概览。 */

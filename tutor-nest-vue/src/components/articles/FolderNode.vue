@@ -113,9 +113,10 @@ const pendingCount = computed(() => {
 /** 子树内是否存在待提交题目（沿用的自动展开依据） */
 const hasPendingChild = computed(() => pendingCount.value > 0)
 
-// 初始展开状态：有待提交则展开。之后用户可手动切换，不再被 watch 覆盖。
-const isExpanded = ref(hasPendingChild.value)
-let autoExpanded = hasPendingChild.value // 标记本次是否是自动展开的
+// 初始展开状态：父级给了 expand-to=true（管理端目录）或子树有待提交题目则展开。
+// 之后用户可手动切换，不再被 watch 覆盖。
+const isExpanded = ref(props.expandTo || hasPendingChild.value)
+let autoExpanded = !props.expandTo && hasPendingChild.value // 标记本次是否是自动展开的
 
 watch(hasPendingChild, (now) => {
   // 数据到达后，只有当从未手动操作过时才自动展开

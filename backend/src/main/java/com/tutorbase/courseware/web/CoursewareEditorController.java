@@ -422,13 +422,14 @@ public class CoursewareEditorController {
             boolean hasDraft,
             int size,
             Instant updatedAt,
-            boolean hosted) {
+            boolean hosted,
+            boolean contentMissing) {
 
         static ArticleSummaryResponse from(CoursewareOverviewService.ArticleSummary summary) {
             return new ArticleSummaryResponse(summary.articleId(), summary.legacyArticleId(),
                     summary.title(), summary.subject(), summary.series(), summary.logicalPath(),
                     summary.published(), summary.hasDraft(), summary.size(), summary.updatedAt(),
-                    summary.hosted());
+                    summary.hosted(), summary.contentMissing());
         }
     }
 

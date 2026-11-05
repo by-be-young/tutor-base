@@ -6,6 +6,16 @@
         草稿保存后学员端看不到，点「发布」才生效。布局指令写在 <code>&lt;!-- @layout:X --&gt;</code> 注释里，
         不影响题干与作答占位符解析。
       </p>
+      <details class="editor__help">
+        <summary>草稿是什么？为什么会多出来？怎么删除？</summary>
+        <ul class="editor__help-list">
+          <li><strong>草稿</strong>＝只在这里保存、还没有上线的正文。点「保存草稿」或「发布」前自动保存都会生成一条，
+            学员端看不到，所以列表里会突然多出草稿。</li>
+          <li><strong>发布</strong>＝把该科目当前所有草稿合并成新的发布版本，学员端从这一刻看到新内容。</li>
+          <li><strong>删除草稿</strong>＝丢掉这份未上线的改动。已经发布过的版本不受影响，学员看到的还是上一版。</li>
+          <li>站内静态课件（<code>public/articles</code> 下的讲义）第一次编辑时也会先生成草稿，发布后仍挂回原篇目，不会多出一篇。</li>
+        </ul>
+      </details>
     </section>
 
     <section class="panel panel--tight editor__identity">
@@ -16,12 +26,16 @@
           <span class="editor__chip">{{ currentSubject }}</span>
           <span v-if="articleId" class="editor__chip">#{{ articleId }}</span>
           <span v-if="currentPath" class="editor__chip editor__chip--path">{{ currentPath }}</span>
-          <span class="editor__chip" :class="currentArticle?.published ? 'is-live' : 'is-draft'">
+          <span class="editor__chip" :class="`is-${currentStatusTone}`">
             {{ currentStatus }}
           </span>
         </p>
         <p v-if="currentArticle && currentArticle.hosted === false" class="editor__identity-hint">
           站内静态课件：正文在 <code>public/articles</code> 下。保存会生成在线草稿，发布后仍按原篇目生效。
+        </p>
+        <p v-if="currentArticle?.contentMissing || recoveredFromStatic" class="editor__identity-hint is-warning">
+          这篇课件的已发布正文文件在服务器上丢失了（存储卷重建或历史环境），当前用站内讲义打开。
+          保存草稿并点「发布」会把正文重新写回。
         </p>
       </div>
       <label class="editor__field editor__field--picker">
@@ -84,8 +98,8 @@
 
         <h2 class="editor__list-title">我的草稿</h2>
         <p v-if="!drafts.length" class="editor__empty">还没有草稿。选择布局后点「新建草稿」。</p>
-        <ul v-else>
-          <li v-for="draft in drafts" :key="draft.articleId">
+        <ul v-else class="editor__draft-list">
+          <li v-for="draft in drafts" :key="draft.articleId" class="editor__draft-item">
             <button
               type="button"
               class="editor__list-item"
@@ -94,6 +108,15 @@
             >
               <span>{{ draft.title || `草稿 ${draft.articleId}` }}</span>
               <em>{{ draft.subject || '未归类' }}{{ draft.published ? ' · 已发布' : '' }}</em>
+            </button>
+            <button
+              type="button"
+              class="editor__ghost editor__draft-remove"
+              :disabled="busy"
+              :title="draft.published ? '删除草稿（已发布版本保留）' : '删除这份未发布的草稿'"
+              @click.stop="deleteDraftById(draft)"
+            >
+              删除
             </button>
           </li>
         </ul>
@@ -147,10 +170,16 @@
             </span>
             <span v-else-if="precheck.checked" class="editor__tag is-ok">校验通过</span>
           </div>
-          <div class="editor__preview" v-html="previewHtml" />
-          <p v-if="!previewHtml" class="editor__empty">
-            还没有正文。先在左侧选一篇课件，或用「新建草稿」按布局起稿。
-          </p>
+          <div class="editor__preview">
+            <CoursewarePreviewPane
+              :markdown="markdown"
+              :title="currentTitle"
+              :subtitle="currentPath"
+              :status="currentStatus"
+              :status-tone="currentStatusTone"
+              empty-text="还没有正文。先在左侧选一篇课件，或用「新建草稿」按布局起稿。"
+            />
+          </div>
           <ul v-if="precheck.errors.length" class="editor__errors">
             <li v-for="(error, index) in precheck.errors" :key="index">{{ error }}</li>
           </ul>
@@ -161,6 +190,9 @@
     <footer class="panel panel--tight editor__footer">
       <button type="button" class="editor__ghost" :disabled="busy" @click="runPrecheck">校验</button>
       <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="save">保存草稿</button>
+      <button type="button" class="editor__ghost" :disabled="busy || !canDeleteDraft" @click="deleteCurrentDraft">
+        删除草稿
+      </button>
       <button type="button" class="editor__primary" :disabled="busy || !subject" @click="publish">发布</button>
     </footer>
   </div>
@@ -170,9 +202,9 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { coursewareGateway } from '@/gateways/coursewareGateway'
-import { fetchStaticArticle } from '@/utils/articleContent'
-import { loadCoursewareLibrary } from '@/utils/coursewareLibrary'
-import { renderCoursewarePreview } from '@/utils/coursewarePreview'
+import CoursewarePreviewPane from '@/components/admin/CoursewarePreviewPane.vue'
+import { loadArticleMarkdownForEditing, loadCoursewareLibrary } from '@/utils/coursewareLibrary'
+import { articleStatus } from '@/utils/coursewareTree'
 import { showToast } from '@/utils/toast'
 
 const route = useRoute()
@@ -193,8 +225,11 @@ const importOverwrite = ref(false)
 const importReport = ref(null)
 const precheck = reactive({ checked: false, errors: [] })
 
-// 预览按站点正文的渲染方式输出（marked + 章节/双栏/占位符），不显示原始 Markdown
-const previewHtml = computed(() => renderCoursewarePreview(markdown.value))
+// 当前这篇在服务端有没有草稿行：决定「删除草稿」是否可用
+const currentHasDraft = ref(false)
+// 已发布正文文件缺失、本次用站内讲义顶上：保存并发布后才会恢复
+const recoveredFromStatic = ref(false)
+const canDeleteDraft = computed(() => Boolean(articleId.value) && currentHasDraft.value)
 
 /** 当前编辑对象：标题 / 科目 / ID / 发布态都从「我的课件」清单里取，避免只剩一个裸 ID。 */
 const currentArticle = computed(
@@ -209,16 +244,20 @@ const currentSubject = computed(() => currentArticle.value?.subject || subject.v
 
 const currentPath = computed(() => currentArticle.value?.logicalPath || '')
 
+// 正文里的状态提示（草稿 / 已发布 / 静态讲义 / 正文缺失 / 有未保存改动）
 const currentStatus = computed(() => {
   if (!articleId.value) return '新草稿 · 尚未保存'
   const current = currentArticle.value
-  if (current && current.hosted === false) {
-    if (dirty.value) return '静态课件 · 有未保存改动'
-    return current.hasDraft ? '静态课件 · 已有草稿' : '静态课件 · 已上线'
-  }
-  const published = currentArticle.value?.published
-  if (published) return dirty.value ? '已发布 · 有未保存改动' : '已发布'
-  return dirty.value ? '草稿 · 有未保存改动' : '草稿 · 未发布'
+  const missing = current?.contentMissing || recoveredFromStatic.value
+  if (missing) return dirty.value ? '正文缺失 · 有未保存改动' : '正文缺失 · 需重新发布'
+  const status = articleStatus(current)?.label || '草稿 · 未发布'
+  return dirty.value ? `${status} · 有未保存改动` : status
+})
+
+const currentStatusTone = computed(() => {
+  if (!articleId.value) return 'draft'
+  if (currentArticle.value?.contentMissing || recoveredFromStatic.value) return 'missing'
+  return articleStatus(currentArticle.value)?.tone || 'draft'
 })
 
 /** 选择器按科目分组，跨科目也能直接跳着编辑。 */
@@ -350,6 +389,8 @@ async function newDraft() {
       ? await coursewareGateway.getTemplate(templateId.value)
       : await coursewareGateway.getLayoutSkeleton(layoutId.value, subject.value || '新课件')
     articleId.value = null
+    currentHasDraft.value = false
+    recoveredFromStatic.value = false
     dirty.value = true
     precheck.checked = false
     precheck.errors = []
@@ -384,22 +425,18 @@ async function openDraft(draft) {
   if (!confirmDiscard()) return false
   busy.value = true
   try {
-    let body
-    if (draft.hosted === false && !draft.hasDraft) {
-      // 站内静态课件还没托管过：直接从 public/articles 读正文，保存时才落成在线草稿
-      body = await fetchStaticArticle(draft.logicalPath)
-      if (body == null) {
-        throw new Error(`取不到这篇静态课件的正文：${draft.logicalPath || draft.articleId}`)
-      }
-    } else {
-      body = (await coursewareGateway.getDraft(draft.articleId)).markdown
-    }
-    articleId.value = draft.articleId
-    markdown.value = body
+    const loaded = await loadArticleMarkdownForEditing(draft)
+    articleId.value = loaded.articleId
+    markdown.value = loaded.markdown
+    currentHasDraft.value = loaded.hasDraft
+    recoveredFromStatic.value = loaded.contentMissing
     if (draft.subject) subject.value = draft.subject
     dirty.value = false
     precheck.checked = false
     precheck.errors = []
+    if (loaded.contentMissing) {
+      showToast('这篇课件的已发布正文文件缺失，已用站内讲义打开。保存草稿并发布后会重新写回正文。', 'warning')
+    }
     return true
   } catch (error) {
     reportError(error)
@@ -407,6 +444,47 @@ async function openDraft(draft) {
   } finally {
     busy.value = false
   }
+}
+
+/** 删除一份草稿：只丢未上线的改动，已发布版本不受影响。 */
+async function deleteDraftById(draft) {
+  const label = draft.title || `草稿 ${draft.articleId}`
+  const hint = draft.published
+    ? `删除「${label}」的草稿？已经发布的版本会保留，学员看到的仍是上一版。`
+    : `删除「${label}」？这份草稿还没有发布过，删除后无法恢复。`
+  if (!window.confirm(hint)) return false
+  busy.value = true
+  try {
+    await coursewareGateway.deleteDraft(draft.articleId)
+    showToast('草稿已删除', 'success')
+    if (Number(articleId.value) === Number(draft.articleId)) resetEditor()
+    await Promise.all([loadDrafts(), loadArticles()])
+    return true
+  } catch (error) {
+    reportError(error)
+    return false
+  } finally {
+    busy.value = false
+  }
+}
+
+function deleteCurrentDraft() {
+  if (!articleId.value) return
+  return deleteDraftById({
+    articleId: articleId.value,
+    title: currentTitle.value,
+    published: Boolean(currentArticle.value?.published)
+  })
+}
+
+function resetEditor() {
+  articleId.value = null
+  markdown.value = ''
+  currentHasDraft.value = false
+  recoveredFromStatic.value = false
+  dirty.value = false
+  precheck.checked = false
+  precheck.errors = []
 }
 
 function insertLayout() {
@@ -437,6 +515,8 @@ async function save() {
   try {
     const saved = await coursewareGateway.saveDraft(articleId.value, markdown.value)
     articleId.value = saved.articleId
+    currentHasDraft.value = true
+    recoveredFromStatic.value = false
     dirty.value = false
     showToast('草稿已保存', 'success')
     await Promise.all([loadDrafts(), loadArticles()])
@@ -453,9 +533,11 @@ async function publish() {
     if (dirty.value || articleId.value == null) {
       const saved = await coursewareGateway.saveDraft(articleId.value, markdown.value)
       articleId.value = saved.articleId
+      currentHasDraft.value = true
       dirty.value = false
     }
     const published = await coursewareGateway.publishDrafts(subject.value)
+    recoveredFromStatic.value = false
     showToast(`已发布 v${published.version}（${published.articleCount} 篇）`, 'success')
     await Promise.all([loadDrafts(), loadArticles()])
   } catch (error) {
@@ -645,6 +727,20 @@ onMounted(async () => {
   color: #b07d1f;
 }
 
+.editor__chip.is-static {
+  border-color: var(--line);
+  color: var(--text-2);
+}
+
+.editor__chip.is-missing {
+  border-color: var(--vermilion);
+  color: var(--vermilion);
+}
+
+.editor__identity-hint.is-warning {
+  color: var(--vermilion);
+}
+
 .editor__field--picker {
   min-width: 260px;
   flex: 0 1 320px;
@@ -739,6 +835,34 @@ onMounted(async () => {
   background: var(--lime);
 }
 
+.editor__draft-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.editor__draft-item {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.editor__draft-item .editor__list-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.editor__draft-remove {
+  flex: none;
+  align-self: center;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  color: var(--vermilion);
+}
+
 .editor__list-item em {
   color: var(--text-3);
   font-family: var(--font-mono);
@@ -788,118 +912,39 @@ onMounted(async () => {
 
 .editor__preview {
   flex: 1;
+  min-height: 0;
+  display: flex;
   overflow: auto;
-  font-size: 0.84rem;
-  line-height: 1.75;
+}
+
+.editor__preview > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.editor__help {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
   color: var(--text-2);
 }
 
-.editor__preview :deep(.preview-section) {
-  margin-bottom: 18px;
-}
-
-.editor__preview :deep(.preview-section h1) {
-  font-size: 1.05rem;
-  line-height: 1.4;
-  margin: 0 0 8px;
+.editor__help summary {
+  cursor: pointer;
+  font-weight: 700;
   color: var(--ink);
 }
 
-.editor__preview :deep(.preview-section h2) {
-  font-size: 0.95rem;
-  margin: 14px 0 6px;
-  color: var(--ink);
-}
-
-.editor__preview :deep(.preview-section h3) {
-  font-size: 0.88rem;
-  margin: 10px 0 4px;
-  color: var(--ink);
-}
-
-.editor__preview :deep(p) {
-  margin: 0 0 10px;
-  white-space: normal;
-  word-break: break-word;
-}
-
-.editor__preview :deep(strong) {
-  color: var(--ink);
-}
-
-.editor__preview :deep(ul),
-.editor__preview :deep(ol) {
-  margin: 0 0 10px;
+.editor__help-list {
+  margin: 8px 0 0;
   padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.65;
 }
 
-.editor__preview :deep(table) {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0 0 12px;
-  font-size: 0.78rem;
-}
-
-.editor__preview :deep(th),
-.editor__preview :deep(td) {
-  border: 1px solid var(--line, #d8d8d8);
-  padding: 4px 6px;
-  text-align: left;
-  vertical-align: top;
-}
-
-.editor__preview :deep(th) {
-  background: var(--paper-2);
+.editor__help-list strong {
   color: var(--ink);
-  font-weight: 600;
-}
-
-.editor__preview :deep(.preview-columns) {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-}
-
-.editor__preview :deep(.preview-side) {
-  border-left: 1.5px dashed var(--ink);
-  padding-left: 10px;
-}
-
-.editor__preview :deep(.preview-stem) {
-  background: var(--lime);
-  color: var(--ink);
-  padding: 0 4px;
-  border-radius: 4px;
-  font-size: 0.74rem;
-}
-
-.editor__preview :deep(.layout) {
-  display: inline-block;
-  background: var(--sky);
-  color: var(--ink);
-  border: 1.5px solid var(--ink);
-  border-radius: var(--r-full);
-  padding: 1px 8px;
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  margin-bottom: 6px;
-}
-
-.editor__preview :deep(.slot) {
-  background: var(--paper-2);
-  border: 1.5px dashed var(--ink);
-  border-radius: var(--r-sm);
-  padding: 1px 6px;
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-}
-
-.editor__preview :deep(mark) {
-  background: var(--lime);
-  color: var(--ink);
-  padding: 0 4px;
-  border-radius: 4px;
 }
 
 .editor__errors {
