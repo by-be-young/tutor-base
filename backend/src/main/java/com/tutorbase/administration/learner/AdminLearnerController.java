@@ -90,12 +90,16 @@ public class AdminLearnerController {
 
     @GetMapping
     LearnerCollectionResponse listLearners(
+            @AuthenticationPrincipal AccountPrincipal administrator,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) String limit) {
         int parsedLimit = parseLimit(limit);
         LearnerQuery.LearnerPage page = learnerQuery.findAfter(LearnerCursor.decode(cursor), parsedLimit);
+        long viewerAccountId = administrator.accountId();
         return new LearnerCollectionResponse(
-                page.items().stream().map(LearnerResponse::from).toList(),
+                page.items().stream()
+                        .map(learner -> LearnerResponse.forViewer(learner, viewerAccountId))
+                        .toList(),
                 page.nextAfterId().isPresent() ? LearnerCursor.encode(page.nextAfterId().getAsLong()) : null);
     }
 
@@ -166,6 +170,27 @@ public class AdminLearnerController {
                     learner.claimedByUsername(),
                     learner.claimedAt(),
                     learner.lastActivityAt());
+        }
+
+        /**
+         * 学习者目录对所有管理员可见（认领不改变可见范围），但最近动态属于认领人：
+         * 他人认领的学员对当前管理员返回 {@code null}，避免教师看到同事学员的活跃情况。
+         * 未认领学员仍是可认领对象，保留动态帮助管理员判断是否认领。
+         */
+        static LearnerResponse forViewer(LearnerQuery.Learner learner, long viewerAccountId) {
+            Long claimedBy = learner.claimedByAccountId();
+            boolean claimedByOther = claimedBy != null && claimedBy != viewerAccountId;
+            return new LearnerResponse(
+                    learner.learnerId(),
+                    learner.username(),
+                    learner.isTest(),
+                    learner.isSpecialTest(),
+                    learner.contentGrantArticleIds(),
+                    learner.enrolledSubjects(),
+                    learner.claimedByAccountId(),
+                    learner.claimedByUsername(),
+                    learner.claimedAt(),
+                    claimedByOther ? null : learner.lastActivityAt());
         }
     }
 }

@@ -264,13 +264,15 @@ class TestLearnerHttpContractTest {
                        (101, 3, 'q1', 'b', 'pending', now()),
                        (102, 4, 'q1', 'c', 'pending', now())
                 """);
+        // 概览的“我的学员/活跃学员”只统计当前管理员认领的学员；认领 alice 后验证测试学员仍被排除。
+        jdbc.update("UPDATE public.student SET claimed_by = 500, claimed_at = now() WHERE id = 2");
         Cookie adminCookie = login("admin", "Admin-password-2026");
 
         mockMvc.perform(get("/api/v1/admin/analytics/overview").cookie(adminCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.learners").value(1))
-                .andExpect(jsonPath("$.claimedLearners").value(0))
-                .andExpect(jsonPath("$.unclaimedLearners").value(1))
+                .andExpect(jsonPath("$.claimedLearners").value(1))
+                .andExpect(jsonPath("$.unclaimedLearners").value(0))
                 .andExpect(jsonPath("$.activeLearners7d").value(1))
                 .andExpect(jsonPath("$.pendingReviews").value(1))
                 .andExpect(jsonPath("$.submissions7d").value(1));

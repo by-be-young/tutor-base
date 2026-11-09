@@ -240,6 +240,8 @@ class AdminAnalyticsHttpContractTest {
         mockMvc.perform(get("/api/v1/admin/analytics/overview").cookie(admin2Cookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.learners").value(2))
+                .andExpect(jsonPath("$.claimedLearners").value(0))
+                .andExpect(jsonPath("$.activeLearners7d").value(0))
                 .andExpect(jsonPath("$.pendingReviews").value(0))
                 .andExpect(jsonPath("$.submissions7d").value(0))
                 .andExpect(jsonPath("$.courseware.visible").value(0))

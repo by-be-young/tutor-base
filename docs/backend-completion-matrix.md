@@ -14,8 +14,8 @@
 | 多管理员学员认领 | Java `/api/v1/admin/learners` | 已接管 | V11 migration、FOR UPDATE 认领/取消认领、409 冲突 contract、删除学员级联 |
 | 多管理员课件认领 | Java `/api/v1/admin/courseware-claims` | 已接管 | V12/V15/V19 migration、目录同步、学科多对多认领、单篇认领与学科覆盖下单独释放（排除）、放弃课件（`scope=abandoned`、不计入待认领）、业务接口按“我的课件”收敛 |
 | 测试学员与特殊测试学员 | Java `/api/v1/admin/learners`、`/rewards` | 已接管 | V16 migration、测试标记、唯一特殊测试、全课件权限、固定高积分、待批阅/提交/趋势/待批阅目标全部排除测试学员、管理端新增入口固定创建测试学员、特殊测试禁止删除 |
-| 管理端统计与学员详情 | Java `/api/v1/admin/analytics`、`/admin/learners/{id}/profile` | 已接管 | 只读聚合、按“我的课件”过滤、概览不含待认领课件、`pendingReviewTarget` 待批阅直达、测试学员排除、积分/签到全局口径、HTTP contract |
-| 学员最近动态 | Java `/api/v1/admin/learners` | 已接管 | 服务端聚合作答/错题/签到/登录时间，前端只用于排序与展示 |
+| 管理端统计与学员详情 | Java `/api/v1/admin/analytics`、`/admin/learners/{id}/profile` | 已接管 | 只读聚合、按“我的课件”过滤、概览不含待认领课件、`pendingReviewTarget` 待批阅直达、测试学员排除、“我的学员”与活跃按当前管理员认领范围、积分/签到全局口径、HTTP contract |
+| 学员最近动态 | Java `/api/v1/admin/learners` | 已接管 | 服务端聚合作答/错题/签到/登录时间，前端只用于排序与展示；他人认领学员返回 `null` |
 | 每日签到 | Java `/api/v1/checkins` | 已接管 | 时区、月界、7/14 日奖励、并发幂等 |
 | 积分与卡片收藏 | Java `/api/v1/rewards` | 已接管 | 后端目录决定奖励；数据库唯一键阻止重复领取 |
 | 成长等级 | 前端推导自 `/rewards` 积分 | 展示层 | 等级只读积分；升级动画与跨页面一致性 |

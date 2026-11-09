@@ -2944,7 +2944,7 @@ components:
         lastActivityAt:
           type: [string, 'null']
           format: date-time
-          description: 最近学习活动时间（作答、错题、签到或登录）；无记录为 null。
+          description: 最近学习活动时间（作答、错题、签到或登录）；无记录为 null；他人认领的学员恒为 null。
     CreateLearnerRequest:
       type: object
       additionalProperties: false
@@ -3565,13 +3565,15 @@ components:
         claimedLearners:
           type: integer
           minimum: 0
+          description: 当前管理员认领的学员数量。
         unclaimedLearners:
           type: integer
           minimum: 0
+          description: 尚未被任何管理员认领的学员数量。
         activeLearners7d:
           type: integer
           minimum: 0
-          description: 最近 7 天内有作答、错题、签到或登录活动的学习者数量。
+          description: 当前管理员认领且最近 7 天内有作答、错题、签到或登录活动的学习者数量。
         pendingReviews:
           type: integer
           minimum: 0

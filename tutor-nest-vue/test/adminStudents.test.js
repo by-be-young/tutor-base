@@ -8,6 +8,7 @@ import {
   groupStudentsForSwitcher,
   isSpecialTestStudent,
   isTestStudent,
+  selectRecentOwnStudents,
   sortStudentsByRecentActivity,
   studentMatchesQuery
 } from '../src/utils/adminStudents.js'
@@ -160,4 +161,24 @@ test('claimState distinguishes mine, unclaimed and other administrators', () => 
   assert.equal(claimState({ claimedByAccountId: '7' }, 7), 'mine')
   assert.equal(claimState({ claimedByAccountId: 8, claimedByUsername: 'other' }, 7), 'other')
   assert.equal(claimState(null, 7), 'unclaimed')
+})
+
+test('selectRecentOwnStudents only keeps my non-test learners sorted by activity', () => {
+  const students = [
+    student('other-admin', '2026-03-10T11:00:00.000Z', { claimedByAccountId: 9 }),
+    student('mine-old', '2026-03-08T10:00:00.000Z', { claimedByAccountId: 7 }),
+    student('unclaimed', '2026-03-10T12:00:00.000Z'),
+    student('mine-new', '2026-03-10T10:00:00.000Z', { claimedByAccountId: '7' }),
+    student('my-test', '2026-03-10T13:00:00.000Z', { claimedByAccountId: 7, isTest: true }),
+    student('mine-null', null, { claimedByAccountId: 7 })
+  ]
+
+  assert.deepEqual(
+    selectRecentOwnStudents(students, 7).map(item => item.username),
+    ['mine-new', 'mine-old', 'mine-null'])
+  assert.deepEqual(selectRecentOwnStudents(students, null), [])
+  assert.deepEqual(selectRecentOwnStudents(students, 7, 2).map(item => item.username),
+    ['mine-new', 'mine-old'])
+  assert.deepEqual(selectRecentOwnStudents(students, 7, 0), [])
+  assert.deepEqual(selectRecentOwnStudents(undefined, 7), [])
 })

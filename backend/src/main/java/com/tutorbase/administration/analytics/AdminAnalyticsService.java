@@ -35,6 +35,9 @@ class AdminAnalyticsService {
     /**
      * 与 LearnerSql 的 last_activity_at 聚合口径一致：作答、错题、签到与登录会话的最新时间。
      * 学习者目录排除关联 administrator 账户的 learner 行；统计接口再排除测试学员。
+     *
+     * <p>“我的学员”和“近 7 天活跃”只统计当前管理员认领的学员；总学员与未认领数保持全局目录口径，
+     * 用于判断是否还有可认领的学员。这样工作台不会展示同事认领学员的活跃情况。
      */
     private static final String LEARNER_ACTIVITY_SQL = """
             WITH learner_activity AS (
@@ -62,9 +65,10 @@ class AdminAnalyticsService {
                   AND NOT s.is_test
             )
             SELECT count(*) AS learners,
-                   count(*) FILTER (WHERE claimed_by IS NOT NULL) AS claimed_learners,
+                   count(*) FILTER (WHERE claimed_by = :administratorAccountId) AS claimed_learners,
                    count(*) FILTER (WHERE claimed_by IS NULL) AS unclaimed_learners,
-                   count(*) FILTER (WHERE last_activity_at >= now() - interval '7 days')
+                   count(*) FILTER (WHERE claimed_by = :administratorAccountId
+                                    AND last_activity_at >= now() - interval '7 days')
                        AS active_learners_7d
             FROM learner_activity
             """;
@@ -89,6 +93,7 @@ class AdminAnalyticsService {
     @Transactional(readOnly = true)
     Overview overview(long administratorAccountId) {
         LearnerCounts counts = jdbc.sql(LEARNER_ACTIVITY_SQL)
+                .param("administratorAccountId", administratorAccountId)
                 .query((resultSet, rowNumber) -> new LearnerCounts(
                         resultSet.getLong("learners"),
                         resultSet.getLong("claimed_learners"),

@@ -204,12 +204,13 @@
 | PUT | `/admin/learners/{learnerId}/password` | administrator | 直接设置或重置自己已认领的学习者密码，并撤销其旧会话和未使用激活码；未认领 `403 learner_not_claimed` |
 | POST | `/admin/learners/{learnerId}/impersonate` | administrator | 免密进入自己已认领的学习者账户：创建新会话并轮换 Cookie；仅限 `role=learner` 且已激活的账户，未认领 `403 learner_not_claimed`，不撤销管理员既有会话 |
 | POST | `/admin/account-activations` | administrator | 兼容接口：为待激活账户生成一次性激活码；当前前端不使用 |
-| GET | `/admin/analytics/overview` | administrator | 管理台概览指标（不含“待认领课件”）；待批阅/提交数、趋势与 `pendingReviewTarget` 只统计“我的课件”中的非测试学员；目标为最早一条待批阅作答或 `null` |
+| GET | `/admin/analytics/overview` | administrator | 管理台概览指标（不含“待认领课件”）；“我的学员”与近 7 天活跃只统计当前管理员认领的学员，总学员与未认领为目录全局口径；待批阅/提交数、趋势与 `pendingReviewTarget` 只统计“我的课件”中的非测试学员；目标为最早一条待批阅作答或 `null` |
 | GET | `/admin/analytics/activity?days=` | administrator | 近 7～90 天每日提交/批阅趋势，按 Asia/Shanghai 自然日补零，只统计“我的课件” |
 | GET | `/admin/learners/{learnerId}/profile` | administrator | 学员详情：积分/累计/等级、近 30 天签到、分学科进度、最近作答、30 天动态；仅限已认领学员，未认领 `403 learner_not_claimed`，学习数据只含“我的课件” |
 
 - 认领是管理员之间的组织归属，不改变科目归属、内容授权、批阅权限或学习者可见范围；管理员目录排除 `role=administrator` 的账户。
 - 学习者响应额外返回 `enrolledSubjects`、`claimedByAccountId`、`claimedByUsername`、`claimedAt`、`lastActivityAt`、`isTest` 与 `isSpecialTest`；最近动态由服务端聚合作答提交、错题、签到和登录会话时间，客户端不得提交这些值。
+- 最近动态只属于认领人：学习者目录仍对全体管理员可见，但他人认领的学员对当前管理员返回 `lastActivityAt=null`；未认领学员保留动态供认领参考。
 - `enrolledSubjects` 是科目归属，`contentGrantArticleIds` 是文章授权；开通科目初始不授权任何文章，二者互不推导。
 - 测试学员保留正常登录与学习能力，但 analytics 的学员计数、活跃度、待批阅、提交/批阅趋势与 `pendingReviewTarget` 全部排除测试学员；管理端切换器单独分组展示。
 - 特殊测试学员全局最多一个，拥有全部课件访问权限，`/rewards` 返回固定 999999999 积分且抽卡不减少；`/me/content-grants` 返回课件目录全量文章并带 `allArticles=true`，前端据此按静态目录全量放行。

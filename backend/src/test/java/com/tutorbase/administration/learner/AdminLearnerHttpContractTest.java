@@ -121,9 +121,10 @@ class AdminLearnerHttpContractTest {
 
     @Test
     void givenAdministratorWhenListingLearnersThenMapsRowsAndUsesOpaqueCursorPagination() throws Exception {
+        Cookie adminCookie = login("admin", "Admin-password-2026");
         MvcResult firstPage = mockMvc.perform(get("/api/v1/admin/learners")
                         .param("limit", "2")
-                        .with(user("admin").roles("ADMINISTRATOR")))
+                        .cookie(adminCookie))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.items.length()").value(2))
@@ -144,7 +145,7 @@ class AdminLearnerHttpContractTest {
         mockMvc.perform(get("/api/v1/admin/learners")
                         .param("cursor", nextCursor)
                         .param("limit", "2")
-                        .with(user("admin").roles("ADMINISTRATOR")))
+                        .cookie(adminCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].learnerId").value(9))
@@ -169,10 +170,11 @@ class AdminLearnerHttpContractTest {
 
     @Test
     void givenInvalidLimitsWhenListingLearnersThenReturnsValidationProblem() throws Exception {
+        Cookie adminCookie = login("admin", "Admin-password-2026");
         for (String invalidLimit : new String[] {"0", "101", "not-a-number"}) {
             mockMvc.perform(get("/api/v1/admin/learners")
                             .param("limit", invalidLimit)
-                            .with(user("admin").roles("ADMINISTRATOR")))
+                            .cookie(adminCookie))
                     .andExpect(status().isBadRequest())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.code").value("validation_failed"));
@@ -181,10 +183,11 @@ class AdminLearnerHttpContractTest {
 
     @Test
     void givenMalformedOrUnknownCursorWhenListingLearnersThenReturnsMalformedRequest() throws Exception {
+        Cookie adminCookie = login("admin", "Admin-password-2026");
         for (String invalidCursor : new String[] {"not-base64!", "djI6NQ"}) {
             mockMvc.perform(get("/api/v1/admin/learners")
                             .param("cursor", invalidCursor)
-                            .with(user("admin").roles("ADMINISTRATOR")))
+                            .cookie(adminCookie))
                     .andExpect(status().isBadRequest())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.code").value("malformed_request"));
@@ -402,12 +405,35 @@ class AdminLearnerHttpContractTest {
                     (blog_id, student_id, question_id, answer_text, updated_at)
                 VALUES (3, 2, 'q1', 'draft', '2026-10-01T00:00:00Z')
                 """);
+        Cookie adminCookie = login("admin", "Admin-password-2026");
         mockMvc.perform(get("/api/v1/admin/learners")
                         .param("limit", "1")
-                        .with(user("admin").roles("ADMINISTRATOR")))
+                        .cookie(adminCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].learnerId").value(2))
                 .andExpect(jsonPath("$.items[0].lastActivityAt").value("2026-10-01T00:00:00Z"));
+    }
+
+    @Test
+    void givenLearnerClaimedByAnotherAdministratorWhenListingThenHidesLastActivityTimestamp() throws Exception {
+        jdbc.update("""
+                INSERT INTO public.article_question_submissions
+                    (blog_id, student_id, question_id, answer_text, updated_at)
+                VALUES (3, 2, 'q1', 'draft', '2026-10-01T00:00:00Z'),
+                       (11, 9, 'q2', 'draft', '2026-10-02T00:00:00Z')
+                """);
+        jdbc.update("UPDATE public.student SET claimed_by = 501, claimed_at = now() WHERE id = 2");
+        Cookie adminCookie = login("admin", "Admin-password-2026");
+
+        mockMvc.perform(get("/api/v1/admin/learners").param("limit", "10").cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].learnerId").value(2))
+                .andExpect(jsonPath("$.items[0].claimedByAccountId").value(501))
+                .andExpect(jsonPath("$.items[0].lastActivityAt")
+                        .value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.items[2].learnerId").value(9))
+                .andExpect(jsonPath("$.items[2].lastActivityAt")
+                        .value("2026-10-02T00:00:00Z"));
     }
 
     @Test

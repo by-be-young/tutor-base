@@ -90,6 +90,17 @@ export function isTestStudent(student) {
   return Boolean(student?.isTest)
 }
 
+/**
+ * 教师主页“最近活跃的学员”：只取当前管理员认领的普通学员，按最近动态倒序并截断。
+ * 未认领与他人认领的学员不进入工作台动态，避免看到同事学员的活跃情况；
+ * 认领与目录浏览由「学员」页负责。
+ */
+export function selectRecentOwnStudents(students, currentAccountId, limit = 8) {
+  const own = (students || []).filter(student =>
+    !isTestStudent(student) && claimState(student, currentAccountId) === 'mine')
+  return sortStudentsByRecentActivity(own).slice(0, Math.max(0, limit))
+}
+
 /** 特殊测试学员：拥有全部课件权限，积分固定为 999999999 且不会减少。 */
 export function isSpecialTestStudent(student) {
   return Boolean(student?.isSpecialTest)

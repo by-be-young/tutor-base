@@ -57,7 +57,7 @@
         </ul>
 
         <p v-if="!overviewError && overview" class="dash-overview__note">
-          学员 {{ overview.learners }} 人 · 已认领 {{ overview.claimedLearners }} · 未认领 {{ overview.unclaimedLearners }}
+          学员 {{ overview.learners }} 人 · 我已认领 {{ overview.claimedLearners }} · 未认领 {{ overview.unclaimedLearners }}
           · 可见课件 {{ overview.courseware.visible }} 篇
         </p>
       </template>
@@ -132,19 +132,19 @@
           <span class="eyebrow">ACTIVITY / 学员动态</span>
           <h2 class="section-title">最近活跃的学员</h2>
         </div>
-        <span class="section-note">按最近动态倒序 · 不含测试学员 · 前 {{ recentStudents.length }} 名</span>
+        <span class="section-note">按最近动态倒序 · 只看我认领的学员 · 前 {{ recentStudents.length }} 名</span>
       </div>
 
       <div v-if="recentStudents.length === 0" class="empty empty--inline">
         <span class="empty__icon"><i class="fas fa-user-plus" aria-hidden="true"></i></span>
-        <p class="empty__title">{{ adminStore.students.length ? '暂无普通学员动态' : '还没有学员' }}</p>
+        <p class="empty__title">{{ ownStudents.length ? '暂无普通学员动态' : '还没有你认领的学员' }}</p>
         <p class="empty__text">
-          {{ adminStore.students.length
-            ? '测试学员不计入活跃度统计与学员动态列表，可到学员页查看或维护。'
-            : '到「学员」页新增第一位学员，认领后即可配置内容授权与批阅。' }}
+          {{ ownStudents.length
+            ? '我的学员还没有学习动态；测试学员不计入活跃度统计与学员动态列表。'
+            : '到「学员」页认领一位学员，认领后即可查看其动态、配置内容授权与批阅。' }}
         </p>
         <router-link to="/admin/learners" class="btn btn--soft btn--sm">
-          {{ adminStore.students.length ? '去学员列表' : '去新增测试学员' }}
+          {{ ownStudents.length ? '去学员列表' : '去认领学员' }}
         </router-link>
       </div>
 
@@ -191,7 +191,7 @@ import { useCoursewareStore } from '@/stores/coursewareStore'
 import { useAdminWorkspace } from '@/composables/useAdminWorkspace'
 import { analyticsGateway } from '@/gateways/analyticsGateway'
 import { buildLinePath, formatCompactNumber, maxValue, reviewTargetLink } from '@/utils/analytics'
-import { claimState, formatRelativeActivity, isTestStudent, sortStudentsByRecentActivity } from '@/utils/adminStudents'
+import { claimState, formatRelativeActivity, isTestStudent, selectRecentOwnStudents } from '@/utils/adminStudents'
 import { activeSubjects, buildSubjectScope } from '@/utils/adminSubjects'
 import EmptyState from '@/components/ui/EmptyState.vue'
 
@@ -274,7 +274,7 @@ const overviewMetrics = computed(() => {
       key: 'active',
       label: '活跃学员',
       value: data.activeLearners7d ?? 0,
-      hint: '近 7 天有动态',
+      hint: '我的学员近 7 天有动态',
       tone: 'stat-card--lime'
     },
     {
@@ -358,11 +358,13 @@ const trendAriaLabel = computed(() => (
   + `批阅 ${activityTotals.value.reviews} 次。`
 ))
 
-// 学员动态与 7 天活跃横条只统计普通学员：测试学员不进入活跃度视图。
+// 学员动态与 7 天活跃横条只看当前管理员认领的学员：未认领与他人认领的学员不进入工作台。
+const ownStudents = computed(() =>
+  adminStore.students.filter(student =>
+    !isTestStudent(student) && claimState(student, accountId.value) === 'mine'))
+
 const recentStudents = computed(() =>
-  sortStudentsByRecentActivity(
-    adminStore.students.filter(student => !isTestStudent(student))
-  ).slice(0, 8))
+  selectRecentOwnStudents(adminStore.students, accountId.value))
 
 const allSubjects = computed(() => {
   const subjects = new Set()
