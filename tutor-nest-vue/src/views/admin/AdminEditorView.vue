@@ -153,6 +153,9 @@
       <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="openPreview">
         学员样式预览
       </button>
+      <button type="button" class="editor__ghost" :disabled="busy || articleId == null" @click="openAnswerSetting">
+        设置答案
+      </button>
       <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="save">保存草稿</button>
       <button type="button" class="editor__ghost" :disabled="busy || !canDeleteDraft" @click="deleteCurrentDraft">
         删除草稿
@@ -504,6 +507,34 @@ async function openPreview() {
     const target = router.resolve({ name: 'CoursewarePreview', params: { id }, query })
     window.open(target.href, '_blank', 'noopener')
     showToast('已保存草稿，并在新标签页打开学员视角预览', 'success')
+  } catch (error) {
+    reportError(error)
+  } finally {
+    busy.value = false
+  }
+}
+
+/** 打开这篇文章的标准答案设置页：有未保存改动先落草稿，保证答案对应最新题号。 */
+async function openAnswerSetting() {
+  if (articleId.value == null) {
+    showToast('先保存一份草稿，再设置答案', 'warning')
+    return
+  }
+  busy.value = true
+  try {
+    let id = articleId.value
+    if (dirty.value) {
+      const saved = await coursewareGateway.saveDraft(id, markdown.value)
+      id = saved.articleId
+      articleId.value = id
+      currentHasDraft.value = true
+      recoveredFromStatic.value = false
+      dirty.value = false
+      await Promise.all([loadDrafts(), loadArticles()])
+    }
+    const target = router.resolve({ name: 'ArticleDetail', params: { id }, query: { mode: 'answer' } })
+    window.open(target.href, '_blank', 'noopener')
+    showToast('已在新标签页打开标准答案设置页', 'success')
   } catch (error) {
     reportError(error)
   } finally {

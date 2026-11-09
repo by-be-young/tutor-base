@@ -118,6 +118,7 @@ const navItems = computed(() => {
     { to: '/admin', label: '工作台', icon: 'fas fa-chart-line', exact: true },
     { to: '/admin/learners', label: '学员', icon: 'fas fa-users' },
     { to: '/admin/reviews', label: '批阅', icon: 'fas fa-pen-nib' },
+    { to: '/admin/answers', label: '答案', icon: 'fas fa-key' },
     { to: '/admin/courseware', label: '课件', icon: 'fas fa-book-open' },
     { to: '/admin/editor', label: '编辑', icon: 'fas fa-pen-to-square' },
     { to: '/admin/sharing', label: '共享', icon: 'fas fa-share-nodes' }
@@ -480,7 +481,8 @@ onBeforeUnmount(() => {
   display: none;
 }
 
-@media (max-width: 1100px) {
+/* 导航项从 7 个增至 8 个（答案）：1240px 以下先收紧尺寸，避免顶栏与右侧操作挤在一起 */
+@media (max-width: 1240px) {
   .admin-nav {
     gap: 2px;
   }

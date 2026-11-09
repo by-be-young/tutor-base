@@ -67,6 +67,12 @@ const routes = [
         meta: { adminTitle: '我的课件' }
       },
       {
+        path: 'answers',
+        name: 'AdminAnswers',
+        component: () => import('@/views/admin/AdminAnswersView.vue'),
+        meta: { adminTitle: '设置答案' }
+      },
+      {
         path: 'content',
         name: 'AdminContent',
         component: () => import('@/views/admin/AdminContentView.vue'),
