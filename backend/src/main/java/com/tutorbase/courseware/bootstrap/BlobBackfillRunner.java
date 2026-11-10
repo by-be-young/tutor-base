@@ -42,6 +42,14 @@ public class BlobBackfillRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        try {
+            doRun(args);
+        } catch (Exception e) {
+            LOGGER.warn("Blob 同步失败（不影响启动）: {}", e.getMessage());
+        }
+    }
+
+    private void doRun(ApplicationArguments args) {
         List<SubjectHead> subjects = jdbc.sql("""
                 SELECT h.teacher_account_id, h.subject, h.release_id, r.version
                 FROM public.course_release_head h
