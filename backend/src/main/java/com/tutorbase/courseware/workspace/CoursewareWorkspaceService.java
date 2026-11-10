@@ -193,15 +193,26 @@ public class CoursewareWorkspaceService {
         }
 
         List<CoursewareArticleInput> articles = new ArrayList<>();
+        String newTitle = titleFromPath(normalizedNew);
         for (Entry e : current) {
             String path = e.articleId() == articleId ? normalizedNew : e.logicalPath();
+            String title = e.articleId() == articleId ? newTitle : e.title();
             articles.add(CoursewareArticleInput.carried(
-                    e.articleId(), e.legacyArticleId(), e.title(), e.series(),
+                    e.articleId(), e.legacyArticleId(), title, e.series(),
                     path, e.contentHash(), e.answerHash(), e.questionCount()));
         }
 
         CoursewarePublisher.Published published = publisher.publish(teacherId, subject, head.version(), articles);
         return new PublishedMove(subject, published.version(), target.logicalPath(), normalizedNew);
+    }
+
+    /** 从逻辑路径取文件名（去目录、去 .md 后缀）作为新标题。 */
+    private static String titleFromPath(String logicalPath) {
+        String name = logicalPath;
+        int slash = name.lastIndexOf('/');
+        if (slash >= 0) name = name.substring(slash + 1);
+        if (name.endsWith(".md")) name = name.substring(0, name.length() - 3);
+        return name;
     }
 
     private String findSubject(long teacherId, long articleId) {
