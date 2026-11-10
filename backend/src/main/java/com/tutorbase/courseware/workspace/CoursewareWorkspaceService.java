@@ -184,7 +184,8 @@ public class CoursewareWorkspaceService {
             throw new CoursewareFailures.NotFound("课件不存在或不属于你：" + articleId);
         }
         if (target.logicalPath().equals(normalizedNew)) {
-            throw new CoursewareFailures.Validation(List.of("新路径与当前路径相同"));
+            // 路径没变，无需发布，直接返回当前版本
+            return new PublishedMove(subject, head.version(), normalizedNew, normalizedNew);
         }
         for (Entry e : current) {
             if (e.logicalPath().equals(normalizedNew)) {
