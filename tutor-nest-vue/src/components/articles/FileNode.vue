@@ -10,35 +10,42 @@
     emits  : click
 -->
 <template>
-  <button type="button" class="file-row" :class="[accentClass, { 'has-pending': pendingCount > 0 }]"
-    :style="{ '--depth': depth }" :aria-label="`打开文档 ${node.name}`" @click="$emit('click')">
-    <!-- 状态点：有待提交 = 朱红，无待提交 = 墨绿 -->
-    <span class="file-row__dot" aria-hidden="true"></span>
+  <div class="file-wrap" :class="accentClass" :style="{ '--depth': depth }">
+    <button type="button" class="file-row" :class="{ 'has-pending': pendingCount > 0 }"
+      :aria-label="`打开文档 ${node.name}`" @click="$emit('click')">
+      <!-- 状态点：有待提交 = 朱红，无待提交 = 墨绿 -->
+      <span class="file-row__dot" aria-hidden="true"></span>
 
-    <span class="file-row__icon" aria-hidden="true">
-      <i class="fas fa-file-lines"></i>
-    </span>
-
-    <span class="file-row__body">
-      <span class="file-row__name">{{ node.name }}</span>
-      <span v-if="isAdmin" class="file-row__meta">
-        <span v-if="node.meta" class="file-row__meta-text">{{ node.meta }}</span>
-        <span v-if="node.path" class="file-row__path mono">{{ node.path }}</span>
+      <span class="file-row__icon" aria-hidden="true">
+        <i class="fas fa-file-lines"></i>
       </span>
-      <span v-else class="file-row__meta">
-        <span v-if="formattedDate" class="file-row__date mono">{{ formattedDate }}</span>
-        <span v-if="pendingCount > 0" class="file-row__pending">
-          <span class="badge">{{ pendingCount }}</span>
-          <span class="file-row__pending-text">题待提交</span>
+
+      <span class="file-row__body">
+        <span class="file-row__name">{{ node.name }}</span>
+        <span v-if="isAdmin" class="file-row__meta">
+          <span v-if="node.meta" class="file-row__meta-text">{{ node.meta }}</span>
+          <span v-if="node.path" class="file-row__path mono">{{ node.path }}</span>
         </span>
-        <span v-else class="file-row__ok">无待提交</span>
+        <span v-else class="file-row__meta">
+          <span v-if="formattedDate" class="file-row__date mono">{{ formattedDate }}</span>
+          <span v-if="pendingCount > 0" class="file-row__pending">
+            <span class="badge">{{ pendingCount }}</span>
+            <span class="file-row__pending-text">题待提交</span>
+          </span>
+          <span v-else class="file-row__ok">无待提交</span>
+        </span>
       </span>
-    </span>
 
-    <span class="file-row__arrow" aria-hidden="true">
-      <i class="fas fa-arrow-right"></i>
-    </span>
-  </button>
+      <span class="file-row__arrow" aria-hidden="true">
+        <i class="fas fa-arrow-right"></i>
+      </span>
+    </button>
+    <button v-if="isAdmin" type="button" class="file-row__move" title="移动到此课件到其他目录"
+      @click.stop="$emit('move', node.blogId)">
+      <i class="fas fa-folder-move"></i>
+      <span>移动</span>
+    </button>
+  </div>
 </template>
 
 <script setup>
@@ -69,7 +76,7 @@ const props = defineProps({
   }
 })
 
-defineEmits(['click'])
+defineEmits(['click', 'move'])
 
 const ACCENTS = ['cyan', 'violet', 'amber', 'coral', 'pink', 'lime']
 const accentClass = computed(() => `accent--${ACCENTS.includes(props.accent) ? props.accent : 'violet'}`)
@@ -87,13 +94,20 @@ const formattedDate = computed(() => {
 </script>
 
 <style scoped>
+.file-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
 .file-row {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
   min-height: 46px;
-  padding: 10px 12px 10px calc(var(--depth, 0) * 12px + 8px);
+  padding: 10px 12px;
   border: 1.5px solid transparent;
   border-radius: var(--r-sm);
   background: transparent;
@@ -233,6 +247,35 @@ const formattedDate = computed(() => {
   opacity: 1;
   color: var(--ink);
   transform: translateX(2px);
+}
+
+/* 管理端移动按钮 */
+.file-row__move {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-sm);
+  background: var(--paper-2);
+  color: var(--text-2);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-fast), color var(--dur-fast), transform var(--dur-fast) var(--ease-out);
+}
+
+.file-row__move:hover {
+  background: var(--cobalt);
+  color: var(--paper-1);
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.file-row__move:active {
+  transform: translate(1px, 1px);
+  box-shadow: none;
 }
 
 /* ---------- 学科印刷色：hover 时图标块取色 ---------- */

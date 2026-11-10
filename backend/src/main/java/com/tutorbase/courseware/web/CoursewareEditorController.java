@@ -216,6 +216,18 @@ public class CoursewareEditorController {
                 .body(ReleaseResponse.from(published));
     }
 
+    @PostMapping("/articles/{articleId}/move")
+    ResponseEntity<MoveResponse> moveArticle(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @PathVariable long articleId,
+            @Valid @RequestBody MoveRequest request) {
+        CoursewareWorkspaceService.PublishedMove result =
+                workspace.moveArticle(teacherId(principal), articleId, request.newLogicalPath());
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new MoveResponse(result.subject(), result.version(), result.oldPath(), result.newPath()));
+    }
+
     @GetMapping("/export")
     ResponseEntity<byte[]> export(
             @AuthenticationPrincipal AccountPrincipal principal,
@@ -439,6 +451,13 @@ public class CoursewareEditorController {
     record PublishDraftsRequest(
             @NotBlank @Size(max = 60) String subject,
             Integer expectVersion) {
+    }
+
+    record MoveRequest(
+            @NotBlank @Size(max = 500) String newLogicalPath) {
+    }
+
+    record MoveResponse(String subject, int version, String oldPath, String newPath) {
     }
 
     record ReleaseResponse(

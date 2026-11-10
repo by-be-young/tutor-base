@@ -100,6 +100,7 @@
               :expand-to="expanded"
               mode="admin"
               @file-click="openPreview(item.subject, $event)"
+              @file-move="openMoveDialog(item.subject, $event)"
             />
             <p class="overview__subject-meta">
               <span v-if="item.version" class="chip chip--lime mono">v{{ item.version }}</span>
@@ -127,6 +128,38 @@
       </p>
       <router-link class="btn btn--ghost btn--sm" to="/admin/content">查看旧认领页</router-link>
     </section>
+
+    <!-- 移动课件对话框 -->
+    <div v-if="moveDialog.open" class="move-overlay" @click.self="closeMoveDialog">
+      <div class="move-dialog" role="dialog" aria-modal="true" aria-labelledby="move-dialog-title">
+        <h3 class="move-dialog__title" id="move-dialog-title">
+          <i class="fas fa-folder-move" aria-hidden="true"></i>
+          移动课件
+        </h3>
+        <p class="move-dialog__current">
+          <span class="text-dim">当前路径：</span>
+          <code class="mono">{{ moveDialog.currentPath }}</code>
+        </p>
+        <label class="move-dialog__label" for="new-path-input">新路径（含科目前缀和文件名）</label>
+        <input id="new-path-input" v-model="moveDialog.newPath" class="move-dialog__input" type="text"
+          placeholder="例如：高中英语/语法课讲义/虚拟语气.md" @keydown.enter="confirmMove" />
+        <div v-if="moveDialog.suggestions.length" class="move-dialog__sugs">
+          <span class="text-dim">已有目录：</span>
+          <button v-for="dir in moveDialog.suggestions" :key="dir" type="button" class="move-dialog__sug"
+            @click="applySuggestion(dir)">
+            {{ dir }}
+          </button>
+        </div>
+        <div class="move-dialog__actions">
+          <button type="button" class="btn btn--ghost btn--sm" @click="closeMoveDialog">取消</button>
+          <button type="button" class="btn btn--primary btn--sm" :disabled="moveDialog.busy || !moveDialog.newPath.trim()"
+            @click="confirmMove">
+            <i v-if="moveDialog.busy" class="fas fa-circle-notch fa-spin"></i>
+            {{ moveDialog.busy ? '移动中…' : '确认移动' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -198,6 +231,62 @@ function openPreview(subjectValue, articleId) {
   if (article?.title) query.title = article.title
   if (article?.logicalPath) query.path = article.logicalPath
   router.push({ name: 'CoursewarePreview', params: { id: articleId }, query })
+}
+
+// ---- 移动课件 ----
+const moveDialog = reactive({
+  open: false,
+  articleId: null,
+  subject: '',
+  currentPath: '',
+  newPath: '',
+  busy: false,
+  suggestions: []
+})
+
+function openMoveDialog(subjectValue, articleId) {
+  const article = articles.value.find(item => Number(item.articleId) === Number(articleId))
+  if (!article) return
+  moveDialog.articleId = Number(articleId)
+  moveDialog.subject = subjectValue
+  moveDialog.currentPath = article.logicalPath || ''
+  moveDialog.newPath = article.logicalPath || ''
+  moveDialog.busy = false
+  // 收集同科目已有目录（取所有路径的父目录）
+  const dirs = new Set()
+  for (const a of articlesOf(subjectValue)) {
+    const p = a.logicalPath || ''
+    const idx = p.lastIndexOf('/')
+    if (idx > 0) dirs.add(p.slice(0, idx + 1))
+  }
+  moveDialog.suggestions = Array.from(dirs).sort()
+  moveDialog.open = true
+}
+
+function applySuggestion(dir) {
+  // 保留原文件名，只换目录
+  const fileName = moveDialog.currentPath.slice(moveDialog.currentPath.lastIndexOf('/') + 1)
+  moveDialog.newPath = dir + fileName
+}
+
+function closeMoveDialog() {
+  if (moveDialog.busy) return
+  moveDialog.open = false
+}
+
+async function confirmMove() {
+  if (!moveDialog.articleId || !moveDialog.newPath.trim() || moveDialog.busy) return
+  moveDialog.busy = true
+  try {
+    await coursewareGateway.moveArticle(moveDialog.articleId, moveDialog.newPath.trim())
+    showToast(`已移动到 ${moveDialog.newPath.trim()}`, 'success')
+    moveDialog.open = false
+    await Promise.all([loadArticles(), loadOverview()])
+  } catch (error) {
+    showToast(error?.message || '移动失败，请稍后重试', 'error')
+  } finally {
+    moveDialog.busy = false
+  }
 }
 
 /** 交给 FolderNode 的目录树：科目是根文件夹，logicalPath 的层级是多级子目录。 */
@@ -453,6 +542,108 @@ onMounted(async () => {
   margin: 0;
   font-size: 0.8rem;
   line-height: 1.6;
+}
+
+/* 移动对话框 */
+.move-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 20px;
+}
+
+.move-dialog {
+  width: 100%;
+  max-width: 520px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-md);
+  background: var(--paper-1);
+  box-shadow: 5px 5px 0 var(--ink);
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.move-dialog__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.move-dialog__current {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.move-dialog__current code {
+  font-size: 0.78rem;
+  background: var(--paper-2);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.move-dialog__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.move-dialog__input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-sm);
+  background: var(--paper-1);
+  font-family: inherit;
+  font-size: 0.86rem;
+  color: var(--ink);
+  outline: none;
+}
+
+.move-dialog__input:focus {
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.move-dialog__sugs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+}
+
+.move-dialog__sug {
+  padding: 3px 9px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--text-2);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: border-color var(--dur-fast), background var(--dur-fast);
+}
+
+.move-dialog__sug:hover {
+  border-color: var(--ink);
+  background: var(--butter);
+}
+
+.move-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
 }
 
 @media (max-width: 768px) {

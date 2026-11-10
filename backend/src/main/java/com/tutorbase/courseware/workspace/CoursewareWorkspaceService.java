@@ -155,6 +155,74 @@ public class CoursewareWorkspaceService {
                 changed, removed);
     }
 
+    /**
+     * 移动一篇课件到新的逻辑路径（重命名目录/文件名）。
+     * 保持 articleId、正文 blob、答案不变，只改 logical_path，并发布为新版本。
+     */
+    @Transactional
+    public PublishedMove moveArticle(long teacherId, long articleId, String newLogicalPath) {
+        SubjectHead head = head(teacherId, null);
+        // 需要先按 articleId 找到所属科目
+        String subject = findSubject(teacherId, articleId);
+        head = head(teacherId, subject);
+        if (head == null) {
+            throw new CoursewareFailures.NotFound("该科目还没有发布版本：" + subject);
+        }
+        String normalizedNew = CoursewareValidator.normalizePath(newLogicalPath);
+        if (!normalizedNew.endsWith(".md")) {
+            throw new CoursewareFailures.Validation(List.of("新路径必须以 .md 结尾：" + newLogicalPath));
+        }
+
+        List<Entry> current = entries(head.releaseId());
+        Entry target = null;
+        for (Entry e : current) {
+            if (e.articleId() == articleId) {
+                target = e;
+                break;
+            }
+        }
+        if (target == null) {
+            throw new CoursewareFailures.NotFound("课件不存在或不属于你：" + articleId);
+        }
+        if (target.logicalPath().equals(normalizedNew)) {
+            throw new CoursewareFailures.Validation(List.of("新路径与当前路径相同"));
+        }
+        for (Entry e : current) {
+            if (e.logicalPath().equals(normalizedNew)) {
+                throw new CoursewareFailures.Validation(List.of("目标路径已被占用：" + normalizedNew));
+            }
+        }
+
+        List<CoursewareArticleInput> articles = new ArrayList<>();
+        for (Entry e : current) {
+            String md = publishedMarkdown(teacherId, e.contentHash());
+            if (md == null) continue;
+            String path = e.logicalPath();
+            if (e.articleId() == articleId) {
+                path = normalizedNew;
+            }
+            articles.add(new CoursewareArticleInput(e.articleId(), e.legacyArticleId(), e.title(),
+                    e.series(), path, md, answersFor(e.articleId(), md)));
+        }
+
+        CoursewarePublisher.Published published = publisher.publish(teacherId, subject, head.version(), articles);
+        return new PublishedMove(subject, published.version(), target.logicalPath(), normalizedNew);
+    }
+
+    private String findSubject(long teacherId, long articleId) {
+        return jdbc.sql("""
+                SELECT DISTINCT ca.subject
+                FROM public.course_article ca
+                JOIN public.course_release_head h ON h.release_id = ca.release_id
+                WHERE ca.teacher_account_id = :teacherId AND ca.article_id = :articleId
+                """)
+                .param("teacherId", teacherId)
+                .param("articleId", articleId)
+                .query(String.class)
+                .optional()
+                .orElseThrow(() -> new CoursewareFailures.NotFound("课件不存在或不属于你：" + articleId));
+    }
+
     private List<Entry> entries(long releaseId) {
         return jdbc.sql("""
                 SELECT article_id, legacy_article_id, title, series, logical_path, content_hash, question_count
@@ -289,5 +357,9 @@ public class CoursewareWorkspaceService {
             int deletedCount,
             List<String> changedPaths,
             List<String> deletedPaths) {
+    }
+
+    /** 移动结果。 */
+    public record PublishedMove(String subject, int version, String oldPath, String newPath) {
     }
 }

@@ -337,5 +337,13 @@ export const coursewareGateway = {
     return backendClient.request(`/admin/courseware-claims/articles/${encodeURIComponent(articleId)}/abandonment`, {
       method: 'POST'
     })
+  },
+
+  /** 移动课件到新路径（重命名目录/文件名，保持 articleId 与内容不变）。 */
+  moveArticle(articleId, newLogicalPath) {
+    return backendClient.request(`/admin/courseware/articles/${encodeURIComponent(articleId)}/move`, {
+      method: 'POST',
+      body: { newLogicalPath }
+    })
   }
 }
