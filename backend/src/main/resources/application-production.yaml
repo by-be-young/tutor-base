@@ -16,5 +16,5 @@ tutor:
     # 挂持久卷覆盖（deploy/compose.yaml 的 courseware-data）。容器 read_only 时
     # 相对路径 ./var/courseware 无法创建，会导致任何发布都写盘失败。
     root: ${TUTOR_COURSEWARE_ROOT:/var/lib/tutor-base/courseware}
-    # 生产默认保持静态目录，直到配置了可写的持久卷/对象存储；切到 storage 才对外暴露托管清单
-    source: ${TUTOR_COURSEWARE_SOURCE:static}
+    # 所有正文从数据库 blob 读取（持久卷 courseware-data），不再依赖前端静态文件。
+    source: ${TUTOR_COURSEWARE_SOURCE:storage}

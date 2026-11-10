@@ -29,6 +29,8 @@ services:
       # 课件正文与发布清单的落盘根目录：必须落在可写且持久化的卷上，
       # 否则 read_only 容器里每次发布都会写盘失败（500）。
       TUTOR_COURSEWARE_ROOT: /var/lib/tutor-base/courseware
+      # 所有正文从数据库 blob 读取，不再走前端静态文件
+      TUTOR_COURSEWARE_SOURCE: storage
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
