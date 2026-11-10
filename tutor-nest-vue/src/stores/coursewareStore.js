@@ -112,7 +112,6 @@ export const useCoursewareStore = defineStore('courseware', () => {
 
     inflight = (async () => {
       try {
-        await syncCatalogIfNeeded(lastArticles.value)
         await fetchClaimsAndCatalog()
         loaded.value = true
       } catch (err) {

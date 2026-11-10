@@ -112,12 +112,6 @@ export function trimStaleStatic(list, staticIndex) {
  */
 export async function loadCoursewareLibrary() {
   const staticIndex = await loadStaticIndex()
-  try {
-    const items = catalogSyncItems(staticIndex)
-    if (items.length) await coursewareGateway.syncCatalog(items)
-  } catch {
-    // 目录同步失败（接口下线/网络异常）时继续读后端清单
-  }
   const articles = trimStaleStatic(
     enrichWithStaticIndex(await coursewareGateway.listArticles(), staticIndex),
     staticIndex
