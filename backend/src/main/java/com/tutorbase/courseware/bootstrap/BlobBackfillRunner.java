@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
@@ -24,6 +25,7 @@ import java.util.List;
  * 这样改完 .md 文件 push，部署后自动上线，不需要走网页编辑器。
  */
 @Component
+@ConditionalOnProperty(name = "tutor.courseware.source", havingValue = "storage")
 public class BlobBackfillRunner implements ApplicationRunner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BlobBackfillRunner.class);
