@@ -158,13 +158,12 @@ public class CoursewareWorkspaceService {
     /**
      * 移动一篇课件到新的逻辑路径（重命名目录/文件名）。
      * 保持 articleId、正文 blob、答案不变，只改 logical_path，并发布为新版本。
+     * 全部走 carry-over（不读 blob），避免容器重建后本地 blob 丢失导致发布清空。
      */
     @Transactional
     public PublishedMove moveArticle(long teacherId, long articleId, String newLogicalPath) {
-        SubjectHead head = head(teacherId, null);
-        // 需要先按 articleId 找到所属科目
         String subject = findSubject(teacherId, articleId);
-        head = head(teacherId, subject);
+        SubjectHead head = head(teacherId, subject);
         if (head == null) {
             throw new CoursewareFailures.NotFound("该科目还没有发布版本：" + subject);
         }
@@ -195,14 +194,10 @@ public class CoursewareWorkspaceService {
 
         List<CoursewareArticleInput> articles = new ArrayList<>();
         for (Entry e : current) {
-            String md = publishedMarkdown(teacherId, e.contentHash());
-            if (md == null) continue;
-            String path = e.logicalPath();
-            if (e.articleId() == articleId) {
-                path = normalizedNew;
-            }
-            articles.add(new CoursewareArticleInput(e.articleId(), e.legacyArticleId(), e.title(),
-                    e.series(), path, md, answersFor(e.articleId(), md)));
+            String path = e.articleId() == articleId ? normalizedNew : e.logicalPath();
+            articles.add(CoursewareArticleInput.carried(
+                    e.articleId(), e.legacyArticleId(), e.title(), e.series(),
+                    path, e.contentHash(), e.answerHash(), e.questionCount()));
         }
 
         CoursewarePublisher.Published published = publisher.publish(teacherId, subject, head.version(), articles);
@@ -225,7 +220,7 @@ public class CoursewareWorkspaceService {
 
     private List<Entry> entries(long releaseId) {
         return jdbc.sql("""
-                SELECT article_id, legacy_article_id, title, series, logical_path, content_hash, question_count
+                SELECT article_id, legacy_article_id, title, series, logical_path, content_hash, answer_hash, question_count
                 FROM public.course_article
                 WHERE release_id = :releaseId
                 ORDER BY logical_path
@@ -238,6 +233,7 @@ public class CoursewareWorkspaceService {
                         rs.getString("series"),
                         rs.getString("logical_path"),
                         rs.getString("content_hash"),
+                        rs.getString("answer_hash"),
                         rs.getInt("question_count")))
                 .list();
     }
@@ -333,6 +329,7 @@ public class CoursewareWorkspaceService {
             String series,
             String logicalPath,
             String contentHash,
+            String answerHash,
             int questionCount) {
     }
 
