@@ -22,12 +22,9 @@
             {{ currentStatus }}
           </span>
         </p>
-        <p v-if="currentArticle && currentArticle.hosted === false" class="editor__identity-hint">
-          站内静态课件：正文在 <code>public/articles</code> 下。保存会生成在线草稿，发布后仍按原篇目生效。
-        </p>
-        <p v-if="currentArticle?.contentMissing || recoveredFromStatic" class="editor__identity-hint is-warning">
-          这篇课件的已发布正文文件在服务器上丢失了（存储卷重建或历史环境），当前用站内讲义打开。
-          保存草稿并点「发布」会把正文重新写回。
+        <p v-if="currentArticle?.contentMissing" class="editor__identity-hint is-warning">
+          这篇课件的已发布正文文件在服务器上缺失。页面不会回退到静态文件；
+          服务端会在启动时从已打包的课件补写正文，仍缺失请联系管理员恢复后再发布。
         </p>
       </div>
       <label class="editor__field editor__field--picker">
@@ -36,7 +33,7 @@
           <option value="">— 从我的课件里选一篇 —</option>
           <optgroup v-for="group in articleGroups" :key="group.subject" :label="group.subject">
             <option v-for="item in group.items" :key="item.articleId" :value="item.articleId">
-              {{ item.title || `课件 ${item.articleId}` }}{{ item.hosted === false ? ' · 静态课件' : item.published ? ' · 已发布' : ' · 草稿' }}
+              {{ item.title || `课件 ${item.articleId}` }}{{ item.published ? ' · 已发布' : ' · 草稿' }}
             </option>
           </optgroup>
         </select>
@@ -183,7 +180,7 @@ const layouts = ref([])
 const templates = ref([])
 const templateId = ref(null)
 const drafts = ref([])
-// 「我的课件」清单：已发布篇目 + 尚未发布的草稿 + 站内静态课件，作为选择器的唯一数据源
+// 「我的课件」清单：已发布篇目 + 尚未发布的草稿（正文全部由数据库托管），作为选择器的唯一数据源
 const articles = ref([])
 const articleId = ref(null)
 const subject = ref('')
@@ -198,8 +195,6 @@ const precheck = reactive({ checked: false, errors: [] })
 
 // 当前这篇在服务端有没有草稿行：决定「删除草稿」是否可用
 const currentHasDraft = ref(false)
-// 已发布正文文件缺失、本次用站内讲义顶上：保存并发布后才会恢复
-const recoveredFromStatic = ref(false)
 const canDeleteDraft = computed(() => Boolean(articleId.value) && currentHasDraft.value)
 
 /** 当前编辑对象：标题 / 科目 / ID / 发布态都从「我的课件」清单里取，避免只剩一个裸 ID。 */
@@ -215,19 +210,19 @@ const currentSubject = computed(() => currentArticle.value?.subject || subject.v
 
 const currentPath = computed(() => currentArticle.value?.logicalPath || '')
 
-// 正文里的状态提示（草稿 / 已发布 / 静态讲义 / 正文缺失 / 有未保存改动）
+// 正文里的状态提示（草稿 / 已发布 / 正文缺失 / 有未保存改动）
 const currentStatus = computed(() => {
   if (!articleId.value) return '新草稿 · 尚未保存'
   const current = currentArticle.value
-  const missing = current?.contentMissing || recoveredFromStatic.value
-  if (missing) return dirty.value ? '正文缺失 · 有未保存改动' : '正文缺失 · 需重新发布'
+  const missing = current?.contentMissing
+  if (missing) return dirty.value ? '正文缺失 · 有未保存改动' : '正文缺失 · 需服务端恢复'
   const status = articleStatus(current)?.label || '草稿 · 未发布'
   return dirty.value ? `${status} · 有未保存改动` : status
 })
 
 const currentStatusTone = computed(() => {
   if (!articleId.value) return 'draft'
-  if (currentArticle.value?.contentMissing || recoveredFromStatic.value) return 'missing'
+  if (currentArticle.value?.contentMissing) return 'missing'
   return articleStatus(currentArticle.value)?.tone || 'draft'
 })
 
@@ -361,7 +356,6 @@ async function newDraft() {
       : await coursewareGateway.getLayoutSkeleton(layoutId.value, subject.value || '新课件')
     articleId.value = null
     currentHasDraft.value = false
-    recoveredFromStatic.value = false
     dirty.value = true
     precheck.checked = false
     precheck.errors = []
@@ -400,14 +394,10 @@ async function openDraft(draft) {
     articleId.value = loaded.articleId
     markdown.value = loaded.markdown
     currentHasDraft.value = loaded.hasDraft
-    recoveredFromStatic.value = loaded.contentMissing
     if (draft.subject) subject.value = draft.subject
     dirty.value = false
     precheck.checked = false
     precheck.errors = []
-    if (loaded.contentMissing) {
-      showToast('这篇课件的已发布正文文件缺失，已用站内讲义打开。保存草稿并发布后会重新写回正文。', 'warning')
-    }
     return true
   } catch (error) {
     reportError(error)
@@ -452,7 +442,6 @@ function resetEditor() {
   articleId.value = null
   markdown.value = ''
   currentHasDraft.value = false
-  recoveredFromStatic.value = false
   dirty.value = false
   precheck.checked = false
   precheck.errors = []
@@ -495,7 +484,6 @@ async function openPreview() {
       id = saved.articleId
       articleId.value = id
       currentHasDraft.value = true
-      recoveredFromStatic.value = false
       dirty.value = false
       await Promise.all([loadDrafts(), loadArticles()])
     }
@@ -528,7 +516,6 @@ async function openAnswerSetting() {
       id = saved.articleId
       articleId.value = id
       currentHasDraft.value = true
-      recoveredFromStatic.value = false
       dirty.value = false
       await Promise.all([loadDrafts(), loadArticles()])
     }
@@ -548,7 +535,6 @@ async function save() {
     const saved = await coursewareGateway.saveDraft(articleId.value, markdown.value)
     articleId.value = saved.articleId
     currentHasDraft.value = true
-    recoveredFromStatic.value = false
     dirty.value = false
     showToast('草稿已保存', 'success')
     await Promise.all([loadDrafts(), loadArticles()])
@@ -569,7 +555,6 @@ async function publish() {
       dirty.value = false
     }
     const published = await coursewareGateway.publishDrafts(subject.value)
-    recoveredFromStatic.value = false
     // 发布成功后服务端会清掉本次并入版本的草稿，编辑器随之回到"已发布正文"状态
     currentHasDraft.value = false
     showToast(`已发布 v${published.version}（${published.articleCount} 篇），草稿已自动清空`, 'success')

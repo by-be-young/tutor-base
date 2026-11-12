@@ -50,12 +50,12 @@ test('同一目录里文件夹排在文件前面，并按中文排序', () => {
   assert.deepEqual(tree.children.map(node => node.name), ['子目录', 'a 篇', 'b 篇'])
 })
 
-test('状态文案区分已发布、草稿、静态讲义与正文缺失', () => {
+test('状态文案区分已发布、草稿、未托管与正文缺失', () => {
   assert.equal(articleStatus({ published: true, hasDraft: false }).label, '已发布')
   assert.equal(articleStatus({ published: true, hasDraft: true }).tone, 'draft')
   assert.equal(articleStatus({ published: false, hasDraft: true }).label, '草稿 · 未发布')
-  assert.equal(articleStatus({ hosted: false, hasDraft: false }).label, '静态讲义 · 已上线')
-  assert.equal(articleStatus({ hosted: false, hasDraft: true }).label, '静态讲义 · 有草稿')
+  assert.equal(articleStatus({ hosted: false, hasDraft: false }).label, '未托管 · 需服务端导入')
+  assert.equal(articleStatus({ hosted: false, hasDraft: true }).label, '未托管 · 有草稿')
   assert.deepEqual(articleStatus({ published: true, contentMissing: true }), {
     label: '正文缺失 · 需重新发布',
     tone: 'missing'

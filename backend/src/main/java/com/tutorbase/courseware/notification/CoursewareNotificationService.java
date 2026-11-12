@@ -59,8 +59,9 @@ public class CoursewareNotificationService {
                 WHERE c.source_teacher_account_id = :teacherId
                   AND ca.subject = :subject
                   AND c.status = 'active'
-                  AND ca.content_hash <> c.base_content_hash
-                  AND (c.dismissed_hash IS NULL OR ca.content_hash <> c.dismissed_hash)
+                  AND replace(ca.content_hash, 'sha256:', '') <> replace(c.base_content_hash, 'sha256:', '')
+                  AND (c.dismissed_hash IS NULL
+                       OR replace(ca.content_hash, 'sha256:', '') <> replace(c.dismissed_hash, 'sha256:', ''))
                 """)
                 .param("teacherId", teacherAccountId)
                 .param("subject", subject)

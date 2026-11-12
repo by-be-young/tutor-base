@@ -101,7 +101,7 @@ def main():
                 print(f"  ⚠ 缺失文件：{md_path}")
                 continue
             markdown = md_path.read_text(encoding="utf-8")
-            content_hash = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
+            content_hash = "sha256:" + hashlib.sha256(markdown.encode("utf-8")).hexdigest()
 
             # 答案 hash 从 article_answer_keys 读
             cur.execute(
@@ -114,7 +114,7 @@ def main():
                 [{"questionId": r[0], "answer": r[1], "autoGrade": r[2]} for r in answer_rows],
                 ensure_ascii=False,
             ).encode("utf-8")
-            answer_hash = hashlib.sha256(answer_bytes).hexdigest()
+            answer_hash = "sha256:" + hashlib.sha256(answer_bytes).hexdigest()
             q_count = len(answer_rows)
 
             old = old_articles.get(aid)
@@ -158,7 +158,7 @@ def main():
             ],
         }
         manifest_bytes = json.dumps(manifest, ensure_ascii=False).encode("utf-8")
-        manifest_hash = hashlib.sha256(manifest_bytes).hexdigest()
+        manifest_hash = "sha256:" + hashlib.sha256(manifest_bytes).hexdigest()
 
         cur.execute(
             """INSERT INTO course_release

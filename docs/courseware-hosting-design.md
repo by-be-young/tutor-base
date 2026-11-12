@@ -1033,8 +1033,8 @@ PostgreSQL 容器演练通过（正向/回滚/重复执行/断言拦截均实测
 - **V26（换主键）单独提供回滚脚本**：`database/planned/V26__teacher_scoped_courseware_keys.rollback.sql`，
   只在该迁移之前不存在"跨老师重复 `article_id`"时能成功，脚本会先断言。详见
   [`docs/courseware-v26-migration-runbook.md`](./courseware-v26-migration-runbook.md)。
-- 应用侧保留双读开关（`COURSEWARE_SOURCE=static|storage`），出问题可切回静态索引。
-- 内容层：blob 内容寻址，不会因迁移丢失；旧 `public/articles` 在一个发布周期内保留在仓库中作为兜底。
+- 应用侧保留 `COURSEWARE_SOURCE=storage|static` 开关用于本地开发与兜底排障；生产固定 `storage`，浏览器不直接读取静态正文。
+- 内容层：blob 内容寻址，不会因迁移丢失；`courseware-static` 只作为服务端启动时补写缺失 blob 的种子，不再是运行时兜底。
 
 ---
 

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.tutorbase.courseware.CoursewareFailures;
+import com.tutorbase.courseware.storage.CoursewareHashes;
 import com.tutorbase.courseware.storage.CoursewareStorage;
 import com.tutorbase.courseware.storage.LocalFileStorage;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -41,8 +42,8 @@ public class CoursewareUpdateService {
                 removed.add(item(copy, null));
                 continue;
             }
-            boolean hasUpdate = !source.contentHash().equals(copy.baseContentHash())
-                    && !source.contentHash().equals(copy.dismissedHash());
+            boolean hasUpdate = !CoursewareHashes.same(source.contentHash(), copy.baseContentHash())
+                    && !CoursewareHashes.same(source.contentHash(), copy.dismissedHash());
             if (hasUpdate) {
                 updated.add(item(copy, source));
             }
@@ -63,8 +64,8 @@ public class CoursewareUpdateService {
         String localHash = localMarkdown == null ? null : LocalFileStorage.sha256(
                 localMarkdown.getBytes(StandardCharsets.UTF_8));
         String sourceMarkdown = markdownOf(copy.sourceTeacherAccountId(), source.contentHash());
-        boolean localModified = localHash != null && !localHash.equals(copy.baseContentHash());
-        boolean answerChanged = !source.answerHash().equals(copy.baseAnswerHash());
+        boolean localModified = localHash != null && !CoursewareHashes.same(localHash, copy.baseContentHash());
+        boolean answerChanged = !CoursewareHashes.same(source.answerHash(), copy.baseAnswerHash());
         return new UpdateDetail(
                 copyId,
                 source.version(),
@@ -90,7 +91,7 @@ public class CoursewareUpdateService {
             throw new CoursewareFailures.NotFound("来源课件已下线：" + copy.sourceArticleId());
         }
         if (expectedSourceHash != null && !expectedSourceHash.isBlank()
-                && !expectedSourceHash.equals(source.contentHash())) {
+                && !CoursewareHashes.same(expectedSourceHash, source.contentHash())) {
             throw new CoursewareFailures.HashConflict("来源已发布新版本，请重新拉取差异");
         }
         if ("keep".equals(mode)) {
@@ -132,7 +133,7 @@ public class CoursewareUpdateService {
                 .update();
         log(teacherId, copy.localArticleId(), "apply_update",
                 "{\"copyId\":" + copyId + ",\"sourceHash\":\"" + source.contentHash() + "\"}");
-        return new ApplyResult(true, backupHash, !source.answerHash().equals(copy.baseAnswerHash()));
+        return new ApplyResult(true, backupHash, !CoursewareHashes.same(source.answerHash(), copy.baseAnswerHash()));
     }
 
     private List<DigestItem> addedInSharedSubjects(long teacherId, List<CopyRow> copies) {

@@ -268,13 +268,13 @@
 
 - 前缀：学员侧 `/courseware`，老师侧 `/admin/courseware`；路径一律带老师维度，`articleId` 只在老师命名空间内唯一。
 - 正文：`GET /courseware/articles/{teacherId}/{articleId}/content` 返回 `text/markdown` 与 `ETag`；未关联/未授权返回 403，确不存在返回 404。
-- 课件清单：`GET /admin/courseware/articles` 返回当前发布版本的全部篇目 + 尚未发布的草稿 + 当前管理员可见、从未发布过的站内静态课件（`hosted=false`，`articleId` 即旧静态编号），作为「课件」页科目目录与在线编辑器选择器的唯一数据源；仅有草稿的篇目 `subject` 为空。不要用 `GET /drafts` 当选择器数据源——通过 CLI 或导入发布、没有草稿行的课件不会出现在其中。
-- 静态课件：`hosted=false` 的篇目正文仍在 `public/articles` 下（前端 `fetchStaticArticle(logicalPath)` 读取）；保存草稿时以该旧编号为 `articleId` 落库，发布时服务端按 `courseware_catalog` 补 `legacy_article_id`，学员端仍按原篇目看到新版本，不会多出一篇。
+- 课件清单：`GET /admin/courseware/articles` 只返回数据库已托管的当前发布版本篇目 + 尚未发布的草稿；尚未导入的静态课件不返回，避免出现「看得见却打不开」的条目。仅有草稿的篇目 `subject` 为空。不要用 `GET /drafts` 当选择器数据源——通过 CLI 或导入发布、没有草稿行的课件不会出现在其中。
+- 正文来源：所有正文只从数据库托管版本（blob）读取。`public/articles` 下的静态 Markdown 仅作为服务端启动时补齐缺失 blob 的种子来源，任何前端页面（学员阅读、管理预览、编辑器）都不得直接读取静态课件。
 - 发布：`POST /admin/courseware/releases` 以 `expectVersion` 做乐观锁；与当前指针不一致返回 `409`。
   编辑器侧的 `POST /admin/courseware/drafts/publish` 在发布成功后**删除本次并入版本的草稿**（内容已写进新 release），未参与本次发布的草稿保持不动；`GET /admin/courseware/drafts` 保证一篇草稿一行（多科目 release head 不会造成重复行）。
 - 正文存储：正文 blob 与版本 manifest 落在 `tutor.courseware.root`（生产默认 `/var/lib/tutor-base/courseware`，由 `deploy/compose.yaml` 的 `courseware-data` 卷挂载）。卷不可写时写盘失败，返回 `503 courseware_storage_unavailable`。
 - 结转：已发布篇目的正文 blob 不在本机（换机、卷未挂载、容器重建）时，`POST /admin/courseware/drafts/publish` 仍按上一版 `content_hash`/`answer_hash` 结转该篇，服务端打 `WARN` 日志，不重算正文、不清空科目；恢复 blob 后再次发布即回到正常路径。
-- 正文缺失：清单里仍在、但 blob 已丢失的已发布篇目，`GET /admin/courseware/articles` 会给出 `contentMissing=true`；`GET /admin/courseware/drafts/{articleId}` 对其返回 `409 courseware_content_missing`（区别于"课件不存在"的 404），前端据此回退到站内静态讲义（`public/articles`）恢复正文，保存草稿后重新发布即可把 blob 写回。
+- 正文缺失：清单里仍在、但 blob 已丢失的已发布篇目，`GET /admin/courseware/articles` 会给出 `contentMissing=true`（哈希比较忽略历史数据里缺失的 `sha256:` 前缀）；`GET /admin/courseware/drafts/{articleId}` 对其返回 `409 courseware_content_missing`（区别于"课件不存在"的 404）。前端不回退静态文件；服务端启动时的 `BlobBackfillRunner` 会从已打包课件补写 blob，仍缺失时由管理员恢复后再发布。
 - 错误码（`Problem.code`）：
 
   | code | HTTP | 含义 |

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.tutorbase.courseware.CoursewareFailures;
+import com.tutorbase.courseware.CoursewareTitles;
 import com.tutorbase.courseware.layout.CoursewareLayoutService;
 import com.tutorbase.courseware.publish.CoursewareArticleInput;
 import com.tutorbase.courseware.publish.CoursewarePublisher;
@@ -251,11 +252,14 @@ public class CoursewareDraftService {
             if (catalog != null && !subject.equals(catalog.subject())) {
                 continue;
             }
+            String contentTitle = CoursewareTitles.titleOf(draft.markdown());
             String title = draft.title() != null
                     ? draft.title()
                     : catalog != null && catalog.title() != null
                             ? catalog.title()
-                            : "草稿 " + draft.articleId();
+                            : !contentTitle.isBlank()
+                                    ? contentTitle
+                                    : "草稿 " + draft.articleId();
             String series = draft.series() == null ? subject : draft.series();
             String path = draft.logicalPath() == null
                     ? subject + "/" + title + ".md"

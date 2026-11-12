@@ -34,19 +34,15 @@ const MANIFESTS = [
   }
 ]
 
-test('清单展平后保留全局 id 并补充静态索引里的日期与路径', () => {
-  const staticIndex = [
-    { id: 3, title: '3-1 原电池', series: '高中化学', date: '2026-08-06', path: '高中化学/理论课讲义/3-1 原电池.md' }
-  ]
-
-  const articles = flattenManifests(MANIFESTS, staticIndex)
+test('清单展平后保留全局 id，日期与路径都来自发布清单', () => {
+  const articles = flattenManifests(MANIFESTS)
 
   assert.deepEqual(articles.map(article => article.id), [3, 1200])
   assert.deepEqual(articles[0], {
     id: 3,
     title: '3-1 原电池',
     series: '高中化学',
-    date: '2026-08-06',
+    date: '2026-10-30',
     path: '高中化学/理论课讲义/3-1 原电池.md',
     teacherId: 7,
     teacherName: 'young',
@@ -54,7 +50,6 @@ test('清单展平后保留全局 id 并补充静态索引里的日期与路径'
     contentHash: 'sha256:aaa',
     releaseVersion: 3
   })
-  // 没有静态索引条目时用发布日期兜底，并保留托管侧的逻辑路径
   assert.equal(articles[1].date, '2026-10-30')
   assert.equal(articles[1].path, '高中化学/理论课讲义/新讲义.md')
   assert.equal(articles[1].teacherId, 7)
@@ -78,7 +73,7 @@ test('跨老师撞号时退回命名空间内唯一的 articleId', () => {
     }]
   }
 
-  const articles = flattenManifests([...MANIFESTS, other], [])
+  const articles = flattenManifests([...MANIFESTS, other])
 
   assert.deepEqual(articles.map(article => article.id), [3, 1200, 1003])
   assert.equal(articles[2].title, '讲义（另一位老师）')
@@ -103,7 +98,7 @@ test('多老师时按老师分组，保持后端顺序', () => {
     }]
   }
 
-  const groups = groupByTeacher(flattenManifests([...MANIFESTS, other], []))
+  const groups = groupByTeacher(flattenManifests([...MANIFESTS, other]))
 
   assert.equal(groups.length, 2)
   assert.equal(groups[0].teacherId, 7)
@@ -114,21 +109,18 @@ test('多老师时按老师分组，保持后端顺序', () => {
 })
 
 test('单老师时不额外分组', () => {
-  const groups = groupByTeacher(flattenManifests(MANIFESTS, []))
+  const groups = groupByTeacher(flattenManifests(MANIFESTS))
   assert.equal(groups.length, 1)
   assert.equal(groups[0].articles.length, 2)
 })
 
-test('正文优先取托管接口，接口失败时回退静态文件', async () => {
+test('正文只走托管接口，不再回退静态文件', async () => {
   const originalFetch = globalThis.fetch
   const calls = []
   try {
     globalThis.fetch = async (url) => {
       calls.push(String(url))
-      if (String(url).includes('/courseware/articles/')) {
-        return new Response('# 原电池\n\n【题干1】题\n', { status: 200 })
-      }
-      return new Response('fallback', { status: 200 })
+      return new Response('# 原电池\n\n【题干1】题\n', { status: 200 })
     }
     const markdown = await loadArticleMarkdown({
       id: 3, path: '高中化学/3-1 原电池.md', teacherId: 7, teacherArticleId: 3
@@ -139,42 +131,18 @@ test('正文优先取托管接口，接口失败时回退静态文件', async ()
   } finally {
     globalThis.fetch = originalFetch
   }
-
-  const failCalls = []
-  try {
-    globalThis.fetch = async (url) => {
-      failCalls.push(String(url))
-      if (String(url).includes('/courseware/articles/')) {
-        return new Response(JSON.stringify({ code: 'courseware_forbidden' }), {
-          status: 403,
-          headers: { 'Content-Type': 'application/json' }
-        })
-      }
-      return new Response('静态正文', { status: 200 })
-    }
-    const markdown = await loadArticleMarkdown({
-      id: 3, path: '高中化学/3-1 原电池.md', teacherId: 7, teacherArticleId: 3
-    })
-    assert.equal(markdown, '静态正文')
-    assert.equal(failCalls.length, 2)
-    assert.match(failCalls[1], /articles\/高中化学\/3-1 原电池\.md$/)
-  } finally {
-    globalThis.fetch = originalFetch
-  }
 })
 
-test('未托管的课件直接走静态文件', async () => {
+test('没有托管身份的课件不读取任何正文', async () => {
   const originalFetch = globalThis.fetch
-  const calls = []
+  let called = false
   try {
-    globalThis.fetch = async (url) => {
-      calls.push(String(url))
+    globalThis.fetch = async () => {
+      called = true
       return new Response('静态正文', { status: 200 })
     }
-    const markdown = await loadArticleMarkdown({ id: 9, path: '高中化学/9.md' })
-    assert.equal(markdown, '静态正文')
-    assert.equal(calls.length, 1)
-    assert.doesNotMatch(calls[0], /courseware\/articles/)
+    assert.equal(await loadArticleMarkdown({ id: 9, path: '高中化学/9.md' }), null)
+    assert.equal(called, false)
   } finally {
     globalThis.fetch = originalFetch
   }

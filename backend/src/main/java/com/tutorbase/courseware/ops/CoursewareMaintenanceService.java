@@ -10,6 +10,7 @@ import java.util.Set;
 
 import com.tutorbase.courseware.CoursewareFailures;
 import com.tutorbase.courseware.CoursewareProperties;
+import com.tutorbase.courseware.storage.CoursewareHashes;
 import com.tutorbase.courseware.storage.CoursewareStorage;
 import com.tutorbase.courseware.storage.LocalFileStorage;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -44,7 +45,7 @@ public class CoursewareMaintenanceService {
     /** 用量：blob 数、总字节、被引用数、孤儿数与配额。 */
     @Transactional(readOnly = true)
     public Usage usage(long teacherId) {
-        Map<String, Long> blobs = storage.listBlobs(teacherId);
+        Map<String, Long> blobs = normalizedBlobs(teacherId);
         long totalBytes = blobs.values().stream().mapToLong(Long::longValue).sum();
         Set<String> referenced = referencedHashes(teacherId);
         Set<String> orphans = new LinkedHashSet<>(blobs.keySet());
@@ -85,7 +86,7 @@ public class CoursewareMaintenanceService {
      */
     @Transactional
     public GcResult collectGarbage(long teacherId, boolean dryRun) {
-        Map<String, Long> blobs = storage.listBlobs(teacherId);
+        Map<String, Long> blobs = normalizedBlobs(teacherId);
         Set<String> referenced = referencedHashes(teacherId);
         List<String> removed = new ArrayList<>();
         long freed = 0;
@@ -124,15 +125,22 @@ public class CoursewareMaintenanceService {
         return rows;
     }
 
+    private Map<String, Long> normalizedBlobs(long teacherId) {
+        Map<String, Long> normalized = new java.util.LinkedHashMap<>();
+        storage.listBlobs(teacherId).forEach((hash, size) ->
+                normalized.merge(CoursewareHashes.normalize(hash), size, Long::sum));
+        return normalized;
+    }
+
     private Set<String> referencedHashes(long teacherId) {
         Set<String> referenced = new LinkedHashSet<>();
         queryStrings("""
                 SELECT DISTINCT content_hash FROM public.course_article
                 WHERE teacher_account_id = :teacherId
-                """, teacherId).forEach(referenced::add);
+                """, teacherId).forEach(hash -> addHash(referenced, hash));
         queryStrings("""
                 SELECT manifest_hash FROM public.course_release WHERE teacher_account_id = :teacherId
-                """, teacherId).forEach(referenced::add);
+                """, teacherId).forEach(hash -> addHash(referenced, hash));
         jdbc.sql("""
                 SELECT base_content_hash, dismissed_hash FROM public.course_copy
                 WHERE owner_account_id = :teacherId OR source_teacher_account_id = :teacherId
@@ -141,13 +149,21 @@ public class CoursewareMaintenanceService {
                 .query((rs, rowNum) -> java.util.Arrays.asList(
                         rs.getString("base_content_hash"), rs.getString("dismissed_hash")))
                 .list()
-                .forEach(pair -> pair.stream().filter(Objects::nonNull).forEach(referenced::add));
+                .forEach(pair -> pair.stream().filter(Objects::nonNull)
+                        .forEach(hash -> addHash(referenced, hash)));
         queryStrings("""
                 SELECT markdown FROM public.course_draft WHERE teacher_account_id = :teacherId
                 """, teacherId)
                 .forEach(markdown -> referenced.add(
                         LocalFileStorage.sha256(markdown.getBytes(StandardCharsets.UTF_8))));
         return referenced;
+    }
+
+    private static void addHash(Set<String> hashes, String hash) {
+        String normalized = CoursewareHashes.normalize(hash);
+        if (normalized != null && !normalized.isBlank()) {
+            hashes.add(normalized);
+        }
     }
 
     private List<String> queryStrings(String sql, long teacherId) {
@@ -179,8 +195,9 @@ public class CoursewareMaintenanceService {
                   ON h.teacher_account_id = c.source_teacher_account_id
                  AND h.release_id = ca.release_id
                 WHERE c.status = 'active'
-                  AND ca.content_hash <> c.base_content_hash
-                  AND (c.dismissed_hash IS NULL OR ca.content_hash <> c.dismissed_hash)
+                  AND replace(ca.content_hash, 'sha256:', '') <> replace(c.base_content_hash, 'sha256:', '')
+                  AND (c.dismissed_hash IS NULL
+                       OR replace(ca.content_hash, 'sha256:', '') <> replace(c.dismissed_hash, 'sha256:', ''))
                 """);
         List<TeacherUsage> usage = allUsage();
         long totalBytes = usage.stream().mapToLong(TeacherUsage::totalBytes).sum();

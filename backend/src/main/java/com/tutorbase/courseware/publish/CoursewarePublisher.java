@@ -11,6 +11,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import com.tutorbase.courseware.CoursewareFailures;
 import com.tutorbase.courseware.CoursewareProperties;
+import com.tutorbase.courseware.storage.CoursewareHashes;
 import com.tutorbase.courseware.storage.CoursewareStorage;
 import com.tutorbase.courseware.storage.LocalFileStorage;
 import org.springframework.dao.DuplicateKeyException;
@@ -102,8 +103,8 @@ public class CoursewarePublisher {
             String answerHash;
             int questionCount;
             if (article.carryOver()) {
-                contentHash = article.contentHash();
-                answerHash = article.answerHash();
+                contentHash = CoursewareHashes.normalize(article.contentHash());
+                answerHash = CoursewareHashes.normalize(article.answerHash());
                 questionCount = article.questionCount() == null ? 0 : article.questionCount();
                 LOGGER.warn("发布结转：articleId={} 的正文 blob 缺失，按上一版哈希 {} 保留篇目（不重算正文）",
                         articleId, contentHash);
@@ -182,6 +183,23 @@ public class CoursewarePublisher {
                     .param("contentHash", article.contentHash())
                     .param("answerHash", article.answerHash())
                     .param("questionCount", article.questionCount())
+                    .update();
+        }
+
+        // 旧认领页、答案面板等仍按 courseware_catalog 取名称：发布/移动后同步标题，
+        // 避免「课件页已改名，别处还是旧名字」。
+        for (PreparedArticle article : prepared) {
+            if (article.legacyArticleId() == null) {
+                continue;
+            }
+            jdbc.sql("""
+                    UPDATE public.courseware_catalog
+                    SET title = :title, updated_at = now()
+                    WHERE teacher_account_id = :teacherId AND article_id = :articleId
+                    """)
+                    .param("title", article.title())
+                    .param("teacherId", teacherAccountId)
+                    .param("articleId", article.legacyArticleId())
                     .update();
         }
 

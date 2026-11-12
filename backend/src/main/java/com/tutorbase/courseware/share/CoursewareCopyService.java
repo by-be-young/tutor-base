@@ -178,8 +178,9 @@ public class CoursewareCopyService {
                     String base = rs.getString("base_content_hash");
                     String current = rs.getString("source_content_hash");
                     String dismissed = rs.getString("dismissed_hash");
-                    boolean hasUpdate = current != null && !current.equals(base)
-                            && !current.equals(dismissed);
+                    boolean hasUpdate = current != null
+                            && !com.tutorbase.courseware.storage.CoursewareHashes.same(current, base)
+                            && !com.tutorbase.courseware.storage.CoursewareHashes.same(current, dismissed);
                     return new CopySummary(
                             rs.getLong("id"),
                             rs.getLong("local_article_id"),
