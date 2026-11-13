@@ -24,9 +24,11 @@ test('按 logicalPath 生成多级目录，去掉重复的科目段', () => {
 
   assert.equal(tree.name, '高中英语')
   assert.equal(tree.isFile, false)
+  assert.equal(tree.path, '高中英语')
   const [first, second] = tree.children
   assert.equal(first.isFile, false)
   assert.equal(first.name, '口语训练')
+  assert.equal(first.path, '高中英语/口语训练')
   assert.equal(second.name, '音标')
   assert.deepEqual(flattenTree(tree).map(node => node.blogId), [1, 2])
 })
@@ -48,6 +50,27 @@ test('同一目录里文件夹排在文件前面，并按中文排序', () => {
     { articleId: 12, title: '子目录里的篇', logicalPath: '高中英语/子目录/x.md', published: true }
   ])
   assert.deepEqual(tree.children.map(node => node.name), ['子目录', 'a 篇', 'b 篇'])
+})
+
+test('登记过的空目录也出现在树里，课件落在其中时不会重复建目录', () => {
+  const tree = buildCoursewareTree(
+    '高中英语',
+    [{ articleId: 21, title: '定语从句', logicalPath: '高中英语/语法课讲义/从句专项/定语从句.md', published: true }],
+    ['高中英语/语法课讲义/从句专项', '高中英语/新目录']
+  )
+
+  const names = tree.children.map(node => node.name)
+  assert.deepEqual(names, ['新目录', '语法课讲义'])
+  const grammar = tree.children.find(node => node.name === '语法课讲义')
+  assert.deepEqual(grammar.children.map(node => node.name), ['从句专项'])
+  const clause = grammar.children[0]
+  assert.equal(clause.path, '高中英语/语法课讲义/从句专项')
+  assert.deepEqual(clause.children.map(node => node.name), ['定语从句'])
+})
+
+test('登记的科目根目录本身不会多建一层', () => {
+  const tree = buildCoursewareTree('高中英语', [], ['高中英语'])
+  assert.deepEqual(tree.children, [])
 })
 
 test('状态文案区分已发布、草稿、未托管与正文缺失', () => {

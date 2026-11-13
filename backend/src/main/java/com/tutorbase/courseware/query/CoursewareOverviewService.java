@@ -172,7 +172,7 @@ public class CoursewareOverviewService {
         // 静态课件不再在这里列出来：正文必须已经由服务端导入成发布版本（或草稿），
         // 浏览器不直接读取 public/articles，避免「看得见却打不开」的条目。
         List<ArticleSummary> drafts = jdbc.sql("""
-                SELECT d.article_id, d.markdown, d.updated_at
+                SELECT d.article_id, d.markdown, d.updated_at, d.title, d.logical_path
                 FROM public.course_draft AS d
                 WHERE d.teacher_account_id = :teacherId
                   AND NOT EXISTS (
@@ -187,19 +187,31 @@ public class CoursewareOverviewService {
                 ORDER BY d.updated_at DESC
                 """)
                 .param("teacherId", teacherId)
-                .query((rs, rowNum) -> new ArticleSummary(
-                        rs.getLong("article_id"),
-                        null,
-                        firstHeading(rs.getString("markdown")),
-                        null,
-                        null,
-                        null,
-                        false,
-                        true,
-                        rs.getString("markdown").length(),
-                        toInstant(rs, "updated_at"),
-                        true,
-                        false))
+                .query((rs, rowNum) -> {
+                    String markdown = rs.getString("markdown");
+                    // 目录树里新建的草稿带用户选定的路径/名称；首段就是学科，用于分组。
+                    String logicalPath = rs.getString("logical_path");
+                    String subject = logicalPath == null || !logicalPath.contains("/")
+                            ? null
+                            : logicalPath.substring(0, logicalPath.indexOf('/'));
+                    String title = rs.getString("title");
+                    if (title == null || title.isBlank()) {
+                        title = firstHeading(markdown);
+                    }
+                    return new ArticleSummary(
+                            rs.getLong("article_id"),
+                            null,
+                            title,
+                            subject,
+                            null,
+                            logicalPath,
+                            false,
+                            true,
+                            markdown.length(),
+                            toInstant(rs, "updated_at"),
+                            true,
+                            false);
+                })
                 .list();
 
         List<ArticleSummary> merged = new java.util.ArrayList<>(published);

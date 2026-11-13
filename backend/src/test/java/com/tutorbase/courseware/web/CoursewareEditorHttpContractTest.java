@@ -104,6 +104,7 @@ class CoursewareEditorHttpContractTest {
         jdbc.update("DELETE FROM public.course_operation_log");
         jdbc.update("DELETE FROM public.course_notification");
         jdbc.update("DELETE FROM public.courseware_catalog");
+        jdbc.update("DELETE FROM public.course_folder");
         jdbc.update("DELETE FROM public.account_session");
         jdbc.update("DELETE FROM public.account");
         jdbc.update("DELETE FROM public.student");
@@ -579,8 +580,140 @@ class CoursewareEditorHttpContractTest {
                         org.hamcrest.Matchers.containsString("# 3 虚拟语气")));
     }
 
+    /**
+     * 从目录树某一级新建的空白课件：草稿要记住选定的路径与名称，发布后仍落在那一级目录。
+     */
     @Test
-    void publishRejectsUnregisteredLayoutAndTemplateResidue() throws Exception {        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+    void draftCreatedInFolderKeepsChosenPathWhenPublished() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+        String logicalPath = "高中英语/语法课讲义/时态练习.md";
+
+        long articleId = objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "markdown", "---\ntitle: 时态练习\ndefaultLayout: A\n---\n\n<!-- @layout:A -->\n"
+                                        + "# 时态练习\n\n在这里写正文\n",
+                                "logicalPath", logicalPath,
+                                "title", "时态练习"))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("articleId").asLong();
+
+        mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].logicalPath",
+                        contains(logicalPath)))
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].title", contains("时态练习")))
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].subject", contains("高中英语")))
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].published", contains(false)));
+
+        mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("subject", "高中英语"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(1));
+
+        long alphaId = jdbc.queryForObject(
+                "SELECT id FROM public.account WHERE username = 'alpha'", Long.class);
+        assertThat(jdbc.queryForObject("""
+                SELECT logical_path FROM public.course_article
+                WHERE teacher_account_id = ? AND article_id = ?
+                """, String.class, alphaId, articleId)).isEqualTo(logicalPath);
+        assertThat(jdbc.queryForObject("""
+                SELECT title FROM public.course_article
+                WHERE teacher_account_id = ? AND article_id = ?
+                """, String.class, alphaId, articleId)).isEqualTo("时态练习");
+    }
+
+    @Test
+    void draftWithIllegalLogicalPathIsRejected() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+
+        mockMvc.perform(post("/api/v1/admin/courseware/drafts")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "markdown", "# 正文\n\n内容\n",
+                                "logicalPath", "高中英语/没有后缀"))))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * 「新建子目录」：空目录没有课件可推导，靠登记留住；登记后课件落在该目录、整棵树都能看到。
+     */
+    @Test
+    void registeredFolderKeepsEmptyDirectoryAndHostsNewArticle() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+
+        mockMvc.perform(post("/api/v1/admin/courseware/folders")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "path", "高中英语/语法课讲义/从句专项"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.created.length()").value(3));
+
+        // 重复登记不再新增
+        mockMvc.perform(post("/api/v1/admin/courseware/folders")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "path", "高中英语/语法课讲义/从句专项"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.created.length()").value(0));
+
+        mockMvc.perform(get("/api/v1/admin/courseware/folders").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", contains(
+                        "高中英语", "高中英语/语法课讲义", "高中英语/语法课讲义/从句专项")));
+
+        long articleId = objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "markdown", "---\ntitle: 定语从句\ndefaultLayout: A\n---\n\n"
+                                        + "<!-- @layout:A -->\n# 定语从句\n\n在这里写正文\n",
+                                "logicalPath", "高中英语/语法课讲义/从句专项/定语从句.md",
+                                "title", "定语从句"))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("articleId").asLong();
+
+        mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].logicalPath",
+                        contains("高中英语/语法课讲义/从句专项/定语从句.md")))
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].subject",
+                        contains("高中英语")));
+    }
+
+    @Test
+    void folderWithIllegalPathIsRejected() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+
+        for (String illegal : List.of("高中英语", "高中英语/../逃逸", "高中英语/课件.md")) {
+            mockMvc.perform(post("/api/v1/admin/courseware/folders")
+                            .cookie(cookie)
+                            .header("X-CSRF-TOKEN", csrf)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("path", illegal))))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test
+    void publishRejectsUnregisteredLayoutAndTemplateResidue() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
         String csrf = csrf(cookie).csrfToken();
 
         MvcResult created = mockMvc.perform(post("/api/v1/admin/courseware/drafts")

@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.tutorbase.courseware.CoursewareFailures;
 import com.tutorbase.courseware.draft.CoursewareDraftService;
+import com.tutorbase.courseware.folder.CoursewareFolderService;
 import com.tutorbase.courseware.layout.CoursewareLayoutService;
 import com.tutorbase.courseware.layout.CoursewareTemplateService;
 import com.tutorbase.courseware.publish.CoursewarePublisher;
@@ -14,6 +15,7 @@ import com.tutorbase.courseware.workspace.CoursewareWorkspaceService;
 import com.tutorbase.identity.AccountPrincipal;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
@@ -43,16 +45,19 @@ public class CoursewareEditorController {
     private final CoursewareTemplateService templates;
     private final CoursewareWorkspaceService workspace;
     private final CoursewareOverviewService overview;
+    private final CoursewareFolderService folders;
 
     CoursewareEditorController(CoursewareLayoutService layouts, CoursewareDraftService drafts,
             CoursewareTransferService transfers, CoursewareTemplateService templates,
-            CoursewareWorkspaceService workspace, CoursewareOverviewService overview) {
+            CoursewareWorkspaceService workspace, CoursewareOverviewService overview,
+            CoursewareFolderService folders) {
         this.layouts = layouts;
         this.drafts = drafts;
         this.transfers = transfers;
         this.templates = templates;
         this.workspace = workspace;
         this.overview = overview;
+        this.folders = folders;
     }
 
     @GetMapping("/workspace/manifest")
@@ -169,8 +174,8 @@ public class CoursewareEditorController {
             @AuthenticationPrincipal AccountPrincipal principal,
             @PathVariable long articleId,
             @Valid @RequestBody SaveDraftRequest request) {
-        CoursewareDraftService.Draft draft =
-                drafts.save(teacherId(principal), articleId, request.legacyArticleId(), request.markdown());
+        CoursewareDraftService.Draft draft = drafts.save(teacherId(principal), articleId,
+                request.legacyArticleId(), request.markdown(), request.logicalPath(), request.title());
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(new DraftResponse(draft.articleId(), draft.markdown(), draft.hasDraft()));
@@ -180,8 +185,8 @@ public class CoursewareEditorController {
     ResponseEntity<DraftResponse> createDraft(
             @AuthenticationPrincipal AccountPrincipal principal,
             @Valid @RequestBody SaveDraftRequest request) {
-        CoursewareDraftService.Draft draft =
-                drafts.save(teacherId(principal), null, request.legacyArticleId(), request.markdown());
+        CoursewareDraftService.Draft draft = drafts.save(teacherId(principal), null,
+                request.legacyArticleId(), request.markdown(), request.logicalPath(), request.title());
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(new DraftResponse(draft.articleId(), draft.markdown(), draft.hasDraft()));
@@ -273,6 +278,22 @@ public class CoursewareEditorController {
                 .body(overview.articles(teacherId(principal)).stream()
                         .map(ArticleSummaryResponse::from)
                         .toList());
+    }
+
+    @GetMapping("/folders")
+    ResponseEntity<List<String>> folders(@AuthenticationPrincipal AccountPrincipal principal) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(folders.list(teacherId(principal)));
+    }
+
+    @PostMapping("/folders")
+    ResponseEntity<FolderCreateResponse> createFolder(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @Valid @RequestBody CreateFolderRequest request) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new FolderCreateResponse(folders.create(teacherId(principal), request.path())));
     }
 
     private static long teacherId(AccountPrincipal principal) {
@@ -400,10 +421,19 @@ public class CoursewareEditorController {
 
     record SaveDraftRequest(
             Long legacyArticleId,
-            @NotBlank @Size(max = 1_048_576) String markdown) {
+            @NotBlank @Size(max = 1_048_576) String markdown,
+            /** 目录树里选定的落点（含学科前缀与 .md）；为空表示由发布时推导。 */
+            @Size(max = 500) @Pattern(regexp = "^$|^[^\\\\:]*\\.md$") String logicalPath,
+            @Size(max = 200) String title) {
     }
 
     record DraftResponse(long articleId, String markdown, boolean hasDraft) {
+    }
+
+    record CreateFolderRequest(@NotBlank @Size(max = 500) String path) {
+    }
+
+    record FolderCreateResponse(List<String> created) {
     }
 
     record DraftSummaryResponse(

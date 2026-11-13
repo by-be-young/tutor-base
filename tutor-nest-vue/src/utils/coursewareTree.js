@@ -30,8 +30,8 @@ export function pathSegments(article) {
   return segments.filter(Boolean)
 }
 
-function folder(key, name) {
-  return { key, name, isFile: false, children: [] }
+function folder(key, name, path) {
+  return { key, name, isFile: false, path: path || name, children: [] }
 }
 
 function sortChildren(node) {
@@ -49,9 +49,11 @@ function sortChildren(node) {
  *
  * @param {string} subjectName 科目名（树的根）
  * @param {Array<object>} articles 该科目的课件清单条目
+ * @param {Array<string>} registeredFolders 已登记的空目录路径（`学科/子目录`），
+ *   让「新建了目录但还没放课件」的层级也出现在树里
  * @returns {{ name: string, isFile: false, children: Array<object> }}
  */
-export function buildCoursewareTree(subjectName, articles = []) {
+export function buildCoursewareTree(subjectName, articles = [], registeredFolders = []) {
   const rootName = subjectName || '未归类'
   const root = folder('', rootName)
   const folders = new Map([['', root]])
@@ -60,12 +62,24 @@ export function buildCoursewareTree(subjectName, articles = []) {
     const key = parentKey ? `${parentKey}/${name}` : name
     let node = folders.get(key)
     if (!node) {
-      node = folder(key, name)
+      // path 是「学科/子目录…」的落点，新建课件时据此拼出 logicalPath
+      const parentPath = folders.get(parentKey).path
+      node = folder(key, name, `${parentPath}/${name}`)
       folders.set(key, node)
       folders.get(parentKey).children.push(node)
     }
     return node
   }
+
+  const ensureFolderPath = rawPath => {
+    let segments = String(rawPath || '').replace(/\\/g, '/').split('/').filter(Boolean)
+    // 第一段是科目名时去掉，避免多出一层「高中英语/高中英语」
+    if (segments[0] === rootName) segments = segments.slice(1)
+    let parent = root
+    for (const name of segments) parent = ensureFolder(parent.key, name)
+  }
+
+  for (const path of registeredFolders) ensureFolderPath(path)
 
   for (const article of articles) {
     let segments = pathSegments(article)

@@ -132,8 +132,12 @@
             <span class="editor__pane-actions">
               <span v-if="dirty" class="editor__tag">未保存</span>
               <button type="button" class="editor__ghost editor__preview-btn" :disabled="busy || !markdown"
-                @click="openPreview">
+                @click="openPreview()">
                 <i class="fas fa-eye" aria-hidden="true"></i> 学员样式预览
+              </button>
+              <button type="button" class="editor__ghost editor__preview-btn" :disabled="busy || !markdown"
+                @click="openPreview(true)">
+                <i class="fas fa-file-pdf" aria-hidden="true"></i> 导出 PDF
               </button>
             </span>
           </div>
@@ -147,8 +151,11 @@
 
     <footer class="panel panel--tight editor__footer">
       <button type="button" class="editor__ghost" :disabled="busy" @click="runPrecheck">校验</button>
-      <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="openPreview">
+      <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="openPreview()">
         学员样式预览
+      </button>
+      <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="openPreview(true)">
+        导出 PDF
       </button>
       <button type="button" class="editor__ghost" :disabled="busy || articleId == null" @click="openAnswerSetting">
         设置答案
@@ -470,8 +477,12 @@ async function runPrecheck() {
   }
 }
 
-/** 打开学员视角预览：先落一次草稿，再在新标签页打开完整的学员阅读器。 */
-async function openPreview() {
+/**
+ * 打开学员视角预览：先落一次草稿，再在新标签页打开完整的学员阅读器。
+ *
+ * @param {boolean} print 直接以打印视图打开（浏览器里选「另存为 PDF」）
+ */
+async function openPreview(print = false) {
   if (!markdown.value.trim()) {
     showToast('正文还是空的，先写点内容再预览', 'warning')
     return
@@ -492,9 +503,11 @@ async function openPreview() {
     if (course) query.subject = course
     if (currentTitle.value) query.title = currentTitle.value
     if (currentPath.value) query.path = currentPath.value
+    if (print) query.print = '1'
     const target = router.resolve({ name: 'CoursewarePreview', params: { id }, query })
     window.open(target.href, '_blank', 'noopener')
-    showToast('已保存草稿，并在新标签页打开学员视角预览', 'success')
+    showToast(print ? '已保存草稿，正在打开打印视图（可另存为 PDF）' : '已保存草稿，并在新标签页打开学员视角预览',
+      'success')
   } catch (error) {
     reportError(error)
   } finally {

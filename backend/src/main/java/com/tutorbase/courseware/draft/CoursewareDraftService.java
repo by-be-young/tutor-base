@@ -50,7 +50,10 @@ public class CoursewareDraftService {
         // 这里用 LATERAL 只取这篇所在的那一份，保证草稿列表一篇一行。
         return jdbc.sql("""
                 SELECT d.article_id, d.updated_at, length(d.markdown) AS size,
-                       ca.title, ca.series, ca.logical_path, ca.subject,
+                       COALESCE(ca.title, d.title) AS title,
+                       ca.series,
+                       COALESCE(ca.logical_path, d.logical_path) AS logical_path,
+                       ca.subject,
                        ca.article_id IS NOT NULL AS published
                 FROM public.course_draft AS d
                 LEFT JOIN LATERAL (
@@ -117,25 +120,49 @@ public class CoursewareDraftService {
     /**
      * 保存草稿。{@code articleId} 为空时在该老师命名空间内分配新 id。
      *
-     * <p>草稿不做发布校验（允许半成品），但会在返回值里带上预检结果，前端可提前提示。
+     * <p>{@code logicalPath}/{@code title} 是用户在目录树里选定的落点；更新已有草稿时不传则保留原值。
+     * 草稿不做发布校验（允许半成品），发布时再按同一套规则校验。
      */
     @Transactional
-    public Draft save(long teacherId, Long articleId, Long legacyArticleId, String markdown) {
+    public Draft save(long teacherId, Long articleId, Long legacyArticleId, String markdown,
+            String logicalPath, String title) {
         if (markdown == null || markdown.isBlank()) {
             throw new CoursewareFailures.Validation(List.of("正文不能为空"));
         }
         long id = articleId == null ? nextArticleId(teacherId) : articleId;
         jdbc.sql("""
-                INSERT INTO public.course_draft (teacher_account_id, article_id, markdown, updated_at)
-                VALUES (:teacherId, :articleId, :markdown, now())
+                INSERT INTO public.course_draft
+                    (teacher_account_id, article_id, markdown, logical_path, title, updated_at)
+                VALUES (:teacherId, :articleId, :markdown, :logicalPath, :title, now())
                 ON CONFLICT (teacher_account_id, article_id) DO UPDATE
-                    SET markdown = EXCLUDED.markdown, updated_at = now()
+                    SET markdown = EXCLUDED.markdown,
+                        logical_path = COALESCE(EXCLUDED.logical_path, public.course_draft.logical_path),
+                        title = COALESCE(EXCLUDED.title, public.course_draft.title),
+                        updated_at = now()
                 """)
                 .param("teacherId", teacherId)
                 .param("articleId", id)
                 .param("markdown", markdown)
+                .param("logicalPath", normalizeDraftPath(logicalPath))
+                .param("title", blankToNull(title))
                 .update();
         return new Draft(id, markdown, true);
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.strip();
+    }
+
+    /** 草稿路径必须落在某个目录里（首段是学科），发布时才能归到对应科目。 */
+    private static String normalizeDraftPath(String logicalPath) {
+        if (logicalPath == null || logicalPath.isBlank()) {
+            return null;
+        }
+        String path = CoursewareValidator.normalizePath(logicalPath);
+        if (!path.endsWith(".md") || path.contains("..") || !path.contains("/")) {
+            throw new CoursewareFailures.Validation(List.of("草稿路径不合法：" + logicalPath));
+        }
+        return path;
     }
 
     @Transactional
@@ -196,7 +223,8 @@ public class CoursewareDraftService {
 
         List<DraftRow> drafts = jdbc.sql("""
                 SELECT d.article_id, d.markdown, ca.article_id AS published_id,
-                       ca.legacy_article_id, ca.title, ca.series, ca.logical_path
+                       ca.legacy_article_id, ca.title, ca.series, ca.logical_path,
+                       d.title AS draft_title, d.logical_path AS draft_path
                 FROM public.course_draft AS d
                 LEFT JOIN public.course_release_head AS h
                   ON h.teacher_account_id = d.teacher_account_id
@@ -216,7 +244,9 @@ public class CoursewareDraftService {
                         rs.getObject("legacy_article_id", Long.class),
                         rs.getString("title"),
                         rs.getString("series"),
-                        rs.getString("logical_path")))
+                        rs.getString("logical_path"),
+                        rs.getString("draft_title"),
+                        rs.getString("draft_path")))
                 .list();
 
         if (current.isEmpty() && drafts.isEmpty()) {
@@ -253,17 +283,23 @@ public class CoursewareDraftService {
                 continue;
             }
             String contentTitle = CoursewareTitles.titleOf(draft.markdown());
+            // title 优先级：已发布元数据 → 草稿里选定的文件名 → catalog → 正文首标题。
+            // 从目录树新建的草稿只有 draftTitle/draftPath，发布后仍落在用户选的那一级目录。
             String title = draft.title() != null
                     ? draft.title()
-                    : catalog != null && catalog.title() != null
-                            ? catalog.title()
-                            : !contentTitle.isBlank()
-                                    ? contentTitle
-                                    : "草稿 " + draft.articleId();
+                    : draft.draftTitle() != null
+                            ? draft.draftTitle()
+                            : catalog != null && catalog.title() != null
+                                    ? catalog.title()
+                                    : !contentTitle.isBlank()
+                                            ? contentTitle
+                                            : "草稿 " + draft.articleId();
             String series = draft.series() == null ? subject : draft.series();
-            String path = draft.logicalPath() == null
-                    ? subject + "/" + title + ".md"
-                    : draft.logicalPath();
+            String path = draft.logicalPath() != null
+                    ? draft.logicalPath()
+                    : draft.draftPath() != null
+                            ? draft.draftPath()
+                            : subject + "/" + title + ".md";
             Long legacyArticleId = draft.legacyArticleId();
             if (legacyArticleId == null && catalog != null) {
                 legacyArticleId = draft.articleId();
@@ -404,7 +440,8 @@ public class CoursewareDraftService {
 
     private record DraftRow(
             long articleId, String markdown, Long legacyArticleId,
-            String title, String series, String logicalPath) {
+            String title, String series, String logicalPath,
+            String draftTitle, String draftPath) {
     }
 
     /** 一篇草稿。 */

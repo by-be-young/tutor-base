@@ -2024,6 +2024,55 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+  /admin/courseware/folders:
+    get:
+      operationId: listCoursewareFolders
+      summary: 我登记过的课件目录
+      description: |
+        课件目录树由篇目的 `logicalPath` 推导，空目录没有文件就无法存在。这里返回当前老师
+        显式登记过的目录路径（升序，形如 `高中英语/语法课讲义/从句专项`），前端与课件路径
+        合并成同一棵树。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 已登记的目录路径。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: createCoursewareFolder
+      summary: 新建课件子目录（空目录也能留住）
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareFolderCreateRequest'
+      responses:
+        '200':
+          description: 本次新登记的路径（含各级父目录）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareFolderCreateResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
   /admin/courseware/articles:
     get:
       operationId: listCoursewareArticles
@@ -4445,6 +4494,37 @@ components:
         markdown:
           type: string
           maxLength: 1048576
+        logicalPath:
+          type: [string, 'null']
+          maxLength: 500
+          description: >-
+            目录树里选定的落点（含学科前缀、以 .md 结尾），如 `高中英语/语法课讲义/虚拟语气.md`。
+            留空表示发布时按标题推导；更新已有草稿时不传则保留原值。
+        title:
+          type: [string, 'null']
+          maxLength: 200
+          description: 目录树里选定文件名对应的标题；留空时取正文首标题。
+    CoursewareFolderCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [path]
+      properties:
+        path:
+          type: string
+          maxLength: 500
+          description: >-
+            要新建的目录路径，含学科前缀且至少两级，如 `高中英语/语法课讲义/从句专项`。
+            不能以 `.md` 结尾、不能含 `..`、不能有空层级；各级父目录会一并登记。
+    CoursewareFolderCreateResponse:
+      type: object
+      additionalProperties: false
+      required: [created]
+      properties:
+        created:
+          type: array
+          description: 本次新写入的目录路径（含新登记的父目录）；全部已存在时为空数组。
+          items:
+            type: string
     CoursewareDraft:
       type: object
       additionalProperties: false

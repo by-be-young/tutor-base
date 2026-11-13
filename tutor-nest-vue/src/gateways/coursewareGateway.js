@@ -161,12 +161,31 @@ export const coursewareGateway = {
     return Array.isArray(response) ? response : []
   },
 
+  /** 我登记过的空目录（`学科/子目录`），用于让没有课件的目录也出现在树里。 */
+  async listFolders() {
+    const response = await backendClient.request('/admin/courseware/folders')
+    return Array.isArray(response) ? response : []
+  },
+
+  /** 新建目录（父目录会一并登记）。返回本次新登记的路径列表。 */
+  async createFolder(path) {
+    const response = await backendClient.request('/admin/courseware/folders', {
+      method: 'POST',
+      body: { path }
+    })
+    return Array.isArray(response?.created) ? response.created : []
+  },
+
   async getDraft(articleId) {
     return backendClient.request(`/admin/courseware/drafts/${encodeURIComponent(articleId)}`)
   },
 
-  async saveDraft(articleId, markdown, legacyArticleId) {
-    const body = legacyArticleId == null ? { markdown } : { markdown, legacyArticleId }
+  async saveDraft(articleId, markdown, legacyArticleId, { logicalPath, title } = {}) {
+    const body = { markdown }
+    if (legacyArticleId != null) body.legacyArticleId = legacyArticleId
+    // 目录树里选定的落点：新建时带上，编辑时留空表示沿用原路径
+    if (logicalPath) body.logicalPath = logicalPath
+    if (title) body.title = title
     if (articleId == null) {
       return backendClient.request('/admin/courseware/drafts', { method: 'POST', body })
     }

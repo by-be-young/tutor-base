@@ -14,33 +14,50 @@
 -->
 <template>
   <div class="tree-branch" :class="accentClass" :style="{ '--depth': depth }">
-    <button type="button" class="folder-card" :aria-expanded="isExpanded"
-      :aria-label="`文件夹 ${node.name}，${totalFileCount} 篇文档${pendingCount > 0 ? `，${pendingCount} 题待提交` : ''}`"
-      @click.stop="toggleExpand">
-      <span class="folder-card__tab" aria-hidden="true"></span>
+    <div class="folder-head">
+      <button type="button" class="folder-card" :aria-expanded="isExpanded"
+        :aria-label="`文件夹 ${node.name}，${totalFileCount} 篇文档${pendingCount > 0 ? `，${pendingCount} 题待提交` : ''}`"
+        @click.stop="toggleExpand">
+        <span class="folder-card__tab" aria-hidden="true"></span>
 
-      <span class="folder-card__chevron" :class="{ 'is-open': isExpanded }" aria-hidden="true">
-        <i class="fas fa-chevron-right"></i>
-      </span>
+        <span class="folder-card__chevron" :class="{ 'is-open': isExpanded }" aria-hidden="true">
+          <i class="fas fa-chevron-right"></i>
+        </span>
 
-      <span class="folder-card__icon" aria-hidden="true">
-        <i :class="isExpanded ? 'fas fa-folder-open' : 'fas fa-folder'"></i>
-      </span>
+        <span class="folder-card__icon" aria-hidden="true">
+          <i :class="isExpanded ? 'fas fa-folder-open' : 'fas fa-folder'"></i>
+        </span>
 
-      <span class="folder-card__name">{{ node.name }}</span>
+        <span class="folder-card__name">{{ node.name }}</span>
 
-      <span class="folder-card__meta">
-        <span class="tag folder-card__count">{{ totalFileCount }} 篇</span>
-        <span v-if="pendingCount > 0" class="badge folder-card__badge">{{ pendingCount }}</span>
-        <span v-else-if="totalFileCount === 0" class="tag folder-card__empty">空</span>
-      </span>
-    </button>
+        <span class="folder-card__meta">
+          <span class="tag folder-card__count">{{ totalFileCount }} 篇</span>
+          <span v-if="pendingCount > 0" class="badge folder-card__badge">{{ pendingCount }}</span>
+          <span v-else-if="totalFileCount === 0" class="tag folder-card__empty">空</span>
+        </span>
+      </button>
+
+      <!-- 管理端：在任意一级目录下新建课件，生成该目录下的空白文档 -->
+      <button v-if="mode === 'admin'" type="button" class="folder-add"
+        :title="`在「${node.name}」下新建课件`" :aria-label="`在 ${node.name} 下新建课件`"
+        @click.stop="$emit('create-file', node.path)">
+        <i class="fas fa-plus"></i>
+      </button>
+
+      <!-- 管理端：在任意一级目录下新建子目录（空目录也能留住） -->
+      <button v-if="mode === 'admin'" type="button" class="folder-add folder-add--dir"
+        :title="`在「${node.name}」下新建子目录`" :aria-label="`在 ${node.name} 下新建子目录`"
+        @click.stop="$emit('create-folder', node.path)">
+        <i class="fas fa-folder-plus"></i>
+      </button>
+    </div>
 
     <div v-show="isExpanded" class="tree-children">
       <template v-for="child in node.children" :key="child.isFile ? `file-${child.blogId}` : `dir-${child.name}`">
         <FolderNode v-if="!child.isFile" :node="child" :depth="depth + 1" :status-map="statusMap" :accent="accent"
           :mode="mode" :expand-token="expandToken" :expand-to="expandTo" @file-click="$emit('file-click', $event)"
-          @file-move="$emit('file-move', $event)" />
+          @file-move="$emit('file-move', $event)" @create-file="$emit('create-file', $event)"
+          @create-folder="$emit('create-folder', $event)" />
         <FileNode v-else :node="child" :depth="depth + 1" :status-map="statusMap" :accent="accent" :mode="mode"
           @click="$emit('file-click', child.blogId)" @move="$emit('file-move', child.blogId)" />
       </template>
@@ -86,7 +103,7 @@ const props = defineProps({
   }
 })
 
-defineEmits(['file-click', 'file-move'])
+defineEmits(['file-click', 'file-move', 'create-file', 'create-folder'])
 
 const ACCENTS = ['cyan', 'violet', 'amber', 'coral', 'pink', 'lime']
 const accentClass = computed(() => `accent--${ACCENTS.includes(props.accent) ? props.accent : 'violet'}`)
@@ -144,12 +161,49 @@ function toggleExpand() {
   padding-left: calc(var(--depth, 0) * 12px);
 }
 
+.folder-head {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.folder-add {
+  flex-shrink: 0;
+  width: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-sm);
+  background: var(--paper-2);
+  color: var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
+    background var(--dur-fast);
+}
+
+.folder-add:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--ink);
+  background: var(--lime);
+}
+
+.folder-add--dir:hover {
+  background: var(--sky);
+}
+
+.folder-add:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
 .folder-card {
   position: relative;
   display: flex;
+  flex: 1;
+  min-width: 0;
   align-items: center;
   gap: 10px;
-  width: 100%;
   min-height: 54px;
   padding: 10px 12px 10px 21px;
   border: 1.5px solid var(--ink);
