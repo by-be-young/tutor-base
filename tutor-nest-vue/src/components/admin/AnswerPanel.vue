@@ -151,7 +151,7 @@
 
                             <EmptyState v-if="selectedArticle.questions.length === 0 && selectedArticle.noQuestions"
                                 icon="fas fa-circle-info" title="该文章暂无题目"
-                                text="这个课件没有检测到题目，无需设置标准答案。" />
+                                text="正文里没有检测到【@题号】作答占位符，纯讲义不需要设置标准答案。" />
 
                             <EmptyState v-else-if="selectedArticle.questions.length === 0" icon="fas fa-circle-question"
                                 title="这篇文章里没有识别到题目"
@@ -223,6 +223,7 @@ import { useArticleStore } from '@/stores/blogStore'
 import { useCoursewareStore } from '@/stores/coursewareStore'
 import { grantedArticles } from '@/utils/adminSubjects'
 import { loadArticleMarkdown } from '@/utils/articleContent'
+import { extractAnswerIds } from '@/utils/questionText'
 import { learningGateway } from '@/gateways/learningGateway'
 import { showToast } from '@/utils/toast'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -298,17 +299,20 @@ const subjectStats = computed(() => props.allSubjects
     })
     .filter(Boolean))
 
-// 静态目录里 questions 数组为空表示该文章没有题目：不应出现在「待设置」，也不提示去设置答案。
-function hasQuestions(blog) {
-    return Array.isArray(blog?.questions) && blog.questions.length > 0
+// 题目只能从托管正文里的 `【@】` 占位符解析，清单本身不带题目信息：
+// 打开过的无题课件记在这里，避免「待设置」反复把它们算进去。
+const noQuestionIds = ref(new Set())
+
+function isNoQuestion(id) {
+    return noQuestionIds.value.has(Number(id))
 }
 
-// 筛选标签右侧保留数量（待设置/已设置/全部），只针对当前学科；待设置排除无题文章。
+// 筛选标签右侧保留数量（待设置/已设置/全部），只针对当前学科；待设置排除已确认无题的课件。
 const filters = computed(() => {
     const articles = subjectArticles.value
     const setCount = articles.filter(blog => answerKeyIds.value.includes(Number(blog.id))).length
     const pendingCount = articles.filter(blog =>
-        hasQuestions(blog) && !answerKeyIds.value.includes(Number(blog.id))).length
+        !answerKeyIds.value.includes(Number(blog.id)) && !isNoQuestion(blog.id)).length
     return [
         { value: 'unset', label: '待设置', count: pendingCount },
         { value: 'set', label: '已设置', count: setCount },
@@ -324,7 +328,7 @@ const filteredArticles = computed(() => {
         articles = articles.filter(blog => answerKeyIds.value.includes(Number(blog.id)))
     } else if (activeFilter.value === 'unset') {
         articles = articles.filter(blog =>
-            hasQuestions(blog) && !answerKeyIds.value.includes(Number(blog.id)))
+            !answerKeyIds.value.includes(Number(blog.id)) && !isNoQuestion(blog.id))
     }
 
     if (search) {
@@ -400,27 +404,6 @@ function buildTree(articles) {
     return root.children
 }
 
-// 与文章详情页保持一致的题目占位符解析：`【@2】` 指定题号，`【@】` 自动递增。
-function extractQuestionIds(markdown) {
-    const ids = []
-    const used = new Set()
-    let autoCounter = 1
-    for (const match of markdown.matchAll(/【@(\d*)】/g)) {
-        let questionId
-        if (match[1] !== '') {
-            questionId = match[1]
-            used.add(Number(match[1]))
-        } else {
-            while (used.has(autoCounter)) autoCounter++
-            questionId = String(autoCounter)
-            used.add(autoCounter)
-            autoCounter++
-        }
-        if (!ids.includes(questionId)) ids.push(questionId)
-    }
-    return ids
-}
-
 async function fetchArticleMarkdown(blog) {
     return loadArticleMarkdown(blog)
 }
@@ -429,15 +412,8 @@ async function openArticle(blogId) {
     const blog = props.blogData.find(item => Number(item.id) === Number(blogId))
     if (!blog) return
 
-    // 静态目录没有题目的文章：编辑器只展示「暂无题目」，也不再请求答案键或提示去设置答案。
-    const noQuestions = !hasQuestions(blog)
-    if (noQuestions) {
-        selectedArticle.value = { ...blog, questions: [], noQuestions: true, loading: false, error: '' }
-        snapshot.value = ''
-        return
-    }
-
-    selectedArticle.value = { ...blog, questions: [], loading: true, error: '', noQuestions }
+    // 清单里没有题目信息，必须读托管正文解析题号；「暂无题目」只能在解析之后判断。
+    selectedArticle.value = { ...blog, questions: [], loading: true, error: '', noQuestions: false }
     snapshot.value = ''
     try {
         const [markdownResult, keysResult] = await Promise.allSettled([
@@ -451,21 +427,25 @@ async function openArticle(blogId) {
         const keyMap = new Map(keys.map(item => [String(item.questionId), item]))
 
         // 以文章占位符解析出的题号为主；若正文解析异常，仍保留已存在的答案配置，避免保存时误删。
-        const questionIds = extractQuestionIds(markdown)
+        const questionIds = extractAnswerIds(markdown || '')
         keyMap.forEach((_, questionId) => {
             if (!questionIds.includes(questionId)) questionIds.push(questionId)
         })
 
         if (!questionIds.length) {
+            if (markdownResult.status === 'fulfilled') {
+                noQuestionIds.value = new Set([...noQuestionIds.value, Number(blog.id)])
+            }
             selectedArticle.value = {
                 ...blog,
                 questions: [],
-                noQuestions,
+                noQuestions: markdownResult.status === 'fulfilled',
                 loading: false,
                 error: markdownResult.status === 'rejected' ? '无法读取文章内容，请稍后重试。' : ''
             }
             return
         }
+        noQuestionIds.value.delete(Number(blog.id))
 
         const questions = questionIds.map((questionId, index) => {
             const key = keyMap.get(questionId)
@@ -477,13 +457,13 @@ async function openArticle(blogId) {
                 wasSet: Boolean(key && (String(key.answerText || '').trim() !== '' || key.autoGrade))
             }
         })
-        selectedArticle.value = { ...blog, questions, loading: false, error: '', noQuestions }
+        selectedArticle.value = { ...blog, questions, loading: false, error: '', noQuestions: false }
         snapshot.value = JSON.stringify(questions.map(rowsOf))
     } catch (error) {
         selectedArticle.value = {
             ...blog,
             questions: [],
-            noQuestions,
+            noQuestions: false,
             loading: false,
             error: error.message || '加载文章题目失败，请稍后重试。'
         }

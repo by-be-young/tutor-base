@@ -118,6 +118,18 @@ export function collectTokens(markdown) {
     return tokens
 }
 
+/**
+ * 正文里的作答题号（按出现顺序去重，含 `【@】` 自动编号）。
+ * 答案面板用它判断一篇课件有没有题目；与发布校验、阅读器解析保持同一套规则。
+ */
+export function extractAnswerIds(markdown) {
+    const ids = []
+    for (const token of collectTokens(markdown)) {
+        if (token.type === 'answer' && !ids.includes(token.id)) ids.push(token.id)
+    }
+    return ids
+}
+
 /** 按行边界与公式边界截断题干，避免把 $...$ 切成两半 */
 function truncateStem(text, limit = STEM_LIMIT) {
     if (text.length <= limit) return text
