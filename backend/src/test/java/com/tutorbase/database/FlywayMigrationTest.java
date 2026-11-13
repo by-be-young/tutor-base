@@ -779,8 +779,8 @@ class FlywayMigrationTest {
         try (var files = Files.list(Path.of("src/main/resources/db/migration"))) {
             return files
                     .map(path -> path.getFileName().toString())
-                    .filter(name -> name.endsWith(".sql"))
-                    .map(name -> MigrationVersion.fromVersion(name.substring(0, name.indexOf("__"))))
+                    .filter(name -> name.matches("V\\d[0-9.]*__.*\\.sql"))
+                    .map(name -> MigrationVersion.fromVersion(name.substring(1, name.indexOf("__"))))
                     .filter(version -> version.compareTo(applied) > 0)
                     .count();
         }
