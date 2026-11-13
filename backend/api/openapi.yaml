@@ -2027,11 +2027,11 @@ paths:
   /admin/courseware/articles:
     get:
       operationId: listCoursewareArticles
-      summary: 我的课件清单（已发布篇目 + 未发布草稿 + 站内静态课件）
+      summary: 我的课件清单（已发布篇目 + 未发布草稿）
       description: |
-        科目目录与在线编辑器选择器共用此清单。包含当前发布版本里的全部篇目、
-        尚未发布的草稿，以及当前管理员可见、但从未发布过的站内静态课件
-        （`hosted=false`，articleId 即旧静态编号）。仅有草稿、还没发布过的篇目 subject 为空。
+        科目目录与在线编辑器选择器共用此清单。只包含数据库已托管的当前发布版本篇目与
+        尚未发布的草稿；正文一律从服务端托管 blob 读取，尚未导入的静态课件不会返回。
+        仅有草稿、还没发布过的篇目 subject 为空。
       security:
         - sessionCookie: []
       responses:
@@ -4493,7 +4493,7 @@ components:
         legacyArticleId:
           type: [integer, 'null']
           format: int64
-          description: 旧静态课件编号；站内静态课件的 articleId 即等于该值。
+          description: 旧静态课件编号；学员授权与历史记录仍按该编号匹配。
         title:
           type: [string, 'null']
         subject:
@@ -4517,14 +4517,15 @@ components:
         hosted:
           type: boolean
           description: >-
-            true = 正文已在服务端托管（当前发布版本或草稿）；false = 站内静态课件，
-            正文仍在 `public/articles` 下，未发布过，编辑时由前端读静态文件，保存后才落成在线草稿。
+            true = 正文已在服务端托管（当前发布版本或草稿）。当前接口只返回托管篇目；
+            保留该字段用于兼容旧客户端，尚未导入的静态课件不再出现在清单里。
         contentMissing:
           type: boolean
           description: >-
             true = 该篇在版本清单里，但正文文件（blob）不在存储中（存储卷重建、历史临时目录被清空等）。
-            此时 `GET /admin/courseware/drafts/{articleId}` 返回 409 `courseware_content_missing`，
-            客户端应回退到站内静态讲义恢复正文后重新发布。草稿与静态课件恒为 false。
+            此时 `GET /admin/courseware/drafts/{articleId}` 返回 409 `courseware_content_missing`。
+            客户端不回退静态文件；服务端启动时会从已打包课件补写 blob，仍缺失时由管理员恢复后再发布。
+            草稿恒为 false。
     CoursewarePrecheck:
       type: object
       additionalProperties: false

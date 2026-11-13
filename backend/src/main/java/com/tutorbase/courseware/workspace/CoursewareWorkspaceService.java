@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.tutorbase.courseware.CoursewareFailures;
+import com.tutorbase.courseware.CoursewareTitles;
 import com.tutorbase.courseware.layout.CoursewareLayoutService;
 import com.tutorbase.courseware.publish.CoursewareArticleInput;
 import com.tutorbase.courseware.publish.CoursewarePublisher;
@@ -194,10 +195,21 @@ public class CoursewareWorkspaceService {
         }
 
         List<CoursewareArticleInput> articles = new ArrayList<>();
-        String newTitle = titleFromPath(normalizedNew);
+        String newTitle = CoursewareTitles.fromLogicalPath(normalizedNew);
         for (Entry e : current) {
             String path = e.articleId() == articleId ? normalizedNew : e.logicalPath();
             String title = e.articleId() == articleId ? newTitle : e.title();
+            if (e.articleId() == articleId) {
+                // 正文里的首标题与目录名是两处显示：能读到 blob 时一并改掉，读不到就继续结转。
+                String markdown = publishedMarkdown(teacherId, e.contentHash());
+                String retitled = markdown == null ? null : CoursewareTitles.retitle(markdown, newTitle);
+                if (retitled != null && !retitled.equals(markdown)) {
+                    articles.add(new CoursewareArticleInput(
+                            e.articleId(), e.legacyArticleId(), title, e.series(),
+                            path, retitled, answersFor(e.articleId(), retitled)));
+                    continue;
+                }
+            }
             articles.add(CoursewareArticleInput.carried(
                     e.articleId(), e.legacyArticleId(), title, e.series(),
                     path, e.contentHash(), e.answerHash(), e.questionCount()));
@@ -205,15 +217,6 @@ public class CoursewareWorkspaceService {
 
         CoursewarePublisher.Published published = publisher.publish(teacherId, subject, head.version(), articles);
         return new PublishedMove(subject, published.version(), target.logicalPath(), normalizedNew);
-    }
-
-    /** 从逻辑路径取文件名（去目录、去 .md 后缀）作为新标题。 */
-    private static String titleFromPath(String logicalPath) {
-        String name = logicalPath;
-        int slash = name.lastIndexOf('/');
-        if (slash >= 0) name = name.substring(slash + 1);
-        if (name.endsWith(".md")) name = name.substring(0, name.length() - 3);
-        return name;
     }
 
     private String findSubject(long teacherId, long articleId) {

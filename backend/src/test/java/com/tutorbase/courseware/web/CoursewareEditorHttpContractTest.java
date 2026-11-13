@@ -2,7 +2,6 @@ package com.tutorbase.courseware.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -95,6 +94,7 @@ class CoursewareEditorHttpContractTest {
                 .addFilters(traceIdFilter)
                 .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity())
                 .build();
+        clearStorage();
         jdbc.update("DELETE FROM public.course_copy");
         jdbc.update("DELETE FROM public.course_draft");
         jdbc.update("DELETE FROM public.course_share");
@@ -103,6 +103,7 @@ class CoursewareEditorHttpContractTest {
         jdbc.update("DELETE FROM public.course_release");
         jdbc.update("DELETE FROM public.course_operation_log");
         jdbc.update("DELETE FROM public.course_notification");
+        jdbc.update("DELETE FROM public.courseware_catalog");
         jdbc.update("DELETE FROM public.account_session");
         jdbc.update("DELETE FROM public.account");
         jdbc.update("DELETE FROM public.student");
@@ -140,7 +141,7 @@ class CoursewareEditorHttpContractTest {
 
         String skeleton = objectMapper.readTree(mockMvc.perform(
                         get("/api/v1/admin/courseware/layouts/B/skeleton").param("title", "新练习").cookie(cookie))
-                .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+                .andReturn().getResponse().getContentAsString()).get("markdown").asString();
 
         MvcResult created = mockMvc.perform(post("/api/v1/admin/courseware/drafts")
                         .cookie(cookie)
@@ -199,7 +200,7 @@ class CoursewareEditorHttpContractTest {
 
         String skeleton = objectMapper.readTree(mockMvc.perform(
                         get("/api/v1/admin/courseware/layouts/B/skeleton").param("title", "口语练习").cookie(cookie))
-                .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+                .andReturn().getResponse().getContentAsString()).get("markdown").asString();
 
         long articleId = objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
                         .cookie(cookie)
@@ -239,7 +240,7 @@ class CoursewareEditorHttpContractTest {
 
         String skeleton = objectMapper.readTree(mockMvc.perform(
                         get("/api/v1/admin/courseware/layouts/B/skeleton").param("title", "口语练习").cookie(cookie))
-                .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+                .andReturn().getResponse().getContentAsString()).get("markdown").asString();
 
         long articleId = objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
                         .cookie(cookie)
@@ -287,7 +288,7 @@ class CoursewareEditorHttpContractTest {
         String csrf = csrf(cookie).csrfToken();
         String skeleton = objectMapper.readTree(mockMvc.perform(
                         get("/api/v1/admin/courseware/layouts/A/skeleton").param("title", "多科目").cookie(cookie))
-                .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+                .andReturn().getResponse().getContentAsString()).get("markdown").asString();
 
         // 先造两个科目的发布版本（course_release_head 每个科目一行）
         for (String subject : List.of("高中英语", "高中化学")) {
@@ -325,7 +326,7 @@ class CoursewareEditorHttpContractTest {
     }
 
     @Test
-    void legacyStaticCoursewareIsListedAndPublishesBackToItsOwnArticle() throws Exception {
+    void catalogOnlyStaticCoursewareAppearsAfterDraftAndPublishesBackToItsOwnArticle() throws Exception {
         long alphaId = jdbc.queryForObject(
                 "SELECT id FROM public.account WHERE username = 'alpha'", Long.class);
         long legacyId = 901L;
@@ -342,18 +343,15 @@ class CoursewareEditorHttpContractTest {
             Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
             String csrf = csrf(cookie).csrfToken();
 
+            // 只有 catalog 行、正文还没托管时不再返回给浏览器，避免读取 public/articles
             mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$[?(@.articleId == 901)].title", contains("口语训练-1")))
-                    .andExpect(jsonPath("$[?(@.articleId == 901)].subject", contains(subject)))
-                    .andExpect(jsonPath("$[?(@.articleId == 901)].published", contains(true)))
-                    .andExpect(jsonPath("$[?(@.articleId == 901)].hosted", contains(false)))
-                    .andExpect(jsonPath("$[?(@.articleId == 901)].hasDraft", contains(false)));
+                    .andExpect(jsonPath("$[?(@.articleId == 901)]", org.hamcrest.Matchers.empty()));
 
             String skeleton = objectMapper.readTree(mockMvc.perform(
                             get("/api/v1/admin/courseware/layouts/A/skeleton")
                                     .param("title", "口语训练-1").cookie(cookie))
-                    .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+                    .andReturn().getResponse().getContentAsString()).get("markdown").asString();
 
             mockMvc.perform(put("/api/v1/admin/courseware/drafts/{articleId}", legacyId)
                             .cookie(cookie)
@@ -363,8 +361,12 @@ class CoursewareEditorHttpContractTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.hasDraft").value(true));
 
+            // 草稿正文已经进数据库，可以作为未发布篇目出现在清单里
             mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
                     .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.articleId == 901)].title", contains("口语训练-1")))
+                    .andExpect(jsonPath("$[?(@.articleId == 901)].published", contains(false)))
+                    .andExpect(jsonPath("$[?(@.articleId == 901)].hosted", contains(true)))
                     .andExpect(jsonPath("$[?(@.articleId == 901)].hasDraft", contains(true)));
 
             mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")
@@ -462,6 +464,115 @@ class CoursewareEditorHttpContractTest {
                   ON ca.release_id = h.release_id AND ca.teacher_account_id = h.teacher_account_id
                 WHERE h.subject = ? ORDER BY ca.logical_path
                 """, String.class, subject)).isEqualTo(hashesBefore);
+    }
+
+    /**
+     * 历史脚本写入的 content_hash 是不带 {@code sha256:} 前缀的裸 hex。存储层按 hex 落盘，
+     * 清单与 GC 必须归一化后再比较，否则正文明明在也会整片标成「正文缺失」。
+     */
+    @Test
+    void rawHexContentHashIsStillTreatedAsPresent() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+        String subject = "高中英语";
+
+        String skeleton = objectMapper.readTree(mockMvc.perform(
+                        get("/api/v1/admin/courseware/layouts/A/skeleton")
+                                .param("title", "裸哈希课件").cookie(cookie))
+                .andReturn().getResponse().getContentAsString()).get("markdown").asString();
+        long articleId = objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("markdown", skeleton))))
+                .andReturn().getResponse().getContentAsString()).get("articleId").asLong();
+
+        mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("subject", subject))))
+                .andExpect(status().isOk());
+
+        jdbc.update("""
+                UPDATE public.course_article SET content_hash = replace(content_hash, 'sha256:', '')
+                WHERE teacher_account_id = 2 AND article_id = ?
+                """, articleId);
+
+        mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].contentMissing", contains(false)));
+
+        mockMvc.perform(get("/api/v1/admin/courseware/maintenance/usage").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.orphanCount").value(0));
+
+        mockMvc.perform(get("/api/v1/admin/courseware/drafts/{articleId}", articleId).cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.markdown").value(org.hamcrest.Matchers.containsString("裸哈希课件")));
+    }
+
+    /**
+     * 在课件页「移动」改名后，发布元数据、正文首标题与旧认领页使用的 courseware_catalog 必须一起更新。
+     */
+    @Test
+    void movingArticleRenamesPublishedTitleBodyHeadingAndCatalog() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+        String subject = "高中英语";
+
+        String skeleton = objectMapper.readTree(mockMvc.perform(
+                        get("/api/v1/admin/courseware/layouts/A/skeleton")
+                                .param("title", "虚拟语气").cookie(cookie))
+                .andReturn().getResponse().getContentAsString()).get("markdown").asString()
+                .replace("在这里写正文", "正文");
+
+        long articleId = objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("markdown", skeleton))))
+                .andReturn().getResponse().getContentAsString()).get("articleId").asLong();
+
+        jdbc.update("""
+                INSERT INTO public.courseware_catalog
+                    (article_id, teacher_account_id, legacy_article_id, subject, title)
+                VALUES (?, 2, ?, ?, ?)
+                """, articleId, articleId, subject, "虚拟语气");
+
+        mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("subject", subject))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/admin/courseware/articles/{articleId}/move", articleId)
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "newLogicalPath", "高中英语/语法课讲义/3 虚拟语气.md"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.newPath").value("高中英语/语法课讲义/3 虚拟语气.md"));
+
+        assertThat(jdbc.queryForObject("""
+                SELECT ca.title
+                FROM public.course_release_head AS h
+                JOIN public.course_article AS ca
+                  ON ca.release_id = h.release_id AND ca.teacher_account_id = h.teacher_account_id
+                WHERE h.teacher_account_id = 2 AND ca.article_id = ?
+                """, String.class, articleId)).isEqualTo("3 虚拟语气");
+        assertThat(jdbc.queryForObject("""
+                SELECT title FROM public.courseware_catalog
+                WHERE teacher_account_id = 2 AND article_id = ?
+                """, String.class, articleId)).isEqualTo("3 虚拟语气");
+
+        mockMvc.perform(get("/api/v1/admin/courseware/drafts/{articleId}", articleId).cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.markdown").value(
+                        org.hamcrest.Matchers.containsString("# 3 虚拟语气")));
     }
 
     @Test
@@ -808,7 +919,7 @@ class CoursewareEditorHttpContractTest {
                 .andExpect(status().isOk())
                 .andReturn();
         Cookie cookie = existingCookie == null ? result.getResponse().getCookie("TUTOR_SESSION") : existingCookie;
-        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asText();
+        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asString();
         return new BrowserSession(cookie, token);
     }
 
@@ -823,6 +934,25 @@ class CoursewareEditorHttpContractTest {
                 .andExpect(status().isOk())
                 .andReturn();
         return result.getResponse().getCookie("TUTOR_SESSION");
+    }
+
+    private static void clearStorage() {
+        if (!Files.isDirectory(STORAGE_ROOT)) {
+            return;
+        }
+        try (var paths = Files.walk(STORAGE_ROOT)) {
+            paths.sorted(java.util.Comparator.reverseOrder())
+                    .filter(path -> !path.equals(STORAGE_ROOT))
+                    .forEach(path -> {
+                        try {
+                            Files.deleteIfExists(path);
+                        } catch (java.io.IOException ignored) {
+                            // 测试隔离失败不应掩盖真正的断言结果
+                        }
+                    });
+        } catch (java.io.IOException ignored) {
+            // 同上
+        }
     }
 
     private static Path createStorageRoot() {

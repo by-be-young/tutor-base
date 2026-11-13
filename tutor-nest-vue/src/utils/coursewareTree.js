@@ -11,8 +11,8 @@ export function articleStatus(article) {
   if (item.contentMissing) return { label: '正文缺失 · 需重新发布', tone: 'missing' }
   if (item.hosted === false) {
     return item.hasDraft
-      ? { label: '静态讲义 · 有草稿', tone: 'draft' }
-      : { label: '静态讲义 · 已上线', tone: 'static' }
+      ? { label: '未托管 · 有草稿', tone: 'draft' }
+      : { label: '未托管 · 需服务端导入', tone: 'missing' }
   }
   if (!item.published) return { label: '草稿 · 未发布', tone: 'draft' }
   return item.hasDraft

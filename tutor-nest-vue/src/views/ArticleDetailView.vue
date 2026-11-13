@@ -348,7 +348,7 @@ const currentArticle = computed(() => {
 })
 
 // ---- 管理端预览（mode=preview）：完全复用学员阅读器，只换正文来源 ----
-// 正文按「草稿 → 已发布 → 站内静态讲义」取，只读展示，不写任何学习数据。
+// 正文按「草稿 → 已发布正文」取，只读展示，不写任何学习数据。
 const previewArticle = ref(null)
 const previewSource = ref('')
 
@@ -1415,8 +1415,8 @@ function resetDetailState() {
 let isRendering = false
 
 /**
- * 管理端预览：从「我的课件」清单找到这一篇，按草稿 → 已发布 → 站内讲义取正文。
- * 清单里没有时（例如刚导入还没刷新）用路由 query 里的元信息兜底。
+ * 管理端预览：从「我的课件」清单找到这一篇，按草稿 → 已发布正文取正文。
+ * 清单里没有时（例如刚导入还没刷新）用路由 query 里的元信息兜底；正文仍只走后端。
  */
 async function loadPreviewArticle() {
     const { articles } = await loadCoursewareLibrary()
@@ -1427,12 +1427,11 @@ async function loadPreviewArticle() {
         title: typeof query.title === 'string' ? query.title : '',
         series: typeof query.subject === 'string' ? query.subject : '',
         logicalPath: typeof query.path === 'string' ? query.path : '',
-        hosted: false,
         hasDraft: false
     }
 
     const loaded = await loadArticleMarkdownForEditing(target)
-    previewSource.value = loaded.contentMissing ? 'recovered' : loaded.source
+    previewSource.value = loaded.source
     previewArticle.value = {
         id: blogId.value,
         title: target.title || `课件 ${blogId.value}`,
@@ -1463,7 +1462,7 @@ async function loadContent() {
         let content = null
 
         if (currentMode.value === 'preview') {
-            // 管理端预览：正文按「草稿 → 已发布 → 站内讲义」取，不依赖学员可见清单
+            // 管理端预览：正文按「草稿 → 已发布正文」取，不依赖学员可见清单
             const preview = await loadPreviewArticle()
             if (!preview) {
                 renderedContent.value = '<p>课件不存在或没有可读正文。</p>'
@@ -1491,7 +1490,7 @@ async function loadContent() {
                 }
             }
 
-            // 加载 Markdown 内容：优先托管接口，回退静态文件
+            // 加载 Markdown 内容：只从数据库托管版本读取
             content = await loadArticleMarkdown(blog)
         }
         if (!content) throw new Error('文件加载失败')
@@ -1552,7 +1551,10 @@ async function loadContent() {
 
     } catch (e) {
         console.error('加载内容失败:', e)
-        renderedContent.value = '<p>无法读取文章内容，请稍后重试。</p>'
+        const text = e?.code === 'courseware_content_missing'
+            ? '这篇课件的正文在服务端缺失，请联系管理员恢复后再试。'
+            : '无法读取文章内容，请稍后重试。'
+        renderedContent.value = `<p>${text}</p>`
     } finally {
         isRendering = false
         nextTick(updateReadingProgress)

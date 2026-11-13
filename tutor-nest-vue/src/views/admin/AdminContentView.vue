@@ -79,7 +79,7 @@
                 </EmptyState>
 
                 <EmptyState v-else-if="catalogEmpty" icon="fas fa-box-open" title="还没有同步课件目录"
-                    text="请确认静态课件目录 data/articles.json 可用后，点击「刷新目录」重试。" />
+                    text="请确认后端课件目录可用后，点击「刷新目录」重试。" />
 
                 <EmptyState v-else-if="mySubjectGroups.length === 0" icon="fas fa-hand-holding-heart"
                     title="你还没有认领任何课件"
@@ -186,7 +186,7 @@
                 </EmptyState>
 
                 <EmptyState v-else-if="catalogEmpty" icon="fas fa-box-open" title="还没有同步课件目录"
-                    text="请确认静态课件目录 data/articles.json 可用后，点击「刷新目录」重试。" />
+                    text="请确认后端课件目录可用后，点击「刷新目录」重试。" />
 
                 <EmptyState v-else-if="unclaimedGroups.length === 0" icon="fas fa-circle-check"
                     title="目录里的课件都已被认领" text="没有需要认领的课件，回到「我的课件」查看你的范围。" />

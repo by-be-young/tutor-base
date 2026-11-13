@@ -178,7 +178,7 @@ class IdentityHttpContractTest {
                 .andExpect(jsonPath("$.expiresAt").isNotEmpty())
                 .andReturn();
 
-        String activationCode = json(issued).get("activationCode").asText();
+        String activationCode = json(issued).get("activationCode").asString();
         assertThat(jdbc.queryForObject(
                 "SELECT encode(token_hash, 'hex') FROM public.account_activation", String.class))
                 .doesNotContain(activationCode);
@@ -862,7 +862,7 @@ class IdentityHttpContractTest {
                 .andExpect(jsonPath("$.headerName").value("X-CSRF-TOKEN"))
                 .andReturn();
         Cookie cookie = existingCookie == null ? requireCookie(result) : existingCookie;
-        return new BrowserSession(cookie, json(result).get("token").asText());
+        return new BrowserSession(cookie, json(result).get("token").asString());
     }
 
     private Cookie login(BrowserSession browser, String username, String password) throws Exception {

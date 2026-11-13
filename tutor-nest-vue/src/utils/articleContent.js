@@ -1,42 +1,11 @@
 // src/utils/articleContent.js
-// 课件正文读取：优先走后端托管接口（/courseware/articles/{teacherId}/{articleId}/content），
-// 后端不可用或该篇未托管时回退到 public/articles 下的静态文件。
+// 课件正文读取：只走数据库托管接口（/courseware/articles/{teacherId}/{articleId}/content）。
+// public/articles 下的静态 Markdown 不再作为运行时正文来源；静态课件必须先由服务端导入托管。
 import { coursewareGateway } from '../gateways/coursewareGateway.js'
 
-export async function fetchStaticArticle(path) {
-  if (!path) return null
-  const baseUrl = import.meta.env?.BASE_URL || ''
-  try {
-    const response = await fetch(`${baseUrl}articles/${path}`)
-    if (!response.ok) return null
-    return await response.text()
-  } catch {
+export async function loadArticleMarkdown(blog) {
+  if (!blog || blog.teacherId == null || blog.teacherArticleId == null) {
     return null
   }
-}
-
-/** 静态目录索引 `data/articles.json`（`id/title/series/date/path`），用于补齐旧静态课件的路径与系列。 */
-export async function fetchStaticIndex() {
-  const baseUrl = import.meta.env?.BASE_URL || ''
-  try {
-    const response = await fetch(`${baseUrl}data/articles.json`)
-    if (!response.ok) return []
-    const data = await response.json()
-    return Array.isArray(data) ? data : []
-  } catch {
-    return []
-  }
-}
-
-export async function loadArticleMarkdown(blog) {
-  if (!blog) return null
-  if (blog.teacherId != null && blog.teacherArticleId != null) {
-    try {
-      const markdown = await coursewareGateway.fetchArticleContent(blog.teacherId, blog.teacherArticleId)
-      if (markdown) return markdown
-    } catch {
-      // 未授权、版本下线或后端不可达：继续尝试静态兜底
-    }
-  }
-  return fetchStaticArticle(blog.path)
+  return coursewareGateway.fetchArticleContent(blog.teacherId, blog.teacherArticleId)
 }

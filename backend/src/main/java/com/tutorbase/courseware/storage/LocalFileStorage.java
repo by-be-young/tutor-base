@@ -110,7 +110,8 @@ public class LocalFileStorage implements CoursewareStorage {
     }
 
     private Path blobPath(long teacherId, String contentHash) {
-        String hex = contentHash.startsWith("sha256:") ? contentHash.substring("sha256:".length()) : contentHash;
+        String normalized = CoursewareHashes.normalize(contentHash);
+        String hex = normalized.substring("sha256:".length());
         if (!hex.matches("[0-9a-f]{64}")) {
             throw new IllegalArgumentException("非法的内容哈希");
         }
