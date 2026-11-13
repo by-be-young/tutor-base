@@ -330,7 +330,8 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(14);
+            assertThat(result.migrationsExecuted)
+                    .isEqualTo((int) pendingMigrationsNewerThan("10"));
             try (Connection connection = driftDatabase.createConnection("")) {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.flyway_schema_history
@@ -430,7 +431,8 @@ class FlywayMigrationTest {
                     .load()
                     .migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(12);
+            assertThat(result.migrationsExecuted)
+                    .isEqualTo((int) pendingMigrationsNewerThan("12"));
             try (Connection connection = preV16Database.createConnection("")) {
                 assertThat(readCount(connection, """
                         SELECT count(*) FROM public.student
@@ -768,6 +770,19 @@ class FlywayMigrationTest {
     private void execute(Connection connection, String sql) throws SQLException {
         try (Statement statement = connection.createStatement()) {
             statement.execute(sql);
+        }
+    }
+
+    /** 历史表停在某个版本后，后续 Flyway 会执行多少个迁移（新增迁移文件后自动跟随）。 */
+    private static long pendingMigrationsNewerThan(String appliedVersion) throws IOException {
+        MigrationVersion applied = MigrationVersion.fromVersion(appliedVersion);
+        try (var files = Files.list(Path.of("src/main/resources/db/migration"))) {
+            return files
+                    .map(path -> path.getFileName().toString())
+                    .filter(name -> name.endsWith(".sql"))
+                    .map(name -> MigrationVersion.fromVersion(name.substring(0, name.indexOf("__"))))
+                    .filter(version -> version.compareTo(applied) > 0)
+                    .count();
         }
     }
 
