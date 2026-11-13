@@ -61,6 +61,7 @@ class FlywayMigrationTest {
             "course_operation_log",
             "course_notification",
             "course_layout",
+            "course_folder",
             "course_template");
 
     @Container
@@ -83,7 +84,7 @@ class FlywayMigrationTest {
                     .count();
         }
         assertThat(result.migrationsExecuted).isEqualTo((int) expectedMigrations);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("25");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("25.2");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
         try (Connection connection = POSTGRES.createConnection("")) {
@@ -134,6 +135,10 @@ class FlywayMigrationTest {
             assertThat(hasColumn(connection, "courseware_catalog", "legacy_article_id")).isTrue();
             assertThat(hasColumn(connection, "wrong_questions", "stem_snapshot")).isTrue();
             assertThat(hasConstraint(connection, "course_copy_local_unique")).isTrue();
+            assertThat(hasColumn(connection, "course_draft", "logical_path")).isTrue();
+            assertThat(hasColumn(connection, "course_draft", "title")).isTrue();
+            assertThat(isColumnNullable(connection, "course_draft", "logical_path")).isTrue();
+            assertThat(hasConstraint(connection, "course_folder_path_check")).isTrue();
             assertThat(readCount(connection, """
                     SELECT count(*) FROM pg_indexes
                     WHERE schemaname = 'public' AND indexname = 'student_teacher_single_primary_idx'

@@ -76,7 +76,7 @@
         <header class="panel-head overview__tree-head">
           <h2 class="panel-title">课件目录</h2>
           <div class="overview__tree-actions">
-            <span class="overview__tree-hint">点篇目打开学员视角预览</span>
+            <span class="overview__tree-hint">＋ 新建课件 · 文件夹＋ 新建子目录 · 点篇目预览</span>
             <button type="button" class="btn btn--ghost btn--sm" @click="toggleAll">
               {{ expanded ? '全部收起' : '全部展开' }}
             </button>
@@ -95,6 +95,8 @@
               mode="admin"
               @file-click="openPreview(item.subject, $event)"
               @file-move="openMoveDialog(item.subject, $event)"
+              @create-file="createArticleIn"
+              @create-folder="createFolderIn"
             />
             <p class="overview__subject-meta">
               <span v-if="item.version" class="chip chip--lime mono">v{{ item.version }}</span>
@@ -186,6 +188,8 @@ const usage = reactive({
 
 // 科目目录：数据来自「我的课件」全量清单，含已发布篇目与草稿（正文均由数据库托管）
 const articles = ref([])
+/** 已登记的空目录（`学科/子目录`）：课件目录树由路径推导，空目录靠这份登记留住。 */
+const folders = ref([])
 const emptyStatus = new Map()
 const articlesBySubject = computed(() => {
   const groups = new Map()
@@ -201,14 +205,18 @@ function articlesOf(subjectValue) {
   return articlesBySubject.value.get(subjectValue) || []
 }
 
+function foldersOf(subjectValue) {
+  return folders.value.filter(path => String(path || '').split('/')[0] === subjectValue)
+}
+
 const ACCENTS = ['cyan', 'violet', 'amber', 'coral', 'pink', 'lime']
 
 function accentFor(index) {
   return ACCENTS[index % ACCENTS.length]
 }
 
-/** 目录展开状态：全部展开/收起由 FolderNode 的 expand-token 统一驱动。 */
-const expanded = ref(true)
+/** 目录展开状态：默认完全收起，全部展开/收起由 FolderNode 的 expand-token 统一驱动。 */
+const expanded = ref(false)
 const expandToken = ref(0)
 
 function toggleAll() {
@@ -223,6 +231,67 @@ function openPreview(subjectValue, articleId) {
   if (article?.title) query.title = article.title
   if (article?.logicalPath) query.path = article.logicalPath
   router.push({ name: 'CoursewarePreview', params: { id: articleId }, query })
+}
+
+// ---- 在任意一级目录新建课件 ----
+/** 按目录落点生成空白课件：名称即文件名，正文带骨架，发布后仍在这一级目录。 */
+async function createArticleIn(folderPath) {
+  const directory = String(folderPath || '').replace(/\/+$/, '')
+  if (!directory) return
+
+  const input = window.prompt(`在「${directory}」下新建课件，请输入文件名（.md 可省略）：`, '新课件')
+  if (input == null) return
+  const name = input.trim().replace(/\.md$/i, '').trim()
+  if (!name) {
+    showToast('文件名不能为空', 'warning')
+    return
+  }
+  if (/[\\/:*?"<>|]/.test(name)) {
+    showToast('文件名不能包含 \\ / : * ? " < > |', 'warning')
+    return
+  }
+
+  const logicalPath = `${directory}/${name}.md`
+  const markdown = `---\ntitle: ${name}\ndefaultLayout: A\n---\n\n<!-- @layout:A -->\n# ${name}\n\n在这里写正文\n`
+  try {
+    const saved = await coursewareGateway.saveDraft(null, markdown, null, { logicalPath, title: name })
+    showToast(`已创建空白课件「${name}」`, 'success')
+    router.push({
+      path: '/admin/editor',
+      query: { subject: directory.split('/')[0], articleId: saved.articleId }
+    })
+  } catch (error) {
+    showToast(error?.message || '新建课件失败，请稍后重试', 'error')
+  }
+}
+
+// ---- 在任意一级目录新建子目录 ----
+/** 空目录没有课件可推导，必须登记到后端；建好后立即展开目录树，方便继续在里面放课件。 */
+async function createFolderIn(folderPath) {
+  const parent = String(folderPath || '').replace(/\/+$/, '')
+  if (!parent) return
+
+  const input = window.prompt(`在「${parent}」下新建子目录，请输入目录名：`, '新目录')
+  if (input == null) return
+  const name = input.trim().replace(/\/+$/, '')
+  if (!name) {
+    showToast('目录名不能为空', 'warning')
+    return
+  }
+  if (/[\\/:*?"<>|]/.test(name)) {
+    showToast('目录名不能包含 \\ / : * ? " < > |', 'warning')
+    return
+  }
+
+  try {
+    await coursewareGateway.createFolder(`${parent}/${name}`)
+    showToast(`已创建子目录「${name}」`, 'success')
+    await loadFolders()
+    expanded.value = true
+    expandToken.value += 1
+  } catch (error) {
+    showToast(error?.message || '新建子目录失败，请稍后重试', 'error')
+  }
 }
 
 // ---- 移动课件 ----
@@ -283,15 +352,23 @@ async function confirmMove() {
 
 /** 交给 FolderNode 的目录树：科目是根文件夹，logicalPath 的层级是多级子目录。 */
 function treeOf(subjectValue) {
-  return buildCoursewareTree(subjectValue, articlesOf(subjectValue))
+  return buildCoursewareTree(subjectValue, articlesOf(subjectValue), foldersOf(subjectValue))
 }
 
-/** 概览给的科目 + 只在「我的课件」清单里出现的科目（例如只有草稿、还没发布） */
+/** 概览给的科目 + 只在「我的课件」清单或目录登记里出现的科目（例如只有草稿、还没发布） */
 const subjects = computed(() => {
   const base = [...data.subjects]
   const known = new Set(base.map(item => item.subject))
-  for (const [subjectKey, items] of articlesBySubject.value) {
-    if (known.has(subjectKey)) continue
+  const extra = new Set()
+  for (const subjectKey of articlesBySubject.value.keys()) {
+    if (!known.has(subjectKey)) extra.add(subjectKey)
+  }
+  for (const path of folders.value) {
+    const subjectKey = String(path || '').split('/')[0]
+    if (subjectKey && !known.has(subjectKey)) extra.add(subjectKey)
+  }
+  for (const subjectKey of extra) {
+    const items = articlesOf(subjectKey)
     base.push({
       subject: subjectKey,
       version: 0,
@@ -370,8 +447,17 @@ async function loadArticles() {
   }
 }
 
+/** 空目录登记：失败不阻塞页面，目录树退回按课件路径推导。 */
+async function loadFolders() {
+  try {
+    folders.value = await coursewareGateway.listFolders()
+  } catch {
+    folders.value = []
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([loadOverview(), loadUsage(), loadArticles()])
+  await Promise.all([loadOverview(), loadUsage(), loadArticles(), loadFolders()])
   loading.value = false
 })
 </script>

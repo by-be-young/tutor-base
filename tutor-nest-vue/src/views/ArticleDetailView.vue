@@ -18,6 +18,9 @@
                         <button type="button" class="reader-preview-back" @click="openPreviewEditor">
                             <i class="fas fa-pen"></i><span>编辑这篇</span>
                         </button>
+                        <button type="button" class="reader-preview-back" @click="printArticle">
+                            <i class="fas fa-file-pdf"></i><span>导出 PDF</span>
+                        </button>
                     </span>
                     <span v-else class="eyebrow">NEST / 学巢阅读</span>
                     <span class="chip reader-mode" :class="modeChipClass">
@@ -1549,6 +1552,11 @@ async function loadContent() {
             observe(detailBodyRef.value)
         }
 
+        // 10. 从编辑页「导出 PDF」跳转过来时自动打开打印（浏览器里选「另存为 PDF」）
+        if (currentMode.value === 'preview' && route.query.print === '1') {
+            window.setTimeout(() => window.print(), 400)
+        }
+
     } catch (e) {
         console.error('加载内容失败:', e)
         const text = e?.code === 'courseware_content_missing'
@@ -1559,6 +1567,11 @@ async function loadContent() {
         isRendering = false
         nextTick(updateReadingProgress)
     }
+}
+
+// 导出 PDF：走浏览器打印（打印样式只保留正文，页边距由 @page 控制）
+function printArticle() {
+    window.print()
 }
 
 // ========== 布局切换 ==========
@@ -3237,4 +3250,74 @@ onUnmounted(() => {
     }
 }
 
-</style>
+/* ---------- 打印 / 导出 PDF：只保留正文 ---------- */
+@media print {
+    @page {
+        margin: 14mm;
+    }
+
+    .reader-progress,
+    .reader-tools,
+    .reader-preview-nav,
+    .reader-meter,
+    .fab-container,
+    .fab-right-group,
+    .answer-sheet-overlay,
+    .reader-hero__halftone {
+        display: none !important;
+    }
+
+    .reader,
+    .reader-shell {
+        background: #fff;
+        padding: 0;
+        margin: 0;
+        max-width: none;
+    }
+
+    .reader-hero {
+        margin: 0 0 12px;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        background: #fff;
+    }
+
+    .reader-title {
+        font-size: 20pt;
+    }
+
+    .reader-sheet {
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        background: #fff;
+    }
+
+    .detail-body {
+        font-size: 11pt;
+        color: #000;
+    }
+
+    .detail-body :deep(h1),
+    .detail-body :deep(h2),
+    .detail-body :deep(h3) {
+        break-after: avoid;
+        page-break-after: avoid;
+    }
+
+    .detail-body :deep(.detail-section-two-column) {
+        display: block;
+    }
+
+    .detail-body :deep(.question-slot),
+    .detail-body :deep(.question-card),
+    .detail-body :deep(.question-group),
+    .detail-body :deep(table),
+    .detail-body :deep(img) {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+}</style>
