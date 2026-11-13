@@ -1,5 +1,6 @@
 // src/utils/coursewareManifest.js
-// /courseware/manifests 的展平与分组规则（纯函数，供 store 与单测共用）。
+// 课件清单的展平与分组规则（纯函数，供 store 与单测共用）。
+// 学员走 /courseware/manifests，管理员走 /admin/courseware/articles（托管库）。
 
 /**
  * 按老师分组：多老师场景下首页/目录需要区分「谁的课件」。
@@ -56,6 +57,39 @@ export function flattenManifests(manifests) {
         releaseVersion: manifest.version
       })
     }
+  }
+  return articles
+}
+
+/**
+ * 管理员的课件库（`GET /admin/courseware/articles`）→ 与清单同构的列表。
+ *
+ * 管理员不是学员，`/courseware/manifests` 对其为空；权限、答案与批阅面板仍需要
+ * 一份「我的托管课件」清单。只取已发布篇目：草稿学员看不到，不应出现在授权范围里。
+ *
+ * @param {Array<object>} list 接口返回的课件摘要
+ * @param {{accountId: number, username: string}} account 当前管理员账号
+ */
+export function flattenHostedArticles(list, account) {
+  const usedIds = new Set()
+  const articles = []
+  for (const item of list || []) {
+    if (!item || item.published === false || item.hosted === false) continue
+    const legacyId = item.legacyArticleId ?? item.articleId
+    let id = Number(legacyId)
+    if (usedIds.has(id)) id = Number(item.articleId)
+    if (!Number.isFinite(id)) continue
+    usedIds.add(id)
+    articles.push({
+      id,
+      title: item.title || `课件 ${item.articleId}`,
+      series: item.subject || '未归类',
+      date: String(item.updatedAt || '').slice(0, 10),
+      path: item.logicalPath || '',
+      teacherId: account?.accountId ?? null,
+      teacherName: account?.username || '',
+      teacherArticleId: item.articleId
+    })
   }
   return articles
 }

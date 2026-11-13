@@ -103,6 +103,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useAdminStore } from '@/stores/adminStore'
+import { useArticleStore } from '@/stores/blogStore'
 import { useCoursewareStore } from '@/stores/coursewareStore'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import PermissionTreeNode from './PermissionTreeNode.vue'
@@ -119,6 +120,7 @@ const props = defineProps({
 const emit = defineEmits(['permission-change', 'save-permissions'])
 
 const adminStore = useAdminStore()
+const articleStore = useArticleStore()
 const coursewareStore = useCoursewareStore()
 
 const currentSubject = ref('')
@@ -159,11 +161,13 @@ function reloadCourseware() {
     coursewareStore.loadWorkspace(props.blogData).catch(() => {})
 }
 
-// 父页面可能先挂载再异步加载文章目录；文章到位后自动补一次同步+加载。
-watch(() => props.blogData, (articles) => {
-    if (!Array.isArray(articles) || articles.length === 0) return
-    coursewareStore.ensureWorkspace(articles).catch(() => {})
-}, { immediate: true })
+// 父页面先挂载再异步加载文章目录。文章加载结束后（包括为空）都要拉一次课件目录，
+// 否则 store.loaded 永远是 false，页面会一直停在加载骨架屏。
+watch(() => [props.blogData, articleStore.loaded, articleStore.isLoading],
+    ([articles, loaded, loading]) => {
+        if (!loaded || loading) return
+        coursewareStore.ensureWorkspace(Array.isArray(articles) ? articles : []).catch(() => {})
+    }, { immediate: true })
 
 // 只显示学员已开通的科目，以及当前正在编辑的学科。
 // 科目归属来自 subjects，与是否已授权文章无关；开通但零授权的科目仍会出现在这里。

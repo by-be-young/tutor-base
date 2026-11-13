@@ -219,6 +219,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useArticleStore } from '@/stores/blogStore'
 import { useCoursewareStore } from '@/stores/coursewareStore'
 import { grantedArticles } from '@/utils/adminSubjects'
 import { loadArticleMarkdown } from '@/utils/articleContent'
@@ -235,6 +236,7 @@ const props = defineProps({
 })
 
 const router = useRouter()
+const articleStore = useArticleStore()
 const coursewareStore = useCoursewareStore()
 
 const currentSubject = ref('')
@@ -273,10 +275,11 @@ function reloadCourseware() {
     coursewareStore.loadWorkspace(props.blogData).catch(() => {})
 }
 
-watch(() => props.blogData, (articles) => {
-    if (!Array.isArray(articles) || articles.length === 0) return
-    coursewareStore.ensureWorkspace(articles).catch(() => {})
-}, { immediate: true })
+watch(() => [props.blogData, articleStore.loaded, articleStore.isLoading],
+    ([articles, loaded, loading]) => {
+        if (!loaded || loading) return
+        coursewareStore.ensureWorkspace(Array.isArray(articles) ? articles : []).catch(() => {})
+    }, { immediate: true })
 
 const scopedArticles = computed(() => grantedArticles({
     articles: props.blogData,

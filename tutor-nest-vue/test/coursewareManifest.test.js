@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { flattenManifests, groupByTeacher } from '../src/utils/coursewareManifest.js'
+import { flattenHostedArticles, flattenManifests, groupByTeacher } from '../src/utils/coursewareManifest.js'
 import { loadArticleMarkdown } from '../src/utils/articleContent.js'
 
 const MANIFESTS = [
@@ -112,6 +112,49 @@ test('单老师时不额外分组', () => {
   const groups = groupByTeacher(flattenManifests(MANIFESTS))
   assert.equal(groups.length, 1)
   assert.equal(groups[0].articles.length, 2)
+})
+
+test('管理员托管清单展平为同构文章列表，跳过草稿与未托管条目', () => {
+  const account = { accountId: 6, username: 'young' }
+  const articles = flattenHostedArticles([
+    {
+      articleId: 50,
+      legacyArticleId: 50,
+      title: '3 虚拟语气',
+      subject: '高中英语',
+      logicalPath: '高中英语/语法课讲义/3 虚拟语气.md',
+      published: true,
+      hosted: true
+    },
+    {
+      articleId: 1001,
+      legacyArticleId: null,
+      title: '未发布草稿',
+      subject: '高中英语',
+      logicalPath: '高中英语/草稿.md',
+      published: false,
+      hosted: true
+    },
+    {
+      articleId: 901,
+      legacyArticleId: 901,
+      title: '未托管',
+      subject: '高中英语',
+      published: true,
+      hosted: false
+    }
+  ], account)
+
+  assert.deepEqual(articles, [{
+    id: 50,
+    title: '3 虚拟语气',
+    series: '高中英语',
+    date: '',
+    path: '高中英语/语法课讲义/3 虚拟语气.md',
+    teacherId: 6,
+    teacherName: 'young',
+    teacherArticleId: 50
+  }])
 })
 
 test('正文只走托管接口，不再回退静态文件', async () => {
