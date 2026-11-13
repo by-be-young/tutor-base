@@ -5,6 +5,7 @@ import {
   analyzeCourseware,
   buildQuestionTextMap,
   cleanStemText,
+  extractAnswerIds,
   normalizeMarkerIndentation,
   resolveQuestionOrder,
   resolveQuestionText,
@@ -187,4 +188,13 @@ test('引用块内的独行占位符只保留「> 」前缀', () => {
 test('正常写法的占位符与正文行不被改写', () => {
     const markdown = ['【题干1】题干', '', '【@1】', '', '> 【题干2】引用题干', '', '> 【@2】'].join('\n')
     assert.equal(normalizeMarkerIndentation(markdown), markdown)
+})
+test('extractAnswerIds 按出现顺序去重，自动编号与其他题号不冲突', () => {
+    const markdown = ['【题干1-3】公共题干', '', '【@】', '', '【@2】', '', '【@】'].join('\n')
+    assert.deepEqual(extractAnswerIds(markdown), ['1', '2', '3'])
+})
+
+test('extractAnswerIds 对纯讲义返回空数组', () => {
+    assert.deepEqual(extractAnswerIds('# 语法讲义\n\n只有正文，没有作答占位符。'), [])
+    assert.deepEqual(extractAnswerIds(null), [])
 })
