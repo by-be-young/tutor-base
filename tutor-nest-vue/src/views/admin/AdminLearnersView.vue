@@ -43,7 +43,7 @@
     <div class="seg admin-tabs" role="tablist" aria-label="学员管理分类">
       <button v-for="tab in tabs" :key="tab.id" type="button" role="tab" class="seg__btn"
         :class="{ 'is-active': activeTab === tab.id }" :aria-selected="activeTab === tab.id"
-        :aria-controls="`admin-tab-${tab.id}`" @click="activeTab = tab.id">
+        :aria-controls="`admin-tab-${tab.id}`" @click="switchTab(tab.id)">
         <i :class="tab.icon" aria-hidden="true"></i>
         <span>{{ tab.label }}</span>
       </button>
@@ -56,6 +56,7 @@
         :selected-student-id="selectedStudentId" :blog-data="blogData" :all-subjects="allSubjects"
         :dirty="permissionDirty" :saving="savingPermissions" @permission-change="onPermissionChange"
         @save-permissions="savePermissions" />
+      <AdminTeacherApplicationsView v-else-if="activeTab === 'applications'" />
       <PermissionPanel v-else :students="students" :selected-student-id="selectedStudentId"
         :blog-data="blogData" :all-subjects="allSubjects" :dirty="permissionDirty"
         :saving="savingPermissions" @permission-change="onPermissionChange" @save-permissions="savePermissions" />
@@ -68,13 +69,16 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/authStore'
 import { useAdminWorkspace } from '@/composables/useAdminWorkspace'
 import StudentSwitcher from '@/components/admin/StudentSwitcher.vue'
 import StudentAccountsPanel from '@/components/admin/StudentAccountsPanel.vue'
 import LearnerSubjectPanel from '@/components/admin/LearnerSubjectPanel.vue'
 import PermissionPanel from '@/components/admin/PermissionPanel.vue'
 import LearnerDetailDrawer from '@/components/admin/LearnerDetailDrawer.vue'
+import AdminTeacherApplicationsView from '@/views/admin/AdminTeacherApplicationsView.vue'
 
 const {
   students,
@@ -102,12 +106,38 @@ const {
 
 const activeTab = ref('students')
 const detailLearnerId = ref(null)
+const route = useRoute()
+const router = useRouter()
+const authStore = useAuthStore()
 
-const tabs = [
-  { id: 'students', label: '学员账户', icon: 'fas fa-users-gear' },
-  { id: 'subjects', label: '学员科目', icon: 'fas fa-book-open' },
-  { id: 'permission', label: '权限管理', icon: 'fas fa-shield-halved' }
-]
+/** 注册审核原本是独立导航项，现已并入「学员」页；只有超级管理员能看到这个标签。 */
+const tabs = computed(() => {
+  const items = [
+    { id: 'students', label: '学员账户', icon: 'fas fa-users-gear' },
+    { id: 'subjects', label: '学员科目', icon: 'fas fa-book-open' },
+    { id: 'permission', label: '权限管理', icon: 'fas fa-shield-halved' }
+  ]
+  if (authStore.isSuperAdministrator) {
+    items.push({ id: 'applications', label: '注册审核', icon: 'fas fa-user-check' })
+  }
+  return items
+})
+
+function allowedTab(tabId) {
+  return tabs.value.some(tab => tab.id === tabId) ? tabId : 'students'
+}
+
+activeTab.value = allowedTab(route.query.tab)
+
+watch(() => route.query.tab, tab => {
+  activeTab.value = allowedTab(tab)
+})
+
+function switchTab(tabId) {
+  activeTab.value = tabId
+  if (route.query.tab === tabId) return
+  router.replace({ query: { ...route.query, tab: tabId === 'students' ? undefined : tabId } })
+}
 
 function openDetailDrawer(student) {
   if (student === null || student === undefined) return

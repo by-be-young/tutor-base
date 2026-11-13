@@ -272,6 +272,8 @@
 - 正文来源：所有正文只从数据库托管版本（blob）读取。`public/articles` 下的静态 Markdown 仅作为服务端启动时补齐缺失 blob 的种子来源，任何前端页面（学员阅读、管理预览、编辑器）都不得直接读取静态课件。
 - 草稿落点：`POST/PUT /admin/courseware/drafts` 可带 `logicalPath`（含学科前缀、以 `.md` 结尾）与 `title`，用于「在某一级目录新建课件」。路径为空时发布按标题推导；更新已有草稿不传则保留原值。路径不合法（无后缀、含 `..`、没有目录段）返回 `400`。
 - 空目录登记：`GET /admin/courseware/folders` 返回当前老师登记过的目录路径（升序，形如 `高中英语/语法课讲义/从句专项`）；`POST /admin/courseware/folders` 传 `{ "path": "..." }` 登记目录，返回 `{ "created": [...] }`（本次新写入的路径，含新登记的各级父目录，重复登记返回空数组）。路径必须带学科前缀且至少两级、不能以 `.md` 结尾、不能含 `..`，否则 `400`。前端把登记的目录与课件 `logicalPath` 合并成同一棵树，空目录因此可见。
+- 删除课件：`DELETE /admin/courseware/articles/{articleId}` 立即生效且不可撤销。已发布篇目按新版本（版本号 +1）重新发布、不再包含该篇，旧版本保留为历史；同时删除草稿、`article_answer_keys`、`courseware_catalog` 行（级联清除认领/排除/放弃记录）、单篇共享、自己获取的副本，并把该 `article_id` 从所有 `student.permissions` 数组移除；其他老师获取的副本标记 `source_unavailable`。学员作答与错题本不删除。响应给出 `wasPublished` 与删除后的 `version`（科目已空时为 0）。前端必须先弹确认对话框。
+- 管理台页面合并：导航固定 5 项「学员 / 批阅 / 工作台 / 课件 / 我的」；`/admin/answers`、`/admin/sharing` 重定向到 `/admin/courseware?tab=answers|sharing`，`/admin/applications` 重定向到 `/admin/learners?tab=applications`（仅超级管理员可见该标签）；旧版认领页 `/admin/content` 已删除。
 - 发布：`POST /admin/courseware/releases` 以 `expectVersion` 做乐观锁；与当前指针不一致返回 `409`。
   编辑器侧的 `POST /admin/courseware/drafts/publish` 在发布成功后**删除本次并入版本的草稿**（内容已写进新 release），未参与本次发布的草稿保持不动；`GET /admin/courseware/drafts` 保证一篇草稿一行（多科目 release head 不会造成重复行）。
 - 正文存储：正文 blob 与版本 manifest 落在 `tutor.courseware.root`（生产默认 `/var/lib/tutor-base/courseware`，由 `deploy/compose.yaml` 的 `courseware-data` 卷挂载）。卷不可写时写盘失败，返回 `503 courseware_storage_unavailable`。

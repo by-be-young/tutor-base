@@ -45,6 +45,11 @@
       <i class="fas fa-folder-move"></i>
       <span>移动</span>
     </button>
+    <button v-if="isAdmin" type="button" class="file-row__move file-row__delete" title="删除这篇课件"
+      @click.stop="$emit('delete', node.blogId)">
+      <i class="fas fa-trash-can"></i>
+      <span>删除</span>
+    </button>
   </div>
 </template>
 
@@ -76,7 +81,7 @@ const props = defineProps({
   }
 })
 
-defineEmits(['click', 'move'])
+defineEmits(['click', 'move', 'delete'])
 
 const ACCENTS = ['cyan', 'violet', 'amber', 'coral', 'pink', 'lime']
 const accentClass = computed(() => `accent--${ACCENTS.includes(props.accent) ? props.accent : 'violet'}`)
@@ -276,6 +281,11 @@ const formattedDate = computed(() => {
 .file-row__move:active {
   transform: translate(1px, 1px);
   box-shadow: none;
+}
+
+.file-row__delete:hover {
+  background: var(--vermilion);
+  color: var(--paper-1);
 }
 
 /* ---------- 学科印刷色：hover 时图标块取色 ---------- */

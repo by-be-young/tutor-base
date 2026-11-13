@@ -1,128 +1,144 @@
 <!-- src/views/admin/AdminCoursewareOverviewView.vue -->
 <template>
   <div class="overview">
-    <section class="panel panel--tight overview__lead">
-      <p class="eyebrow">课件托管</p>
-      <p class="overview__lead-text">
-        每个科目一个发布版本：草稿只有你自己能看到，点「发布」才生效；删除草稿不会影响已发布内容。
-        点目录里的篇目会在新页面里用学员阅读器完整预览（草稿会标注「学员还看不到」），要改内容再点「去编辑」。
-        所有正文都从数据库托管版本读取，页面不再直接读取 <code>public/articles</code> 下的静态文件。
-        获取他人的课件、分享自己的课件都在「共享」页。
-      </p>
-    </section>
-
-    <div class="stat-grid">
-      <div class="stat-card">
-        <span class="stat-label">科目</span>
-        <span class="stat-value">{{ subjects.length }}</span>
-        <span class="stat-sub">已发布版本 + 草稿</span>
-      </div>
-      <div class="stat-card stat-card--amber">
-        <span class="stat-label">待发布草稿</span>
-        <span class="stat-value">{{ data.pendingDrafts }}</span>
-        <span class="stat-sub">草稿需点发布才生效</span>
-      </div>
-      <div class="stat-card stat-card--cyan">
-        <span class="stat-label">获取的课件</span>
-        <span class="stat-value">{{ data.acquiredCount }}</span>
-        <span class="stat-sub">来自其他老师</span>
-      </div>
-      <div class="stat-card" :class="{ 'stat-card--coral': data.pendingUpdates > 0 }">
-        <span class="stat-label">有更新</span>
-        <span class="stat-value">{{ data.pendingUpdates }}</span>
-        <span class="stat-sub">来源发布了新版本</span>
-      </div>
+    <!-- 课件页合并了原来的「设置答案」与「共享」页：三个标签共用顶部概览 -->
+    <div class="seg overview__tabs" role="tablist" aria-label="课件工作区">
+      <button v-for="tab in tabs" :key="tab.id" type="button" role="tab" class="seg__btn"
+        :class="{ 'is-active': activeTab === tab.id }" :aria-selected="activeTab === tab.id"
+        :aria-controls="`courseware-tab-${tab.id}`" @click="switchTab(tab.id)">
+        <i :class="tab.icon" aria-hidden="true"></i>
+        <span>{{ tab.label }}</span>
+      </button>
     </div>
 
-    <section class="panel panel--pad">
-      <header class="panel-head overview__head">
-        <h2 class="panel-title">存储空间</h2>
-        <span class="chip" :class="usageChipClass">{{ usageLabel }}</span>
-      </header>
-      <div class="panel-body overview__usage">
-        <div class="progress" :class="usageProgressClass" role="img"
-          :aria-label="`已用 ${formatBytes(usage.totalBytes)}，配额 ${quotaText}`">
-          <span class="progress__bar" :style="{ width: usageWidth }"></span>
-        </div>
-        <p class="overview__usage-line">
-          <strong>{{ formatBytes(usage.totalBytes) }}</strong>
-          <span class="text-muted"> / {{ quotaText }}</span>
-          <span v-if="usage.orphanCount" class="text-dim">
-            · 其中 {{ usage.orphanCount }} 个孤儿文件（{{ formatBytes(usage.orphanBytes) }}）可回收
-          </span>
+    <template v-if="activeTab === 'tree'">
+      <section class="panel panel--tight overview__lead">
+        <p class="eyebrow">课件托管</p>
+        <p class="overview__lead-text">
+          每个科目一个发布版本：草稿只有你自己能看到，点「发布」才生效；删除草稿不会影响已发布内容。
+          点目录里的篇目会在新页面里用学员阅读器完整预览（草稿会标注「学员还看不到」），要改内容再点「去编辑」。
+          所有正文都从数据库托管版本读取，页面不再直接读取 <code>public/articles</code> 下的静态文件。
+          删除一篇课件会同时清掉它的草稿、答案、共享与学员权限，并从当前发布版本里移除。
         </p>
+      </section>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-label">科目</span>
+          <span class="stat-value">{{ subjects.length }}</span>
+          <span class="stat-sub">已发布版本 + 草稿</span>
+        </div>
+        <div class="stat-card stat-card--amber">
+          <span class="stat-label">待发布草稿</span>
+          <span class="stat-value">{{ data.pendingDrafts }}</span>
+          <span class="stat-sub">草稿需点发布才生效</span>
+        </div>
+        <div class="stat-card stat-card--cyan">
+          <span class="stat-label">获取的课件</span>
+          <span class="stat-value">{{ data.acquiredCount }}</span>
+          <span class="stat-sub">来自其他老师</span>
+        </div>
+        <div class="stat-card" :class="{ 'stat-card--coral': data.pendingUpdates > 0 }">
+          <span class="stat-label">有更新</span>
+          <span class="stat-value">{{ data.pendingUpdates }}</span>
+          <span class="stat-sub">来源发布了新版本</span>
+        </div>
       </div>
-    </section>
 
-    <div v-if="loading" class="empty" role="status">
-      <span class="spinner" aria-hidden="true"></span>
-      <p class="empty__text">正在加载课件概览…</p>
-    </div>
-
-    <div v-else-if="!subjects.length" class="empty">
-      <i class="fas fa-folder-open empty__icon" aria-hidden="true"></i>
-      <p class="empty__title">还没有发布任何科目</p>
-      <p class="empty__text">
-        到「编辑」页新建草稿并发布；正文会保存到服务端托管版本，供学员端和预览统一读取。
-      </p>
-      <div class="empty__actions">
-        <router-link class="btn btn--primary btn--sm" to="/admin/editor">去新建课件</router-link>
-        <router-link class="btn btn--ghost btn--sm" to="/admin/sharing">去共享页</router-link>
-      </div>
-    </div>
-
-    <div v-else class="overview__workspace">
-      <section class="panel panel--pad overview__tree">
-        <header class="panel-head overview__tree-head">
-          <h2 class="panel-title">课件目录</h2>
-          <div class="overview__tree-actions">
-            <span class="overview__tree-hint">＋ 新建课件 · 文件夹＋ 新建子目录 · 点篇目预览</span>
-            <button type="button" class="btn btn--ghost btn--sm" @click="toggleAll">
-              {{ expanded ? '全部收起' : '全部展开' }}
-            </button>
-          </div>
+      <section class="panel panel--pad">
+        <header class="panel-head overview__head">
+          <h2 class="panel-title">存储空间</h2>
+          <span class="chip" :class="usageChipClass">{{ usageLabel }}</span>
         </header>
-        <div class="panel-body overview__subjects">
-          <section v-for="(item, index) in subjects" :key="item.subject" class="overview__subject">
-            <!-- 科目目录直接复用站内的文件夹树（与学员端知识地图同一套 FolderNode/FileNode），
-                 层级按 logicalPath 还原，可以一层层展开到具体讲义。 -->
-            <FolderNode
-              :node="treeOf(item.subject)"
-              :accent="accentFor(index)"
-              :status-map="emptyStatus"
-              :expand-token="expandToken"
-              :expand-to="expanded"
-              mode="admin"
-              @file-click="openPreview(item.subject, $event)"
-              @file-move="openMoveDialog(item.subject, $event)"
-              @create-file="createArticleIn"
-              @create-folder="createFolderIn"
-            />
-            <p class="overview__subject-meta">
-              <span v-if="item.version" class="chip chip--lime mono">v{{ item.version }}</span>
-              <span v-else class="chip chip--amber mono">未发布</span>
-              <span class="overview__subject-stat">草稿 {{ item.draftCount }}</span>
-              <span class="overview__subject-stat">被获取 {{ item.copiedCount }}</span>
-              <span class="overview__subject-stat">分享 {{ item.shareCount }}</span>
-              <span v-if="item.publishedAt" class="overview__subject-stat">
-                发布于 {{ formatDate(item.publishedAt) }}
-              </span>
-              <router-link class="btn btn--soft btn--sm" :to="{ path: '/admin/editor', query: { subject: item.subject } }">
-                新建 / 继续编辑
-              </router-link>
-            </p>
-          </section>
+        <div class="panel-body overview__usage">
+          <div class="progress" :class="usageProgressClass" role="img"
+            :aria-label="`已用 ${formatBytes(usage.totalBytes)}，配额 ${quotaText}`">
+            <span class="progress__bar" :style="{ width: usageWidth }"></span>
+          </div>
+          <p class="overview__usage-line">
+            <strong>{{ formatBytes(usage.totalBytes) }}</strong>
+            <span class="text-muted"> / {{ quotaText }}</span>
+            <span v-if="usage.orphanCount" class="text-dim">
+              · 其中 {{ usage.orphanCount }} 个孤儿文件（{{ formatBytes(usage.orphanBytes) }}）可回收
+            </span>
+          </p>
         </div>
       </section>
-    </div>
 
-    <section class="panel panel--tight overview__legacy">
-      <h2 class="panel-title">旧「认领」页即将下线</h2>
-      <p class="text-dim overview__legacy-text">
-        课件归属已改为「老师命名空间 + 发布版本」，不再需要认领。
-        旧页面仅用于查看历史认领记录，写入操作可被服务端配置下线。
-      </p>
-      <router-link class="btn btn--ghost btn--sm" to="/admin/content">查看旧认领页</router-link>
+      <div v-if="loading" class="empty" role="status">
+        <span class="spinner" aria-hidden="true"></span>
+        <p class="empty__text">正在加载课件概览…</p>
+      </div>
+
+      <div v-else-if="!subjects.length" class="empty">
+        <i class="fas fa-folder-open empty__icon" aria-hidden="true"></i>
+        <p class="empty__title">还没有任何科目</p>
+        <p class="empty__text">
+          在目录的「＋」里新建课件会同时建好科目目录；正文会保存到服务端托管版本，供学员端和预览统一读取。
+        </p>
+      </div>
+
+      <div v-else class="overview__workspace">
+        <section class="panel panel--pad overview__tree">
+          <header class="panel-head overview__tree-head">
+            <h2 class="panel-title">课件目录</h2>
+            <div class="overview__tree-actions">
+              <span class="overview__tree-hint">＋ 新建课件 · 文件夹＋ 新建子目录 · 点篇目预览</span>
+              <button type="button" class="btn btn--ghost btn--sm" @click="toggleAll">
+                {{ expanded ? '全部收起' : '全部展开' }}
+              </button>
+            </div>
+          </header>
+          <div class="panel-body overview__subjects">
+            <section v-for="(item, index) in subjects" :key="item.subject" class="overview__subject">
+              <!-- 科目目录直接复用站内的文件夹树（与学员端知识地图同一套 FolderNode/FileNode），
+                   层级按 logicalPath 还原，可以一层层展开到具体讲义。 -->
+              <FolderNode
+                :node="treeOf(item.subject)"
+                :accent="accentFor(index)"
+                :status-map="emptyStatus"
+                :expand-token="expandToken"
+                :expand-to="expanded"
+                mode="admin"
+                @file-click="openPreview(item.subject, $event)"
+                @file-move="openMoveDialog(item.subject, $event)"
+                @file-delete="openDeleteDialog(item.subject, $event)"
+                @create-file="createArticleIn"
+                @create-folder="createFolderIn"
+              />
+              <p class="overview__subject-meta">
+                <span v-if="item.version" class="chip chip--lime mono">v{{ item.version }}</span>
+                <span v-else class="chip chip--amber mono">未发布</span>
+                <span class="overview__subject-stat">草稿 {{ item.draftCount }}</span>
+                <span class="overview__subject-stat">被获取 {{ item.copiedCount }}</span>
+                <span class="overview__subject-stat">分享 {{ item.shareCount }}</span>
+                <span v-if="item.publishedAt" class="overview__subject-stat">
+                  发布于 {{ formatDate(item.publishedAt) }}
+                </span>
+              </p>
+            </section>
+          </div>
+        </section>
+      </div>
+    </template>
+
+    <section v-else-if="activeTab === 'answers'" id="courseware-tab-answers" class="overview__panel" role="tabpanel">
+      <div class="panel panel--tight answers-bar">
+        <div class="answers-bar__switcher">
+          <span class="eyebrow">CURRENT LEARNER</span>
+          <StudentSwitcher @select="handleSelectStudent" />
+        </div>
+        <p class="answers-bar__hint">
+          <i aria-hidden="true" class="fas fa-circle-info"></i>
+          答案按学员范围维护：只列出你名下、且该学员已开通科目里已授权的课件。
+        </p>
+      </div>
+      <AnswerPanel :blog-data="blogData" :all-subjects="allSubjects" :students="adminStore.students"
+        :selected-student-id="adminStore.currentStudentId" />
+    </section>
+
+    <section v-else id="courseware-tab-sharing" class="overview__panel" role="tabpanel">
+      <AdminSharingView />
     </section>
 
     <!-- 移动课件对话框 -->
@@ -156,20 +172,99 @@
         </div>
       </div>
     </div>
+
+    <!-- 删除课件确认对话框：删除会连带清掉草稿、答案、共享与学员权限，必须二次确认 -->
+    <div v-if="deleteDialog.open" class="move-overlay" @click.self="closeDeleteDialog">
+      <div class="move-dialog delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title">
+        <h3 class="move-dialog__title delete-dialog__title" id="delete-dialog-title">
+          <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
+          删除课件
+        </h3>
+        <p class="delete-dialog__name">{{ deleteDialog.title }}</p>
+        <p v-if="deleteDialog.path" class="move-dialog__current">
+          <span class="text-dim">路径：</span>
+          <code class="mono">{{ deleteDialog.path }}</code>
+        </p>
+        <ul class="delete-dialog__list">
+          <li>从当前发布版本移除（不可撤销，其它老师手里的副本也会失效）</li>
+          <li>删除它的草稿、答案设置、单篇共享</li>
+          <li>删除学员权限里的这篇授权</li>
+        </ul>
+        <div class="move-dialog__actions">
+          <button type="button" class="btn btn--ghost btn--sm" :disabled="deleteDialog.busy" @click="closeDeleteDialog">
+            取消
+          </button>
+          <button type="button" class="btn btn--primary btn--sm delete-dialog__confirm"
+            :disabled="deleteDialog.busy" @click="confirmDelete">
+            <i v-if="deleteDialog.busy" class="fas fa-circle-notch fa-spin"></i>
+            {{ deleteDialog.busy ? '删除中…' : '确认删除' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import FolderNode from '@/components/articles/FolderNode.vue'
+import AnswerPanel from '@/components/admin/AnswerPanel.vue'
+import StudentSwitcher from '@/components/admin/StudentSwitcher.vue'
+import AdminSharingView from '@/views/admin/AdminSharingView.vue'
 import { coursewareGateway } from '@/gateways/coursewareGateway'
+import { ensureArticleData } from '@/composables/useAdminWorkspace'
+import { useAdminStore } from '@/stores/adminStore'
+import { useArticleStore } from '@/stores/blogStore'
+import { useAuthStore } from '@/stores/authStore'
+import { useCoursewareStore } from '@/stores/coursewareStore'
 import { loadCoursewareLibrary } from '@/utils/coursewareLibrary'
 import { buildCoursewareTree } from '@/utils/coursewareTree'
 import { showToast } from '@/utils/toast'
 
-const loading = ref(true)
 const router = useRouter()
+const route = useRoute()
+const adminStore = useAdminStore()
+const blogStore = useArticleStore()
+const authStore = useAuthStore()
+const coursewareStore = useCoursewareStore()
+
+/** 课件 / 设置答案 / 共享 三个标签；答案与共享原本是独立导航项，现已并入本页。 */
+const tabs = [
+  { id: 'tree', label: '课件目录', icon: 'fas fa-folder-tree' },
+  { id: 'answers', label: '设置答案', icon: 'fas fa-key' },
+  { id: 'sharing', label: '共享', icon: 'fas fa-share-nodes' }
+]
+const TAB_IDS = tabs.map(tab => tab.id)
+const activeTab = ref(TAB_IDS.includes(route.query.tab) ? route.query.tab : 'tree')
+
+function switchTab(tabId) {
+  activeTab.value = tabId
+  if (route.query.tab === tabId) return
+  router.replace({ query: { ...route.query, tab: tabId === 'tree' ? undefined : tabId } })
+}
+
+// 旧链接 /admin/answers、/admin/sharing 会带 tab 进来；也支持浏览器前进后退
+watch(() => route.query.tab, tab => {
+  activeTab.value = TAB_IDS.includes(tab) ? tab : 'tree'
+})
+
+const blogData = computed(() => blogStore.blogData)
+const allSubjects = computed(() => {
+  const subjects = new Set()
+  for (const blog of blogStore.blogData) {
+    if (blog.series) subjects.add(blog.series)
+  }
+  return Array.from(subjects).sort((left, right) => left.localeCompare(right, 'zh-CN'))
+})
+
+const accountId = computed(() => authStore.currentUser?.accountId ?? null)
+
+function handleSelectStudent(studentId) {
+  adminStore.selectStudent(studentId)
+}
+
+const loading = ref(true)
 const data = reactive({
   subjects: [],
   pendingDrafts: 0,
@@ -350,6 +445,46 @@ async function confirmMove() {
   }
 }
 
+// ---- 删除课件 ----
+/** 删除前弹窗确认：会连带清掉草稿、答案、共享与学员权限，属于不可撤销操作。 */
+const deleteDialog = reactive({
+  open: false,
+  articleId: null,
+  title: '',
+  path: '',
+  busy: false
+})
+
+function openDeleteDialog(subjectValue, articleId) {
+  const article = articles.value.find(item => Number(item.articleId) === Number(articleId))
+  deleteDialog.articleId = Number(articleId)
+  deleteDialog.title = article?.title || `课件 ${articleId}`
+  deleteDialog.path = article?.logicalPath || ''
+  deleteDialog.busy = false
+  deleteDialog.open = true
+}
+
+function closeDeleteDialog() {
+  if (deleteDialog.busy) return
+  deleteDialog.open = false
+}
+
+async function confirmDelete() {
+  if (!deleteDialog.articleId || deleteDialog.busy) return
+  deleteDialog.busy = true
+  const removedTitle = deleteDialog.title
+  try {
+    await coursewareGateway.deleteArticle(deleteDialog.articleId)
+    showToast(`已删除课件「${removedTitle}」`, 'success')
+    deleteDialog.open = false
+    await Promise.all([loadArticles(), loadOverview(), loadFolders()])
+  } catch (error) {
+    showToast(error?.message || '删除失败，请稍后重试', 'error')
+  } finally {
+    deleteDialog.busy = false
+  }
+}
+
 /** 交给 FolderNode 的目录树：科目是根文件夹，logicalPath 的层级是多级子目录。 */
 function treeOf(subjectValue) {
   return buildCoursewareTree(subjectValue, articlesOf(subjectValue), foldersOf(subjectValue))
@@ -456,8 +591,21 @@ async function loadFolders() {
   }
 }
 
+async function ensureStudents() {
+  if (adminStore.students.length > 0) return
+  try {
+    await adminStore.loadStudents()
+    adminStore.selectInitialStudent(accountId.value)
+  } catch (error) {
+    showToast(error?.message || '加载学员列表失败，请稍后重试', 'error')
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([loadOverview(), loadUsage(), loadArticles(), loadFolders()])
+  // 课件页内置「设置答案」：与答案面板共用同一份已托管课件清单与学员列表
+  const jobs = [loadOverview(), loadUsage(), loadArticles(), loadFolders(), ensureStudents()]
+  jobs.push(ensureArticleData(blogStore).then(() => coursewareStore.loadWorkspace(blogStore.blogData)))
+  await Promise.all(jobs.map(job => job.catch(() => {})))
   loading.value = false
 })
 </script>
@@ -467,6 +615,60 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+/* 课件 / 设置答案 / 共享 三个标签 */
+.overview__tabs {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.overview__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.answers-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.answers-bar__switcher {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 1 360px;
+  min-width: 240px;
+}
+
+.answers-bar__hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.answers-bar__hint i {
+  color: var(--text-3);
+}
+
+@media (max-width: 760px) {
+  .answers-bar {
+    align-items: flex-start;
+  }
+
+  .answers-bar__switcher {
+    flex-basis: 100%;
+  }
 }
 
 .overview__lead {
@@ -558,17 +760,36 @@ onMounted(async () => {
   font-variant-numeric: tabular-nums;
 }
 
-.overview__legacy {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+.delete-dialog {
+  max-width: 480px;
 }
 
-.overview__legacy-text {
+.delete-dialog__title {
+  color: var(--vermilion);
+}
+
+.delete-dialog__name {
   margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.delete-dialog__list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   font-size: 0.8rem;
-  line-height: 1.6;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.delete-dialog__confirm {
+  background: var(--vermilion);
+  color: var(--paper-1);
 }
 
 /* 移动对话框 */

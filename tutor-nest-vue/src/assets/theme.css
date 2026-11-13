@@ -1559,3 +1559,59 @@ select option {
     transform: none !important;
   }
 }
+
+
+/* ---------------------------------------------------------------------------
+   25. Print / 导出 PDF：只留正文，站点 UI 一律不打印
+   —— 预览页（含管理端 /admin/preview）导出 PDF 时，页头、底部导航、页脚、
+      背景装饰、命令面板、签到弹窗、提示条、进度条都不该出现在纸上。
+   ------------------------------------------------------------------------- */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  html,
+  body,
+  #app {
+    background: #fff !important;
+    color: #000;
+  }
+
+  /* 站点骨架：页头 / 页脚 / 移动端 dock / 背景装饰 / 浮层 */
+  .skip-link,
+  .site-header,
+  .site-footer,
+  .mobile-dock,
+  .paper-decor,
+  .route-progress,
+  .route-error,
+  .palette,
+  .palette-backdrop,
+  .checkin-modal,
+  .checkin-overlay,
+  .checkin-panel,
+  .toast-stack,
+  .custom-toast,
+  .app-header,
+  .admin-header,
+  .admin-dock,
+  .admin-pagehead {
+    display: none !important;
+  }
+
+  .app-main,
+  .app-main--admin {
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* 交互控件：按钮、分段控件、快捷键提示一律不上纸 */
+  .btn,
+  .seg,
+  .seg__btn,
+  kbd {
+    display: none !important;
+  }
+}

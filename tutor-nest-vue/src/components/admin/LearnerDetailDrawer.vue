@@ -390,7 +390,7 @@ function goReviews() {
 }
 
 function goCourseware() {
-  router.push('/admin/content')
+  router.push('/admin/courseware')
 }
 
 function onKeydown(event) {

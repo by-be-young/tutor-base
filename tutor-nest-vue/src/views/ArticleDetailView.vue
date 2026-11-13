@@ -3260,10 +3260,14 @@ onUnmounted(() => {
     .reader-tools,
     .reader-preview-nav,
     .reader-meter,
+    .reader-hero__top,
+    .reader-hero__halftone,
+    .reader-meta,
+    .answer-sheet-fab,
     .fab-container,
     .fab-right-group,
     .answer-sheet-overlay,
-    .reader-hero__halftone {
+    .answer-sheet-sidebar {
         display: none !important;
     }
 
