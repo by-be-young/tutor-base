@@ -176,6 +176,16 @@ export const coursewareGateway = {
     return Array.isArray(response?.created) ? response.created : []
   },
 
+  /**
+   * 删除一篇课件：服务端会把它从当前发布版本剔除、并清掉草稿/答案/共享/副本与学员授权。
+   * 不可撤销，调用前必须先让用户确认。
+   */
+  deleteArticle(articleId) {
+    return backendClient.request(`/admin/courseware/articles/${encodeURIComponent(articleId)}`, {
+      method: 'DELETE'
+    })
+  },
+
   async getDraft(articleId) {
     return backendClient.request(`/admin/courseware/drafts/${encodeURIComponent(articleId)}`)
   },

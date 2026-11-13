@@ -2096,6 +2096,40 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+  /admin/courseware/articles/{articleId}:
+    delete:
+      operationId: deleteCoursewareArticle
+      summary: 删除一篇课件（连同草稿、答案、共享、副本与学员授权）
+      description: |
+        删除会立即生效：已发布的篇目会作为新版本（版本号 +1）重新发布，新版本不再包含这一篇，
+        旧版本保留为历史但不影响学员端。同时清理：
+        草稿、`article_answer_keys`、`courseware_catalog` 行（随之级联清除认领/排除/放弃记录）、
+        单篇共享、自己从别处获取的副本、学员内容授权（`student.permissions`）。
+        其他老师从这篇获取的副本保留内容，状态改为 `source_unavailable`。
+        学员作答记录与错题本属于学习历史（含题干/答案快照），不在此删除。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - $ref: '#/components/parameters/CsrfHeader'
+      responses:
+        '200':
+          description: 删除结果。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareArticleDeleted'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
   /admin/courseware/drafts/{articleId}:
     get:
       operationId: getCoursewareDraft
@@ -4525,6 +4559,30 @@ components:
           description: 本次新写入的目录路径（含新登记的父目录）；全部已存在时为空数组。
           items:
             type: string
+    CoursewareArticleDeleted:
+      type: object
+      additionalProperties: false
+      required: [articleId, wasPublished, version, deletedAt]
+      properties:
+        articleId:
+          type: integer
+          format: int64
+        subject:
+          type: [string, 'null']
+          description: 该篇所属科目（仅草稿且未写学科路径时为 null）。
+        title:
+          type: [string, 'null']
+        logicalPath:
+          type: [string, 'null']
+        wasPublished:
+          type: boolean
+          description: 删除前是否在当前发布版本里。
+        version:
+          type: integer
+          description: 删除后该科目的新版本号；未发布或科目已空时为 0。
+        deletedAt:
+          type: string
+          format: date-time
     CoursewareDraft:
       type: object
       additionalProperties: false

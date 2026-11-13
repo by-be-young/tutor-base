@@ -19,7 +19,7 @@
           <span class="eyebrow">CLAIMS / 认领概览</span>
           <h2 class="section-title">我负责的内容</h2>
         </div>
-        <router-link to="/admin/content" class="btn btn--soft btn--sm">
+        <router-link to="/admin/courseware" class="btn btn--soft btn--sm">
           <i class="fas fa-book-open" aria-hidden="true"></i> 管理课件
         </router-link>
       </div>

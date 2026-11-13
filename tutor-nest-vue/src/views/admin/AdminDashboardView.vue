@@ -13,8 +13,8 @@
         <router-link :to="reviewLink" class="btn btn--primary btn--sm">
           <i class="fas fa-pen-nib" aria-hidden="true"></i> 去批阅
         </router-link>
-        <router-link to="/admin/content" class="btn btn--soft btn--sm">
-          <i class="fas fa-book-open" aria-hidden="true"></i> 去课件认领
+        <router-link to="/admin/courseware" class="btn btn--soft btn--sm">
+          <i class="fas fa-book-open" aria-hidden="true"></i> 去课件
         </router-link>
         <router-link to="/admin/learners" class="btn btn--ghost btn--sm">
           <i class="fas fa-users" aria-hidden="true"></i> 去学员列表

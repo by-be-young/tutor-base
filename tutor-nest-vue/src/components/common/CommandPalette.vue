@@ -83,9 +83,9 @@ const allGroups = computed(() => {
         label: '管理中心',
         items: [
           { id: 'admin-dashboard', label: '工作台', hint: '概览、学员动态与快捷入口', icon: 'fas fa-chart-line', to: '/admin', meta: '页面' },
-          { id: 'admin-learners', label: '学员', hint: '账户、科目与权限管理', icon: 'fas fa-users', to: '/admin/learners', meta: '页面' },
+          { id: 'admin-learners', label: '学员', hint: '账户、科目、权限与注册审核', icon: 'fas fa-users', to: '/admin/learners', meta: '页面' },
           { id: 'admin-reviews', label: '批阅', hint: '待批阅作业与标准答案', icon: 'fas fa-pen-nib', to: '/admin/reviews', meta: '页面' },
-          { id: 'admin-content', label: '课件', hint: '认领学科与课件', icon: 'fas fa-book-open', to: '/admin/content', meta: '页面' },
+          { id: 'admin-courseware', label: '课件', hint: '目录、设置答案与共享', icon: 'fas fa-book-open', to: '/admin/courseware', meta: '页面' },
           { id: 'admin-profile', label: '我的', hint: '管理员资料与认领概览', icon: 'fas fa-user-gear', to: '/admin/me', meta: '页面' }
         ]
       },

@@ -68,21 +68,13 @@ const routes = [
       },
       {
         path: 'answers',
-        name: 'AdminAnswers',
-        component: () => import('@/views/admin/AdminAnswersView.vue'),
-        meta: { adminTitle: '设置答案' }
-      },
-      {
-        path: 'content',
-        name: 'AdminContent',
-        component: () => import('@/views/admin/AdminContentView.vue'),
-        meta: { adminTitle: '旧版认领' }
+        // 答案设置已并入「课件」页（标签页），旧链接按标签页打开
+        redirect: to => ({ name: 'AdminCoursewareOverview', query: { ...to.query, tab: 'answers' } })
       },
       {
         path: 'sharing',
-        name: 'AdminSharing',
-        component: () => import('@/views/admin/AdminSharingView.vue'),
-        meta: { adminTitle: '共享' }
+        // 共享已并入「课件」页（标签页）
+        redirect: to => ({ name: 'AdminCoursewareOverview', query: { ...to.query, tab: 'sharing' } })
       },
       {
         path: 'editor',
@@ -92,9 +84,8 @@ const routes = [
       },
       {
         path: 'applications',
-        name: 'AdminTeacherApplications',
-        component: () => import('@/views/admin/AdminTeacherApplicationsView.vue'),
-        meta: { adminTitle: '注册审核', requiredSuperAdmin: true }
+        // 注册审核已并入「学员」页（标签页，仅超级管理员可见）
+        redirect: to => ({ name: 'AdminLearners', query: { ...to.query, tab: 'applications' } })
       },
       {
         path: 'me',

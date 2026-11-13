@@ -2,6 +2,7 @@ package com.tutorbase.courseware.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -709,6 +710,141 @@ class CoursewareEditorHttpContractTest {
                             .content(objectMapper.writeValueAsString(Map.of("path", illegal))))
                     .andExpect(status().isBadRequest());
         }
+    }
+
+    /**
+     * 删除课件：从当前版本剔除并重新发布，同时清掉草稿、答案、目录行、单篇共享与学员授权。
+     */
+    @Test
+    void deletingPublishedArticleRemovesEveryReference() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+        String subject = "高中英语";
+        String doomedPath = "高中英语/语法课讲义/待删除课件.md";
+        String keeperPath = "高中英语/语法课讲义/留存的课件.md";
+
+        long articleId = createDraft(cookie, csrf, doomedPath, "待删除课件",
+                "---\ntitle: 待删除课件\ndefaultLayout: A\n---\n\n<!-- @layout:A -->\n# 待删除课件\n\n正文\n");
+        long keeperArticleId = createDraft(cookie, csrf, keeperPath, "留存的课件",
+                "---\ntitle: 留存的课件\ndefaultLayout: A\n---\n\n<!-- @layout:A -->\n# 留存的课件\n\n正文\n");
+
+        long alphaId = jdbc.queryForObject("SELECT id FROM public.account WHERE username = 'alpha'", Long.class);
+        jdbc.update("INSERT INTO public.article_answer_keys (blog_id, question_id, answer_text, auto_grade) "
+                + "VALUES (?, '1', 'A', true)", articleId);
+        jdbc.update("UPDATE public.student SET permissions = array_append(permissions, cast(? as integer)) WHERE id = 2",
+                articleId);
+        jdbc.update("""
+                INSERT INTO public.course_share (owner_teacher_account_id, scope_type, subject, article_id)
+                VALUES (?, 'article', ?, ?)
+                """, alphaId, subject, articleId);
+        // 目录行（历史遗留的 legacy 别名）：删除时应连同认领/排除记录一起消失
+        jdbc.update("""
+                INSERT INTO public.courseware_catalog (article_id, teacher_account_id, legacy_article_id, subject, title)
+                VALUES (?, ?, ?, ?, '待删除课件')
+                """, articleId, alphaId, articleId, subject);
+
+        try {
+            mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")
+                            .cookie(cookie)
+                            .header("X-CSRF-TOKEN", csrf)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("subject", subject))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.version").value(1));
+
+            mockMvc.perform(delete("/api/v1/admin/courseware/articles/{articleId}", articleId)
+                            .cookie(cookie)
+                            .header("X-CSRF-TOKEN", csrf))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.articleId").value(articleId))
+                    .andExpect(jsonPath("$.wasPublished").value(true))
+                    .andExpect(jsonPath("$.version").value(2));
+
+            // 当前版本里已经没有这一篇，另一篇仍在（沿用同一逻辑路径）
+            mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")]", org.hamcrest.Matchers.empty()))
+                    .andExpect(jsonPath("$[?(@.articleId == " + keeperArticleId + ")].logicalPath",
+                            contains(keeperPath)));
+
+            assertThat(readLong("""
+                    SELECT count(*) FROM public.course_article
+                    WHERE teacher_account_id = ? AND article_id = ?
+                      AND release_id = (SELECT h.release_id FROM public.course_release_head AS h
+                                        WHERE h.teacher_account_id = ? AND h.subject = ?)
+                    """, alphaId, articleId, alphaId, subject)).isZero();
+            assertThat(readLong("""
+                    SELECT r.version FROM public.course_release_head AS h
+                    JOIN public.course_release AS r ON r.id = h.release_id
+                    WHERE h.teacher_account_id = ? AND h.subject = ?
+                    """, alphaId, subject)).isEqualTo(2);
+            assertThat(readLong("SELECT count(*) FROM public.course_draft WHERE article_id = ?", articleId)).isZero();
+            assertThat(readLong("SELECT count(*) FROM public.article_answer_keys WHERE blog_id = ?", articleId))
+                    .isZero();
+            assertThat(readLong("SELECT count(*) FROM public.course_share WHERE article_id = ?", articleId)).isZero();
+            assertThat(readLong("SELECT count(*) FROM public.courseware_catalog WHERE article_id = ?", articleId))
+                    .isZero();
+            assertThat(readLong("""
+                    SELECT count(*) FROM public.student
+                    WHERE id = 2 AND permissions @> ARRAY[cast(? as integer)]
+                    """, articleId)).isZero();
+        } finally {
+            jdbc.update("DELETE FROM public.article_answer_keys WHERE blog_id = ?", articleId);
+            jdbc.update("DELETE FROM public.course_share WHERE article_id = ?", articleId);
+        }
+    }
+
+    private long createDraft(Cookie cookie, String csrf, String logicalPath, String title, String markdown)
+            throws Exception {
+        return objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "markdown", markdown,
+                                "logicalPath", logicalPath,
+                                "title", title))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("articleId").asLong();
+    }
+
+    @Test
+    void deletingDraftOnlyArticleRemovesDraftAndGrants() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+
+        long articleId = objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "markdown", "# 只有草稿\n\n正文\n",
+                                "logicalPath", "高中英语/语法课讲义/只有草稿.md",
+                                "title", "只有草稿"))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("articleId").asLong();
+
+        mockMvc.perform(delete("/api/v1/admin/courseware/articles/{articleId}", articleId)
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.wasPublished").value(false))
+                .andExpect(jsonPath("$.version").value(0));
+
+        mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")]", org.hamcrest.Matchers.empty()));
+
+        // 再删一次：已经不存在，返回 404
+        mockMvc.perform(delete("/api/v1/admin/courseware/articles/{articleId}", articleId)
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf))
+                .andExpect(status().isNotFound());
+    }
+
+    private long readLong(String sql, Object... args) {
+        Long value = jdbc.queryForObject(sql, Long.class, args);
+        return value == null ? 0L : value;
     }
 
     @Test

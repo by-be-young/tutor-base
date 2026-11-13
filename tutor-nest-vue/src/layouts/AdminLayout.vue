@@ -113,22 +113,15 @@ const scrolled = ref(false)
 const userMenuOpen = ref(false)
 const userMenuRef = ref(null)
 
-const navItems = computed(() => {
-  const items = [
-    { to: '/admin', label: '工作台', icon: 'fas fa-chart-line', exact: true },
-    { to: '/admin/learners', label: '学员', icon: 'fas fa-users' },
-    { to: '/admin/reviews', label: '批阅', icon: 'fas fa-pen-nib' },
-    { to: '/admin/answers', label: '答案', icon: 'fas fa-key' },
-    { to: '/admin/courseware', label: '课件', icon: 'fas fa-book-open' },
-    { to: '/admin/editor', label: '编辑', icon: 'fas fa-pen-to-square' },
-    { to: '/admin/sharing', label: '共享', icon: 'fas fa-share-nodes' }
-  ]
-  if (authStore.isSuperAdministrator) {
-    items.push({ to: '/admin/applications', label: '审核', icon: 'fas fa-user-check' })
-  }
-  items.push({ to: '/admin/me', label: '我的', icon: 'fas fa-user-gear' })
-  return items
-})
+// 导航只保留 5 项（答案/共享并入课件，注册审核并入学员，编辑不再是独立入口）。
+// 顺序固定：移动端底部导航的最中心一格必须是「工作台」。
+const navItems = computed(() => [
+  { to: '/admin/learners', label: '学员', icon: 'fas fa-users' },
+  { to: '/admin/reviews', label: '批阅', icon: 'fas fa-pen-nib' },
+  { to: '/admin', label: '工作台', icon: 'fas fa-chart-line', exact: true },
+  { to: '/admin/courseware', label: '课件', icon: 'fas fa-book-open' },
+  { to: '/admin/me', label: '我的', icon: 'fas fa-user-gear' }
+])
 
 const roleLabel = computed(() => authStore.isSuperAdministrator ? '超级管理员' : '管理员')
 

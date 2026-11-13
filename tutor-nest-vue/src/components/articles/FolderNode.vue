@@ -56,10 +56,12 @@
       <template v-for="child in node.children" :key="child.isFile ? `file-${child.blogId}` : `dir-${child.name}`">
         <FolderNode v-if="!child.isFile" :node="child" :depth="depth + 1" :status-map="statusMap" :accent="accent"
           :mode="mode" :expand-token="expandToken" :expand-to="expandTo" @file-click="$emit('file-click', $event)"
-          @file-move="$emit('file-move', $event)" @create-file="$emit('create-file', $event)"
+          @file-move="$emit('file-move', $event)" @file-delete="$emit('file-delete', $event)"
+          @create-file="$emit('create-file', $event)"
           @create-folder="$emit('create-folder', $event)" />
         <FileNode v-else :node="child" :depth="depth + 1" :status-map="statusMap" :accent="accent" :mode="mode"
-          @click="$emit('file-click', child.blogId)" @move="$emit('file-move', child.blogId)" />
+          @click="$emit('file-click', child.blogId)" @move="$emit('file-move', child.blogId)"
+          @delete="$emit('file-delete', child.blogId)" />
       </template>
     </div>
   </div>
@@ -103,7 +105,7 @@ const props = defineProps({
   }
 })
 
-defineEmits(['file-click', 'file-move', 'create-file', 'create-folder'])
+defineEmits(['file-click', 'file-move', 'file-delete', 'create-file', 'create-folder'])
 
 const ACCENTS = ['cyan', 'violet', 'amber', 'coral', 'pink', 'lime']
 const accentClass = computed(() => `accent--${ACCENTS.includes(props.accent) ? props.accent : 'violet'}`)

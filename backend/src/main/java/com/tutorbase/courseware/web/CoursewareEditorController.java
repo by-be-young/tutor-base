@@ -8,6 +8,7 @@ import com.tutorbase.courseware.draft.CoursewareDraftService;
 import com.tutorbase.courseware.folder.CoursewareFolderService;
 import com.tutorbase.courseware.layout.CoursewareLayoutService;
 import com.tutorbase.courseware.layout.CoursewareTemplateService;
+import com.tutorbase.courseware.publish.CoursewareArticleDeletionService;
 import com.tutorbase.courseware.publish.CoursewarePublisher;
 import com.tutorbase.courseware.query.CoursewareOverviewService;
 import com.tutorbase.courseware.transfer.CoursewareTransferService;
@@ -46,11 +47,12 @@ public class CoursewareEditorController {
     private final CoursewareWorkspaceService workspace;
     private final CoursewareOverviewService overview;
     private final CoursewareFolderService folders;
+    private final CoursewareArticleDeletionService deletions;
 
     CoursewareEditorController(CoursewareLayoutService layouts, CoursewareDraftService drafts,
             CoursewareTransferService transfers, CoursewareTemplateService templates,
             CoursewareWorkspaceService workspace, CoursewareOverviewService overview,
-            CoursewareFolderService folders) {
+            CoursewareFolderService folders, CoursewareArticleDeletionService deletions) {
         this.layouts = layouts;
         this.drafts = drafts;
         this.transfers = transfers;
@@ -58,6 +60,7 @@ public class CoursewareEditorController {
         this.workspace = workspace;
         this.overview = overview;
         this.folders = folders;
+        this.deletions = deletions;
     }
 
     @GetMapping("/workspace/manifest")
@@ -231,6 +234,16 @@ public class CoursewareEditorController {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(new MoveResponse(result.subject(), result.version(), result.oldPath(), result.newPath()));
+    }
+
+    @DeleteMapping("/articles/{articleId}")
+    ResponseEntity<DeleteArticleResponse> deleteArticle(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @PathVariable long articleId) {
+        CoursewareArticleDeletionService.Deleted deleted = deletions.delete(teacherId(principal), articleId);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(DeleteArticleResponse.from(deleted));
     }
 
     @GetMapping("/export")
@@ -434,6 +447,21 @@ public class CoursewareEditorController {
     }
 
     record FolderCreateResponse(List<String> created) {
+    }
+
+    record DeleteArticleResponse(
+            long articleId,
+            String subject,
+            String title,
+            String logicalPath,
+            boolean wasPublished,
+            int version,
+            Instant deletedAt) {
+
+        static DeleteArticleResponse from(CoursewareArticleDeletionService.Deleted deleted) {
+            return new DeleteArticleResponse(deleted.articleId(), deleted.subject(), deleted.title(),
+                    deleted.logicalPath(), deleted.wasPublished(), deleted.version(), deleted.deletedAt());
+        }
     }
 
     record DraftSummaryResponse(
