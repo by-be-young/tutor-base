@@ -90,6 +90,7 @@
 <script setup>
 import { computed, watch } from 'vue'
 import { useAdminStore } from '@/stores/adminStore'
+import { useArticleStore } from '@/stores/blogStore'
 import { useCoursewareStore } from '@/stores/coursewareStore'
 import { buildSubjectScope, subjectToggleChange } from '@/utils/adminSubjects'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -106,6 +107,7 @@ const props = defineProps({
 const emit = defineEmits(['permission-change', 'save-permissions'])
 
 const adminStore = useAdminStore()
+const articleStore = useArticleStore()
 const coursewareStore = useCoursewareStore()
 
 function subjectTone(subject) {
@@ -132,10 +134,11 @@ function reloadCourseware() {
     coursewareStore.loadWorkspace(props.blogData).catch(() => {})
 }
 
-watch(() => props.blogData, (articles) => {
-    if (!Array.isArray(articles) || articles.length === 0) return
-    coursewareStore.ensureWorkspace(articles).catch(() => {})
-}, { immediate: true })
+watch(() => [props.blogData, articleStore.loaded, articleStore.isLoading],
+    ([articles, loaded, loading]) => {
+        if (!loaded || loading) return
+        coursewareStore.ensureWorkspace(Array.isArray(articles) ? articles : []).catch(() => {})
+    }, { immediate: true })
 
 const visibleArticles = computed(() => {
     if (!coursewareStore.loaded) return []

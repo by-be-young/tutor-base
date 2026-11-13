@@ -192,6 +192,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { useArticleStore } from '@/stores/blogStore'
 import { useCoursewareStore } from '@/stores/coursewareStore'
 import { learningGateway } from '@/gateways/learningGateway'
 import { showToast } from '@/utils/toast'
@@ -210,6 +211,7 @@ const props = defineProps({
 })
 
 const router = useRouter()
+const articleStore = useArticleStore()
 const coursewareStore = useCoursewareStore()
 
 const currentSubject = ref('')
@@ -263,10 +265,11 @@ function reloadCourseware() {
     coursewareStore.loadWorkspace(props.blogData).catch(() => {})
 }
 
-watch(() => props.blogData, (articles) => {
-    if (!Array.isArray(articles) || articles.length === 0) return
-    coursewareStore.ensureWorkspace(articles).catch(() => {})
-}, { immediate: true })
+watch(() => [props.blogData, articleStore.loaded, articleStore.isLoading],
+    ([articles, loaded, loading]) => {
+        if (!loaded || loading) return
+        coursewareStore.ensureWorkspace(Array.isArray(articles) ? articles : []).catch(() => {})
+    }, { immediate: true })
 
 const grantedArticles = computed(() => props.blogData.filter(blog =>
     grantedIds.value.has(Number(blog.id))
