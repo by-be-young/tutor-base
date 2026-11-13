@@ -494,10 +494,12 @@ class CoursewareEditorHttpContractTest {
                         .content(objectMapper.writeValueAsString(Map.of("subject", subject))))
                 .andExpect(status().isOk());
 
+        long alphaId = jdbc.queryForObject(
+                "SELECT id FROM public.account WHERE username = 'alpha'", Long.class);
         jdbc.update("""
                 UPDATE public.course_article SET content_hash = replace(content_hash, 'sha256:', '')
-                WHERE teacher_account_id = 2 AND article_id = ?
-                """, articleId);
+                WHERE teacher_account_id = ? AND article_id = ?
+                """, alphaId, articleId);
 
         mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
                 .andExpect(status().isOk())
@@ -534,11 +536,13 @@ class CoursewareEditorHttpContractTest {
                         .content(objectMapper.writeValueAsString(Map.of("markdown", skeleton))))
                 .andReturn().getResponse().getContentAsString()).get("articleId").asLong();
 
+        long alphaId = jdbc.queryForObject(
+                "SELECT id FROM public.account WHERE username = 'alpha'", Long.class);
         jdbc.update("""
                 INSERT INTO public.courseware_catalog
                     (article_id, teacher_account_id, legacy_article_id, subject, title)
-                VALUES (?, 2, ?, ?, ?)
-                """, articleId, articleId, subject, "虚拟语气");
+                VALUES (?, ?, ?, ?, ?)
+                """, articleId, alphaId, articleId, subject, "虚拟语气");
 
         mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")
                         .cookie(cookie)
@@ -562,12 +566,12 @@ class CoursewareEditorHttpContractTest {
                 FROM public.course_release_head AS h
                 JOIN public.course_article AS ca
                   ON ca.release_id = h.release_id AND ca.teacher_account_id = h.teacher_account_id
-                WHERE h.teacher_account_id = 2 AND ca.article_id = ?
-                """, String.class, articleId)).isEqualTo("3 虚拟语气");
+                WHERE h.teacher_account_id = ? AND ca.article_id = ?
+                """, String.class, alphaId, articleId)).isEqualTo("3 虚拟语气");
         assertThat(jdbc.queryForObject("""
                 SELECT title FROM public.courseware_catalog
-                WHERE teacher_account_id = 2 AND article_id = ?
-                """, String.class, articleId)).isEqualTo("3 虚拟语气");
+                WHERE teacher_account_id = ? AND article_id = ?
+                """, String.class, alphaId, articleId)).isEqualTo("3 虚拟语气");
 
         mockMvc.perform(get("/api/v1/admin/courseware/drafts/{articleId}", articleId).cookie(cookie))
                 .andExpect(status().isOk())
