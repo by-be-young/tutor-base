@@ -397,19 +397,6 @@ public class CoursewareDraftService {
         return max == null ? FIRST_ARTICLE_ID : Math.max(max + 1, FIRST_ARTICLE_ID);
     }
 
-    private void log(long teacherId, long articleId, String action, String detailJson) {
-        jdbc.sql("""
-                INSERT INTO public.course_operation_log
-                    (actor_account_id, action, teacher_account_id, article_id, detail)
-                VALUES (:teacherId, :action, :teacherId, :articleId, cast(:detail as jsonb))
-                """)
-                .param("teacherId", teacherId)
-                .param("articleId", articleId)
-                .param("action", action)
-                .param("detail", detailJson == null ? "{}" : detailJson)
-                .update();
-    }
-
     private record PublishedRow(
             long articleId, Long legacyArticleId, String title, String series,
             String logicalPath, String contentHash, String answerHash, Integer questionCount) {

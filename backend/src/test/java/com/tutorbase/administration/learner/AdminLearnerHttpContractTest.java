@@ -140,7 +140,7 @@ class AdminLearnerHttpContractTest {
         String nextCursor = tools.jackson.databind.json.JsonMapper.builder().build()
                 .readTree(firstPage.getResponse().getContentAsString())
                 .get("nextCursor")
-                .asText();
+                .asString();
 
         mockMvc.perform(get("/api/v1/admin/learners")
                         .param("cursor", nextCursor)
@@ -503,7 +503,7 @@ class AdminLearnerHttpContractTest {
                 .andExpect(status().isOk())
                 .andReturn();
         Cookie cookie = existingCookie == null ? requireCookie(result) : existingCookie;
-        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asText();
+        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asString();
         return new BrowserSession(cookie, token);
     }
 

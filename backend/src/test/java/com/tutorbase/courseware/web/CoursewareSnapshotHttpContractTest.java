@@ -182,7 +182,7 @@ class CoursewareSnapshotHttpContractTest {
                 .andExpect(status().isOk())
                 .andReturn();
         Cookie cookie = existingCookie == null ? result.getResponse().getCookie("TUTOR_SESSION") : existingCookie;
-        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asText();
+        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asString();
         return new BrowserSession(cookie, token);
     }
 

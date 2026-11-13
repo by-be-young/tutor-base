@@ -328,7 +328,7 @@ class TestLearnerHttpContractTest {
         MvcResult result = mockMvc.perform(request).andExpect(status().isOk()).andReturn();
         Cookie cookie = existingCookie == null ? requireCookie(result) : existingCookie;
         String token = objectMapper.readTree(result.getResponse().getContentAsString())
-                .get("token").asText();
+                .get("token").asString();
         return new BrowserSession(cookie, token);
     }
 

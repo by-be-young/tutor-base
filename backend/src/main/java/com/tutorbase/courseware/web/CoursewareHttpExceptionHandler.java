@@ -32,7 +32,7 @@ class CoursewareHttpExceptionHandler {
 
     @ExceptionHandler(CoursewareFailures.QuotaExceeded.class)
     ProblemDetail quotaExceeded(CoursewareFailures.QuotaExceeded exception, HttpServletRequest request) {
-        return problem(HttpStatus.PAYLOAD_TOO_LARGE, "courseware_quota_exceeded", "存储配额不足",
+        return problem(HttpStatus.CONTENT_TOO_LARGE, "courseware_quota_exceeded", "存储配额不足",
                 exception.getMessage(), request);
     }
 

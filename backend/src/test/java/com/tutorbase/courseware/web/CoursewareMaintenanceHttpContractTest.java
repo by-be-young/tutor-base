@@ -147,7 +147,7 @@ class CoursewareMaintenanceHttpContractTest {
         huge.append("字".repeat(4000));
         huge.append("\n\n【@1】\n");
         publish(cookie, csrf, huge.toString())
-                .andExpect(status().isPayloadTooLarge())
+                .andExpect(status().is(413))
                 .andExpect(jsonPath("$.code").value("courseware_quota_exceeded"));
     }
 
@@ -217,7 +217,7 @@ class CoursewareMaintenanceHttpContractTest {
                 .andExpect(status().isOk())
                 .andReturn();
         Cookie cookie = existingCookie == null ? result.getResponse().getCookie("TUTOR_SESSION") : existingCookie;
-        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asText();
+        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asString();
         return new BrowserSession(cookie, token);
     }
 

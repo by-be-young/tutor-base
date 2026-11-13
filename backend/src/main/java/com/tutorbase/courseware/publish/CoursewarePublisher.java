@@ -192,7 +192,7 @@ public class CoursewarePublisher {
             if (article.legacyArticleId() == null) {
                 continue;
             }
-            jdbc.sql("""
+            int updated = jdbc.sql("""
                     UPDATE public.courseware_catalog
                     SET title = :title, updated_at = now()
                     WHERE teacher_account_id = :teacherId AND article_id = :articleId
@@ -201,6 +201,18 @@ public class CoursewarePublisher {
                     .param("teacherId", teacherAccountId)
                     .param("articleId", article.legacyArticleId())
                     .update();
+            if (updated == 0) {
+                // 换主键前写入的历史目录行没有归属，只按 article_id 补一次标题；
+                // 带上 teacher_account_id IS NULL，避免改到别的老师同名编号的行。
+                jdbc.sql("""
+                        UPDATE public.courseware_catalog
+                        SET title = :title, updated_at = now()
+                        WHERE teacher_account_id IS NULL AND article_id = :articleId
+                        """)
+                        .param("title", article.title())
+                        .param("articleId", article.legacyArticleId())
+                        .update();
+            }
         }
 
         jdbc.sql("""

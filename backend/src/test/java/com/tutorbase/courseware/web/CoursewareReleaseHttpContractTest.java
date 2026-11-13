@@ -128,7 +128,7 @@ class CoursewareReleaseHttpContractTest {
                 .andReturn();
 
         String manifestHash = objectMapper.readTree(published.getResponse().getContentAsString())
-                .get("contentHash").asText();
+                .get("contentHash").asString();
         assertThat(jdbc.queryForObject(
                 "SELECT count(*) FROM public.course_release WHERE teacher_account_id = ?",
                 Long.class, administratorAccountId)).isEqualTo(1L);
@@ -291,7 +291,7 @@ class CoursewareReleaseHttpContractTest {
                 .andExpect(status().isOk())
                 .andReturn();
         Cookie cookie = existingCookie == null ? requireCookie(result) : existingCookie;
-        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asText();
+        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asString();
         return new BrowserSession(cookie, token);
     }
 

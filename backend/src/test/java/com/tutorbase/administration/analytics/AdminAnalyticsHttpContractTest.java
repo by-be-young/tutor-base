@@ -56,7 +56,6 @@ class AdminAnalyticsHttpContractTest {
     private static final long ADMIN_ACCOUNT_ID = 500L;
     private static final long ADMIN2_ACCOUNT_ID = 501L;
     private static final long ALICE_ID = 2L;
-    private static final long BOB_ID = 5L;
     private static final long CHEMISTRY_ARTICLE_ONE = 101L;
     private static final long CHEMISTRY_ARTICLE_TWO = 102L;
     private static final long ENGLISH_ARTICLE = 201L;
@@ -438,7 +437,7 @@ class AdminAnalyticsHttpContractTest {
                 .andReturn();
         Cookie cookie = existingCookie == null ? requireCookie(result) : existingCookie;
         String token = objectMapper.readTree(result.getResponse().getContentAsString())
-                .get("token").asText();
+                .get("token").asString();
         return new BrowserSession(cookie, token);
     }
 

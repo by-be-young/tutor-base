@@ -2,7 +2,6 @@ package com.tutorbase.courseware.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -142,7 +141,7 @@ class CoursewareEditorHttpContractTest {
 
         String skeleton = objectMapper.readTree(mockMvc.perform(
                         get("/api/v1/admin/courseware/layouts/B/skeleton").param("title", "新练习").cookie(cookie))
-                .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+                .andReturn().getResponse().getContentAsString()).get("markdown").asString();
 
         MvcResult created = mockMvc.perform(post("/api/v1/admin/courseware/drafts")
                         .cookie(cookie)
@@ -201,7 +200,7 @@ class CoursewareEditorHttpContractTest {
 
         String skeleton = objectMapper.readTree(mockMvc.perform(
                         get("/api/v1/admin/courseware/layouts/B/skeleton").param("title", "口语练习").cookie(cookie))
-                .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+                .andReturn().getResponse().getContentAsString()).get("markdown").asString();
 
         long articleId = objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
                         .cookie(cookie)
@@ -241,7 +240,7 @@ class CoursewareEditorHttpContractTest {
 
         String skeleton = objectMapper.readTree(mockMvc.perform(
                         get("/api/v1/admin/courseware/layouts/B/skeleton").param("title", "口语练习").cookie(cookie))
-                .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+                .andReturn().getResponse().getContentAsString()).get("markdown").asString();
 
         long articleId = objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
                         .cookie(cookie)
@@ -289,7 +288,7 @@ class CoursewareEditorHttpContractTest {
         String csrf = csrf(cookie).csrfToken();
         String skeleton = objectMapper.readTree(mockMvc.perform(
                         get("/api/v1/admin/courseware/layouts/A/skeleton").param("title", "多科目").cookie(cookie))
-                .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+                .andReturn().getResponse().getContentAsString()).get("markdown").asString();
 
         // 先造两个科目的发布版本（course_release_head 每个科目一行）
         for (String subject : List.of("高中英语", "高中化学")) {
@@ -352,7 +351,7 @@ class CoursewareEditorHttpContractTest {
             String skeleton = objectMapper.readTree(mockMvc.perform(
                             get("/api/v1/admin/courseware/layouts/A/skeleton")
                                     .param("title", "口语训练-1").cookie(cookie))
-                    .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+                    .andReturn().getResponse().getContentAsString()).get("markdown").asString();
 
             mockMvc.perform(put("/api/v1/admin/courseware/drafts/{articleId}", legacyId)
                             .cookie(cookie)
@@ -480,7 +479,7 @@ class CoursewareEditorHttpContractTest {
         String skeleton = objectMapper.readTree(mockMvc.perform(
                         get("/api/v1/admin/courseware/layouts/A/skeleton")
                                 .param("title", "裸哈希课件").cookie(cookie))
-                .andReturn().getResponse().getContentAsString()).get("markdown").asText();
+                .andReturn().getResponse().getContentAsString()).get("markdown").asString();
         long articleId = objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
                         .cookie(cookie)
                         .header("X-CSRF-TOKEN", csrf)
@@ -525,7 +524,7 @@ class CoursewareEditorHttpContractTest {
         String skeleton = objectMapper.readTree(mockMvc.perform(
                         get("/api/v1/admin/courseware/layouts/A/skeleton")
                                 .param("title", "虚拟语气").cookie(cookie))
-                .andReturn().getResponse().getContentAsString()).get("markdown").asText()
+                .andReturn().getResponse().getContentAsString()).get("markdown").asString()
                 .replace("在这里写正文", "正文");
 
         long articleId = objectMapper.readTree(mockMvc.perform(post("/api/v1/admin/courseware/drafts")
@@ -920,7 +919,7 @@ class CoursewareEditorHttpContractTest {
                 .andExpect(status().isOk())
                 .andReturn();
         Cookie cookie = existingCookie == null ? result.getResponse().getCookie("TUTOR_SESSION") : existingCookie;
-        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asText();
+        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asString();
         return new BrowserSession(cookie, token);
     }
 

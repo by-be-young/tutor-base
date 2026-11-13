@@ -188,7 +188,7 @@ class CoursewareClaimHttpContractTest {
                 .andExpect(jsonPath("$.subject").value(CHEMISTRY))
                 .andExpect(jsonPath("$.claimedAt").isString())
                 .andReturn();
-        String firstClaimedAt = readTree(firstClaim).get("claimedAt").asText();
+        String firstClaimedAt = readTree(firstClaim).get("claimedAt").asString();
 
         mockMvc.perform(put(subjectClaimPath(CHEMISTRY))
                         .cookie(adminCookie)
@@ -280,7 +280,7 @@ class CoursewareClaimHttpContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.articleId").value(ENGLISH_ARTICLE))
                 .andReturn();
-        String firstClaimedAt = readTree(firstClaim).get("claimedAt").asText();
+        String firstClaimedAt = readTree(firstClaim).get("claimedAt").asString();
         mockMvc.perform(put(articleClaimPath(ENGLISH_ARTICLE))
                         .cookie(adminCookie)
                         .header("X-CSRF-TOKEN", admin.csrfToken()))
@@ -331,16 +331,16 @@ class CoursewareClaimHttpContractTest {
         tools.jackson.databind.JsonNode chemistryItem = findItem(catalog, CHEMISTRY_ARTICLE_ONE);
         assertThat(chemistryItem.get("claimedBy").size()).isEqualTo(2);
         assertThat(chemistryItem.get("claimedBy").get(0).get("accountId").asLong()).isEqualTo(500L);
-        assertThat(chemistryItem.get("claimedBy").get(0).get("username").asText()).isEqualTo("admin");
+        assertThat(chemistryItem.get("claimedBy").get(0).get("username").asString()).isEqualTo("admin");
         assertThat(chemistryItem.get("claimedBy").get(1).get("accountId").asLong()).isEqualTo(501L);
-        assertThat(chemistryItem.get("claimedBy").get(1).get("username").asText()).isEqualTo("admin2");
+        assertThat(chemistryItem.get("claimedBy").get(1).get("username").asString()).isEqualTo("admin2");
         assertThat(chemistryItem.get("coveredBySubjectClaim").asBoolean()).isTrue();
 
         tools.jackson.databind.JsonNode chemistrySubject = findSubject(catalog, CHEMISTRY);
         assertThat(chemistrySubject.get("mine").asBoolean()).isTrue();
         assertThat(chemistrySubject.get("total").asLong()).isEqualTo(2);
         List<String> claimedByOthers = new ArrayList<>();
-        chemistrySubject.get("claimedByOthers").forEach(node -> claimedByOthers.add(node.asText()));
+        chemistrySubject.get("claimedByOthers").forEach(node -> claimedByOthers.add(node.asString()));
         assertThat(claimedByOthers).containsExactly("admin2");
 
         mockMvc.perform(get("/api/v1/admin/courseware-claims").cookie(adminTwoCookie))
@@ -646,7 +646,7 @@ class CoursewareClaimHttpContractTest {
                 .andExpect(jsonPath("$.articleId").value(CHEMISTRY_ARTICLE_ONE))
                 .andExpect(jsonPath("$.claimedAt").isString())
                 .andReturn();
-        String firstClaimedAt = readTree(firstClaim).get("claimedAt").asText();
+        String firstClaimedAt = readTree(firstClaim).get("claimedAt").asString();
         mockMvc.perform(put(articleClaimPath(CHEMISTRY_ARTICLE_ONE))
                         .cookie(adminCookie)
                         .header("X-CSRF-TOKEN", admin.csrfToken()))
@@ -909,7 +909,7 @@ class CoursewareClaimHttpContractTest {
     private tools.jackson.databind.JsonNode findSubject(
             tools.jackson.databind.JsonNode catalog, String subject) {
         for (tools.jackson.databind.JsonNode item : catalog.get("subjects")) {
-            if (subject.equals(item.get("subject").asText())) {
+            if (subject.equals(item.get("subject").asString())) {
                 return item;
             }
         }
@@ -935,7 +935,7 @@ class CoursewareClaimHttpContractTest {
                 .andExpect(status().isOk())
                 .andReturn();
         Cookie cookie = existingCookie == null ? requireCookie(result) : existingCookie;
-        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asText();
+        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asString();
         return new BrowserSession(cookie, token);
     }
 

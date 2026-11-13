@@ -322,7 +322,6 @@ class LearningService {
                     revealAllAnswers ? key.autoGrade() : null, null));
         }
         for (Submission submission : submissions) {
-            QuestionState state = states.get(submission.questionId());
             AnswerKey key = keys.stream()
                     .filter(candidate -> candidate.questionId().equals(submission.questionId()))
                     .findFirst().orElse(null);

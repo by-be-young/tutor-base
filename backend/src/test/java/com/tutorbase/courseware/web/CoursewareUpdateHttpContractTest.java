@@ -137,8 +137,8 @@ class CoursewareUpdateHttpContractTest {
                 .andExpect(jsonPath("$.localModified").value(false))
                 .andReturn();
         String sourceHash = objectMapper.readTree(detail.getResponse().getContentAsString())
-                .get("sourceHash").asText();
-        String diff = objectMapper.readTree(detail.getResponse().getContentAsString()).get("diff").asText();
+                .get("sourceHash").asString();
+        String diff = objectMapper.readTree(detail.getResponse().getContentAsString()).get("diff").asString();
         assertThat(diff).contains("-【题干1】旧版题干").contains("+【题干1】新版题干");
 
         mockMvc.perform(post("/api/v1/admin/courseware/copies/{copyId}/updates/apply", copyId)
@@ -261,7 +261,7 @@ class CoursewareUpdateHttpContractTest {
                 .andExpect(status().isOk())
                 .andReturn();
         Cookie cookie = existingCookie == null ? result.getResponse().getCookie("TUTOR_SESSION") : existingCookie;
-        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asText();
+        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asString();
         return new BrowserSession(cookie, token);
     }
 

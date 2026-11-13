@@ -5,7 +5,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import com.tutorbase.courseware.CoursewareFailures;
 import org.springframework.jdbc.core.simple.JdbcClient;
