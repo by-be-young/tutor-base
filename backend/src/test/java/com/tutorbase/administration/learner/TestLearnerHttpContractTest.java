@@ -91,6 +91,9 @@ class TestLearnerHttpContractTest {
         jdbc.update("DELETE FROM public.card_collection");
         jdbc.update("DELETE FROM public.admin_courseware_claim");
         jdbc.update("DELETE FROM public.admin_subject_claim");
+        jdbc.update("DELETE FROM public.course_article");
+        jdbc.update("DELETE FROM public.course_release_head");
+        jdbc.update("DELETE FROM public.course_release");
         jdbc.update("DELETE FROM public.courseware_catalog");
         jdbc.update("DELETE FROM public.account_session");
         jdbc.update("DELETE FROM public.account_activation");
@@ -163,6 +166,7 @@ class TestLearnerHttpContractTest {
 
     @Test
     void givenSpecialTestLearnerWhenReadingContentGrantsThenReturnsAllCatalogArticles() throws Exception {
+        publishCourse(ADMIN_ACCOUNT_ID, 101, 102);
         Cookie testerCookie = login("tester", "Tester-password-2026");
 
         mockMvc.perform(get("/api/v1/me/content-grants").cookie(testerCookie))
@@ -318,6 +322,28 @@ class TestLearnerHttpContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.articleIds.length()").value(3))
                 .andExpect(jsonPath("$.articleIds[2]").value(103));
+    }
+
+    private void publishCourse(long teacherAccountId, long... articleIds) {
+        long releaseId = jdbc.queryForObject("""
+                INSERT INTO public.course_release
+                    (teacher_account_id, subject, version, manifest_path, manifest_hash)
+                VALUES (?, '高中化学', 1, 'manifest.json', 'manifest-hash')
+                RETURNING id
+                """, Long.class, teacherAccountId);
+        for (long articleId : articleIds) {
+            jdbc.update("""
+                    INSERT INTO public.course_article
+                        (release_id, teacher_account_id, article_id, legacy_article_id, subject, title, series,
+                         logical_path, content_hash, answer_hash, question_count)
+                    VALUES (?, ?, ?, ?, '高中化学', '发布文章', '课后练习', ?, 'content-hash', 'answer-hash', 0)
+                    """, releaseId, teacherAccountId, articleId, articleId,
+                    "高中化学/课后练习/文章-" + articleId);
+        }
+        jdbc.update("""
+                INSERT INTO public.course_release_head (teacher_account_id, subject, release_id)
+                VALUES (?, '高中化学', ?)
+                """, teacherAccountId, releaseId);
     }
 
     private BrowserSession csrf(Cookie existingCookie) throws Exception {
