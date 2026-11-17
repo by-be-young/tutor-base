@@ -948,8 +948,9 @@ onMounted(async () => {
 }
 
 .editor__field--picker {
+  width: 320px;
+  max-width: 100%;
   min-width: 260px;
-  flex: 0 1 320px;
 }
 
 .editor__toolbar,
