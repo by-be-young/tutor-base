@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.tutorbase.courseware.CoursewareFailures;
 import com.tutorbase.courseware.draft.CoursewareDraftService;
+import com.tutorbase.courseware.edit.CoursewareArticleEditingService;
 import com.tutorbase.courseware.folder.CoursewareFolderService;
 import com.tutorbase.courseware.layout.CoursewareLayoutService;
 import com.tutorbase.courseware.layout.CoursewareTemplateService;
@@ -36,7 +37,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-/** 在线编辑器：布局注册表、草稿、从草稿发布、导出导入。 */
+/** 在线编辑器：布局注册表、篇目直读直存、导出导入与课件维护。 */
 @RestController
 @RequestMapping("/api/v1/admin/courseware")
 public class CoursewareEditorController {
@@ -50,12 +51,13 @@ public class CoursewareEditorController {
     private final CoursewareFolderService folders;
     private final CoursewareArticleDeletionService deletions;
     private final CoursewareMediaService media;
+    private final CoursewareArticleEditingService editing;
 
     CoursewareEditorController(CoursewareLayoutService layouts, CoursewareDraftService drafts,
             CoursewareTransferService transfers, CoursewareTemplateService templates,
             CoursewareWorkspaceService workspace, CoursewareOverviewService overview,
             CoursewareFolderService folders, CoursewareArticleDeletionService deletions,
-            CoursewareMediaService media) {
+            CoursewareMediaService media, CoursewareArticleEditingService editing) {
         this.layouts = layouts;
         this.drafts = drafts;
         this.transfers = transfers;
@@ -65,6 +67,7 @@ public class CoursewareEditorController {
         this.folders = folders;
         this.deletions = deletions;
         this.media = media;
+        this.editing = editing;
     }
 
     @GetMapping("/workspace/manifest")
@@ -226,6 +229,41 @@ public class CoursewareEditorController {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(ReleaseResponse.from(published));
+    }
+
+    @PostMapping("/articles")
+    ResponseEntity<ArticleCreatedResponse> createArticle(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @Valid @RequestBody CreateArticleRequest request) {
+        CoursewareArticleEditingService.Created created = editing.create(
+                teacherId(principal), request.subject(), request.title(),
+                request.logicalPath(), request.markdown());
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new ArticleCreatedResponse(created.articleId(), created.subject(), created.version()));
+    }
+
+    @GetMapping("/articles/{articleId}")
+    ResponseEntity<ArticleContentResponse> readArticle(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @PathVariable long articleId) {
+        CoursewareArticleEditingService.ArticleContent content =
+                editing.read(teacherId(principal), articleId);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(ArticleContentResponse.from(content));
+    }
+
+    @PutMapping("/articles/{articleId}")
+    ResponseEntity<ArticleSavedResponse> saveArticle(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @PathVariable long articleId,
+            @Valid @RequestBody SaveArticleRequest request) {
+        CoursewareArticleEditingService.SaveResult saved =
+                editing.update(teacherId(principal), articleId, request.markdown());
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new ArticleSavedResponse(saved.articleId(), saved.subject(), saved.version()));
     }
 
     @PostMapping("/articles/{articleId}/move")
@@ -467,6 +505,37 @@ public class CoursewareEditorController {
     }
 
     record DraftResponse(long articleId, String markdown, boolean hasDraft) {
+    }
+
+    record CreateArticleRequest(
+            @NotBlank @Size(max = 200) String subject,
+            @Size(max = 200) String title,
+            @NotBlank @Size(max = 500) String logicalPath,
+            @NotBlank @Size(max = 1_048_576) String markdown) {
+    }
+
+    record SaveArticleRequest(@NotBlank @Size(max = 1_048_576) String markdown) {
+    }
+
+    record ArticleContentResponse(
+            long articleId,
+            String subject,
+            String title,
+            String series,
+            String logicalPath,
+            String markdown,
+            boolean published) {
+
+        static ArticleContentResponse from(CoursewareArticleEditingService.ArticleContent content) {
+            return new ArticleContentResponse(content.articleId(), content.subject(), content.title(),
+                    content.series(), content.logicalPath(), content.markdown(), content.published());
+        }
+    }
+
+    record ArticleSavedResponse(long articleId, String subject, int version) {
+    }
+
+    record ArticleCreatedResponse(long articleId, String subject, int version) {
     }
 
     record CreateFolderRequest(@NotBlank @Size(max = 500) String path) {

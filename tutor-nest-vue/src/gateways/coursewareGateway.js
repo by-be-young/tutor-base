@@ -60,12 +60,11 @@ export const coursewareGateway = {
     return Array.isArray(response) ? response.map(normalizeCopyResult) : []
   },
 
-  /** 「我的课件」概览：科目、版本、草稿与待处理数量。 */
+  /** 「我的课件」概览：科目、版本与待处理数量。 */
   async getOverview() {
     const response = await backendClient.request('/admin/courseware/overview')
     return {
       subjects: Array.isArray(response?.subjects) ? response.subjects : [],
-      pendingDrafts: Number(response?.pendingDrafts) || 0,
       acquiredCount: Number(response?.acquiredCount) || 0,
       pendingUpdates: Number(response?.pendingUpdates) || 0,
       unreadNotifications: Number(response?.unreadNotifications) || 0
@@ -124,15 +123,31 @@ export const coursewareGateway = {
     return String(response?.markdown || '')
   },
 
-  async listDrafts() {
-    const response = await backendClient.request('/admin/courseware/drafts')
-    return Array.isArray(response) ? response : []
-  },
-
-  // 「我的课件」全量清单（已发布 + 草稿），编辑页选择器与「课件」页目录共用
+  /** 「我的课件」全量清单（只含当前发布版本），课件页目录与预览共用。 */
   async listArticles() {
     const response = await backendClient.request('/admin/courseware/articles')
     return Array.isArray(response) ? response : []
+  },
+
+  /** 读取当前发布版本的一篇课件（编辑页唯一入口）。 */
+  getArticle(articleId) {
+    return backendClient.request(`/admin/courseware/articles/${encodeURIComponent(articleId)}`)
+  },
+
+  /** 保存并立即更新线上版本（不走草稿）。 */
+  saveArticle(articleId, markdown) {
+    return backendClient.request(`/admin/courseware/articles/${encodeURIComponent(articleId)}`, {
+      method: 'PUT',
+      body: { markdown }
+    })
+  },
+
+  /** 从课件页新建一篇并立即发布（不走草稿）。 */
+  createArticle({ subject, title, logicalPath, markdown }) {
+    return backendClient.request('/admin/courseware/articles', {
+      method: 'POST',
+      body: { subject, title, logicalPath, markdown }
+    })
   },
 
   /** 我登记过的空目录（`学科/子目录`），用于让没有课件的目录也出现在树里。 */
@@ -160,39 +175,6 @@ export const coursewareGateway = {
     })
   },
 
-  async getDraft(articleId) {
-    return backendClient.request(`/admin/courseware/drafts/${encodeURIComponent(articleId)}`)
-  },
-
-  async saveDraft(articleId, markdown, legacyArticleId, { logicalPath, title } = {}) {
-    const body = { markdown }
-    if (legacyArticleId != null) body.legacyArticleId = legacyArticleId
-    // 目录树里选定的落点：新建时带上，编辑时留空表示沿用原路径
-    if (logicalPath) body.logicalPath = logicalPath
-    if (title) body.title = title
-    if (articleId == null) {
-      return backendClient.request('/admin/courseware/drafts', { method: 'POST', body })
-    }
-    return backendClient.request(`/admin/courseware/drafts/${encodeURIComponent(articleId)}`, {
-      method: 'PUT',
-      body
-    })
-  },
-
-  deleteDraft(articleId) {
-    return backendClient.request(`/admin/courseware/drafts/${encodeURIComponent(articleId)}`, {
-      method: 'DELETE'
-    })
-  },
-
-  async precheckDraft(markdown) {
-    const response = await backendClient.request('/admin/courseware/drafts/precheck', {
-      method: 'POST',
-      body: { markdown }
-    })
-    return { ok: Boolean(response?.ok), errors: Array.isArray(response?.errors) ? response.errors : [] }
-  },
-
   /** 图片文件名是否已在桶里；重名时返回 suggested（第一个可用后缀）。 */
   async checkMedia(fileName) {
     const response = await backendClient.request(
@@ -213,32 +195,6 @@ export const coursewareGateway = {
     form.append('fileName', fileName)
     return backendClient.requestForm('/admin/courseware/media', form)
   },
-
-  publishDrafts(subject, expectVersion) {
-    const body = { subject }
-    if (expectVersion != null) body.expectVersion = expectVersion
-    return backendClient.request('/admin/courseware/drafts/publish', { method: 'POST', body })
-  },
-
-  /** 导出 zip：返回 blob 供前端触发下载。 */
-  exportZip({ subject, articleIds } = {}) {
-    const parameters = new URLSearchParams()
-    if (subject) parameters.set('subject', subject)
-    for (const id of articleIds || []) parameters.append('articleIds', String(id))
-    const query = parameters.toString() ? `?${parameters}` : ''
-    return backendClient.requestBlob(`/admin/courseware/export${query}`)
-  },
-
-  /** 导入 zip（multipart，结果先落草稿，由老师确认后发布）。 */
-  importZip(file, overwrite = false) {
-    const form = new FormData()
-    form.append('file', file)
-    return backendClient.requestForm(
-      `/admin/courseware/import?overwrite=${overwrite ? 'true' : 'false'}`,
-      form
-    )
-  },
-
 
   async listCopies() {
     const response = await backendClient.request('/admin/courseware/copies')

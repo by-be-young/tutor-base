@@ -117,10 +117,10 @@ public class CoursewareOverviewService {
     }
 
     /**
-     * 「我的课件」清单：已发布篇目（当前生效版本）+ 尚未发布的草稿。
+     * 「我的课件」清单：只返回当前发布版本的篇目。
      *
-     * <p>在线编辑器与「课件」页的科目目录都以它为数据源；只看 course_draft 会因为
-     * 通过 CLI / 导入发布、没有草稿行的课件完全选不到。
+     * <p>课件页目录与编辑页都以它为数据源。草稿链路已下线，保存即发布，因此
+     * 这里不再合并 course_draft 行。
      */
     @Transactional(readOnly = true)
     public List<ArticleSummary> articles(long teacherId) {
@@ -129,19 +129,13 @@ public class CoursewareOverviewService {
         java.util.Set<String> storedHashes = storage.listBlobs(teacherId).keySet().stream()
                 .map(com.tutorbase.courseware.storage.CoursewareHashes::normalize)
                 .collect(java.util.stream.Collectors.toSet());
-        List<ArticleSummary> published = jdbc.sql("""
+        return jdbc.sql("""
                 SELECT h.subject, ca.article_id, ca.legacy_article_id, ca.title, ca.series,
-                       ca.logical_path, ca.content_hash, ca.question_count,
-                       d.markdown IS NOT NULL AS has_draft,
-                       COALESCE(length(d.markdown), 0) AS size,
-                       d.updated_at AS draft_updated_at
+                       ca.logical_path, ca.content_hash, ca.question_count
                 FROM public.course_release_head AS h
                 JOIN public.course_article AS ca
                   ON ca.release_id = h.release_id
                  AND ca.teacher_account_id = h.teacher_account_id
-                LEFT JOIN public.course_draft AS d
-                  ON d.teacher_account_id = h.teacher_account_id
-                 AND d.article_id = ca.article_id
                 WHERE h.teacher_account_id = :teacherId
                 ORDER BY h.subject, ca.logical_path
                 """)
@@ -154,83 +148,17 @@ public class CoursewareOverviewService {
                         rs.getString("series"),
                         rs.getString("logical_path"),
                         true,
-                        rs.getBoolean("has_draft"),
-                        rs.getInt("size"),
+                        false,
+                        0,
                         rs.getInt("question_count"),
-                        toInstant(rs, "draft_updated_at"),
+                        null,
                         !storedHashes.contains(
                                 com.tutorbase.courseware.storage.CoursewareHashes.normalize(
                                         rs.getString("content_hash")))))
                 .list();
-
-        // 草稿之后列出：只要正文已经托管在数据库（发布版本或草稿）就可见，
-        // 浏览器不再读取任何静态课件目录。
-        List<ArticleSummary> drafts = jdbc.sql("""
-                SELECT d.article_id, d.markdown, d.updated_at, d.title, d.logical_path
-                FROM public.course_draft AS d
-                WHERE d.teacher_account_id = :teacherId
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM public.course_release_head AS h
-                      JOIN public.course_article AS ca
-                        ON ca.release_id = h.release_id
-                       AND ca.teacher_account_id = h.teacher_account_id
-                      WHERE h.teacher_account_id = d.teacher_account_id
-                        AND ca.article_id = d.article_id
-                  )
-                ORDER BY d.updated_at DESC
-                """)
-                .param("teacherId", teacherId)
-                .query((rs, rowNum) -> {
-                    String markdown = rs.getString("markdown");
-                    // 目录树里新建的草稿带用户选定的路径/名称；首段就是学科，用于分组。
-                    String logicalPath = rs.getString("logical_path");
-                    String subject = logicalPath == null || !logicalPath.contains("/")
-                            ? null
-                            : logicalPath.substring(0, logicalPath.indexOf('/'));
-                    String title = rs.getString("title");
-                    if (title == null || title.isBlank()) {
-                        title = firstHeading(markdown);
-                    }
-                    return new ArticleSummary(
-                            rs.getLong("article_id"),
-                            null,
-                            title,
-                            subject,
-                            null,
-                            logicalPath,
-                            false,
-                            true,
-                            markdown.length(),
-                            com.tutorbase.courseware.publish.CoursewareValidator.answerIds(markdown).size(),
-                            toInstant(rs, "updated_at"),
-                            false);
-                })
-                .list();
-
-        List<ArticleSummary> merged = new java.util.ArrayList<>(published);
-        merged.addAll(drafts);
-        return merged;
     }
 
-    private static Instant toInstant(java.sql.ResultSet resultSet, String column) throws java.sql.SQLException {
-        java.time.OffsetDateTime value = resultSet.getObject(column, java.time.OffsetDateTime.class);
-        return value == null ? null : value.toInstant();
-    }
-
-    /** 草稿没有 frontmatter 元数据时，用正文第一个一级标题当标题。 */
-    private static String firstHeading(String markdown) {        if (markdown == null) {
-            return "";
-        }
-        for (String line : markdown.split("\n")) {
-            if (line.startsWith("# ")) {
-                return line.substring(2).trim();
-            }
-        }
-        return "";
-    }
-
-    /** 编辑器选择器与「课件」页的一行。 */
+    /** 课件页的一行。 */
     public record ArticleSummary(
             long articleId,
             Long legacyArticleId,

@@ -147,15 +147,29 @@ test('预览走 text 接口，改名走 PATCH', async () => {
   )
 })
 
-test('编辑器草稿与布局接口', async () => {
+test('编辑器直读、直存与直建接口', async () => {
   await withFetch(
-    (url) => {
+    (url, options) => {
       if (url.includes('/csrf')) return jsonResponse(200, { token: 'test-token' })
       if (url.includes('/layouts/B/skeleton')) return jsonResponse(200, { markdown: '---\ntitle: x\n---\n【@1】' })
       if (url.includes('/layouts')) {
         return jsonResponse(200, [{ layoutId: 'A', name: '讲义式', component: 'LayoutLecture', allowedBlocks: [], version: 1 }])
       }
-      if (url.includes('/drafts/precheck')) return jsonResponse(200, { ok: false, errors: ['布局 Z 未注册或已停用'] })
+      if (/\/courseware\/articles\/1000$/.test(url)) {
+        if (options.method === 'PUT') return jsonResponse(200, { articleId: 1000, subject: '高中英语', version: 4 })
+        return jsonResponse(200, {
+          articleId: 1000,
+          subject: '高中英语',
+          title: '口语训练-1',
+          series: '口语课讲义',
+          logicalPath: '高中英语/口语课讲义/口语训练-1.md',
+          markdown: '正文',
+          published: true
+        })
+      }
+      if (/\/courseware\/articles$/.test(url) && options.method === 'POST') {
+        return jsonResponse(200, { articleId: 1001, subject: '高中英语', version: 4 })
+      }
       if (url.includes('/courseware/articles')) {
         return jsonResponse(200, [{
           articleId: 1000,
@@ -170,10 +184,6 @@ test('编辑器草稿与布局接口', async () => {
           updatedAt: null
         }])
       }
-      if (url.includes('/drafts/publish')) {
-        return jsonResponse(200, { teacherId: 7, subject: '高中化学', version: 3, contentHash: 'sha256:x', articleCount: 2, publishedAt: '2026-10-31T00:00:00Z' })
-      }
-      if (url.includes('/drafts')) return jsonResponse(200, { articleId: 1000, markdown: '正文', hasDraft: true })
       return jsonResponse(200, [])
     },
     async (calls) => {
@@ -183,30 +193,38 @@ test('编辑器草稿与布局接口', async () => {
       const skeleton = await coursewareGateway.getLayoutSkeleton('B', '练习3')
       assert.match(skeleton, /【@1】/)
 
-      const draft = await coursewareGateway.saveDraft(null, '正文')
-      assert.equal(draft.articleId, 1000)
-      const createPost = calls.find(call => call.options.method === 'POST' && /\/drafts$/.test(call.url))
-      assert.deepEqual(JSON.parse(createPost.options.body), { markdown: '正文' })
+      const article = await coursewareGateway.getArticle(1000)
+      assert.equal(article.markdown, '正文')
+      assert.match(calls.find(call => call.url.endsWith('/articles/1000')).url, /\/admin\/courseware\/articles\/1000$/)
 
-      const put = await coursewareGateway.saveDraft(1000, '正文2')
-      assert.equal(put.hasDraft, true)
-      const putCall = calls.find(call => call.options.method === 'PUT')
-      assert.match(putCall.url, /\/drafts\/1000$/)
+      const saved = await coursewareGateway.saveArticle(1000, '正文2')
+      assert.equal(saved.version, 4)
+      const putCall = calls.find(call => call.options.method === 'PUT' && call.url.endsWith('/articles/1000'))
+      assert.deepEqual(JSON.parse(putCall.options.body), { markdown: '正文2' })
 
-      const precheck = await coursewareGateway.precheckDraft('x')
-      assert.equal(precheck.ok, false)
-      assert.equal(precheck.errors.length, 1)
+      const created = await coursewareGateway.createArticle({
+        subject: '高中英语',
+        title: '新建',
+        logicalPath: '高中英语/新建.md',
+        markdown: '正文'
+      })
+      assert.equal(created.articleId, 1001)
+      const createPost = calls.find(call =>
+        call.options.method === 'POST' && /\/admin\/courseware\/articles$/.test(call.url))
+      assert.deepEqual(JSON.parse(createPost.options.body), {
+        subject: '高中英语',
+        title: '新建',
+        logicalPath: '高中英语/新建.md',
+        markdown: '正文'
+      })
 
-      const published = await coursewareGateway.publishDrafts('高中化学')
-      assert.equal(published.version, 3)
-
-      // 选择器数据源：已发布但没有草稿行的课件也必须出现在清单里
       const articles = await coursewareGateway.listArticles()
       assert.equal(articles.length, 1)
       assert.equal(articles[0].articleId, 1000)
       assert.equal(articles[0].published, true)
-      assert.equal(articles[0].hasDraft, false)
-      assert.match(calls.find(call => call.url.includes('/courseware/articles')).url, /\/admin\/courseware\/articles$/)
+      assert.match(calls.find(call =>
+        call.options.method === 'GET' && /\/admin\/courseware\/articles$/.test(call.url)).url,
+        /\/admin\/courseware\/articles$/)
     }
   )
 })
@@ -238,26 +256,6 @@ test('模板库接口', async () => {
   )
 })
 
-test('导入 zip 用 multipart 且不带 JSON Content-Type', async () => {
-  await withFetch(
-    (url) => {
-      if (url.includes('/csrf')) return jsonResponse(200, { token: 'test-token' })
-      return jsonResponse(200, { imported: 2, overwritten: 0, skipped: 1, items: [] })
-    },
-    async (calls) => {
-      const form = new FormData()
-      form.append('file', new Blob(['zip']), 'a.zip')
-      const report = await coursewareGateway.importZip(form.get('file'), true)
-      assert.equal(report.imported, 2)
-      const upload = calls.find(call => call.url.includes('/import'))
-      assert.equal(upload.options.method, 'POST')
-      assert.match(upload.url, /overwrite=true$/)
-      assert.equal(upload.options.headers['Content-Type'], undefined)
-      assert.equal(upload.options.headers['X-CSRF-TOKEN'], 'test-token')
-    }
-  )
-})
-
 test('课件概览接口', async () => {
   await withFetch(
     () => jsonResponse(200, {
@@ -270,7 +268,7 @@ test('课件概览接口', async () => {
     async (calls) => {
       const overview = await coursewareGateway.getOverview()
       assert.equal(overview.subjects.length, 1)
-      assert.equal(overview.pendingDrafts, 1)
+      assert.equal(overview.acquiredCount, 2)
       assert.equal(overview.unreadNotifications, 4)
       assert.match(calls[0].url, /\/admin\/courseware\/overview$/)
     }

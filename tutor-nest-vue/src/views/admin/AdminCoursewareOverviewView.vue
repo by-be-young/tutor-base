@@ -17,10 +17,6 @@
           <span class="stat-label">科目</span>
           <span class="stat-value">{{ subjects.length }}</span>
         </div>
-        <div class="stat-card stat-card--amber">
-          <span class="stat-label">待发布草稿</span>
-          <span class="stat-value">{{ data.pendingDrafts }}</span>
-        </div>
         <div class="stat-card stat-card--cyan">
           <span class="stat-label">获取的课件</span>
           <span class="stat-value">{{ data.acquiredCount }}</span>
@@ -91,7 +87,6 @@
               <p class="overview__subject-meta">
                 <span v-if="item.version" class="chip chip--lime mono">v{{ item.version }}</span>
                 <span v-else class="chip chip--amber mono">未发布</span>
-                <span class="overview__subject-stat">草稿 {{ item.draftCount }}</span>
                 <span class="overview__subject-stat">被获取 {{ item.copiedCount }}</span>
                 <span class="overview__subject-stat">分享 {{ item.shareCount }}</span>
                 <span v-if="item.publishedAt" class="overview__subject-stat">
@@ -158,8 +153,7 @@
         </p>
         <ul class="delete-dialog__list">
           <li>从当前发布版本移除（不可撤销，其它老师手里的副本也会失效）</li>
-          <li>删除它的草稿、答案设置、单篇共享</li>
-          <li>删除学员权限里的这篇授权</li>
+          <li>删除答案设置、单篇共享与学员授权</li>
         </ul>
         <div class="move-dialog__actions">
           <button type="button" class="btn btn--ghost btn--sm" :disabled="deleteDialog.busy" @click="closeDeleteDialog">
@@ -227,7 +221,6 @@ const allSubjects = computed(() => {
 const loading = ref(true)
 const data = reactive({
   subjects: [],
-  pendingDrafts: 0,
   acquiredCount: 0,
   pendingUpdates: 0,
   unreadNotifications: 0
@@ -241,7 +234,7 @@ const usage = reactive({
   level: 'ok'
 })
 
-// 科目目录：数据来自「我的课件」全量清单，含已发布篇目与草稿（正文均由数据库托管）
+// 科目目录：数据来自「我的课件」当前发布版本清单（正文由数据库托管）
 const articles = ref([])
 /** 已登记的空目录（`学科/子目录`）：课件目录树由路径推导，空目录靠这份登记留住。 */
 const folders = ref([])
@@ -309,11 +302,16 @@ async function createArticleIn(folderPath) {
   const logicalPath = `${directory}/${name}.md`
   const markdown = `---\ntitle: ${name}\ndefaultLayout: A\n---\n\n<!-- @layout:A -->\n# ${name}\n\n在这里写正文\n`
   try {
-    const saved = await coursewareGateway.saveDraft(null, markdown, null, { logicalPath, title: name })
-    showToast(`已创建空白课件「${name}」`, 'success')
+    const created = await coursewareGateway.createArticle({
+      subject: directory.split('/')[0],
+      title: name,
+      logicalPath,
+      markdown
+    })
+    showToast(`已创建并发布「${name}」`, 'success')
     router.push({
       path: '/admin/editor',
-      query: { subject: directory.split('/')[0], articleId: saved.articleId }
+      query: { articleId: created.articleId }
     })
   } catch (error) {
     showToast(error?.message || '新建课件失败，请稍后重试', 'error')
@@ -450,7 +448,7 @@ function treeOf(subjectValue) {
   return buildCoursewareTree(subjectValue, articlesOf(subjectValue), foldersOf(subjectValue))
 }
 
-/** 概览给的科目 + 只在「我的课件」清单或目录登记里出现的科目（例如只有草稿、还没发布） */
+/** 概览给的科目 + 只在「我的课件」清单或目录登记里出现的科目 */
 const subjects = computed(() => {
   const base = [...data.subjects]
   const known = new Set(base.map(item => item.subject))
@@ -469,7 +467,6 @@ const subjects = computed(() => {
       version: 0,
       publishedAt: null,
       articleCount: items.filter(item => item.published).length,
-      draftCount: items.filter(item => item.hasDraft).length,
       copiedCount: 0,
       shareCount: 0
     })
@@ -524,7 +521,6 @@ async function loadOverview() {
   try {
     const overview = await coursewareGateway.getOverview()
     data.subjects = overview.subjects
-    data.pendingDrafts = overview.pendingDrafts
     data.acquiredCount = overview.acquiredCount
     data.pendingUpdates = overview.pendingUpdates
     data.unreadNotifications = overview.unreadNotifications

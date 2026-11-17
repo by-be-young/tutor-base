@@ -1,166 +1,121 @@
 <template>
   <div class="editor">
-    <section class="panel panel--tight editor__identity">
-      <div class="editor__identity-main">
-        <h1 class="editor__identity-title">{{ currentTitle }}</h1>
-        <p class="editor__identity-meta">
-          <span class="editor__chip">{{ currentSubject }}</span>
-          <span v-if="articleId" class="editor__chip">#{{ articleId }}</span>
-          <span v-if="currentPath" class="editor__chip editor__chip--path">{{ currentPath }}</span>
-          <span class="editor__chip" :class="`is-${currentStatusTone}`">
-            {{ currentStatus }}
-          </span>
-        </p>
-        <p v-if="currentArticle?.contentMissing" class="editor__identity-hint is-warning">
-          这篇课件的已发布正文文件在服务器上缺失。页面不会回退到任何静态文件，
-          请重新保存并发布一份正文来恢复。
-        </p>
-      </div>
-      <div class="editor__identity-side">
-        <button type="button" class="btn btn--soft btn--sm" @click="guideOpen = true">
-          <i class="fas fa-circle-question" aria-hidden="true"></i> 发布教程
+    <section v-if="article" class="panel editor__head">
+      <div class="editor__head-main">
+        <button type="button" class="editor__back" aria-label="返回课件页" @click="goCourseware">
+          <i class="fas fa-arrow-left" aria-hidden="true"></i>
         </button>
-        <label class="editor__field editor__field--picker">
-          <span>选择要编辑的课件</span>
-          <select :value="articleId ?? ''" @change="onPickArticle">
-            <option value="">— 从我的课件里选一篇 —</option>
-            <optgroup v-for="group in articleGroups" :key="group.subject" :label="group.subject">
-              <option v-for="item in group.items" :key="item.articleId" :value="item.articleId">
-                {{ item.title || `课件 ${item.articleId}` }}{{ item.published ? ' · 已发布' : ' · 草稿' }}
-              </option>
-            </optgroup>
-          </select>
-        </label>
+        <div class="editor__head-text">
+          <p class="editor__crumb">{{ currentPath }}</p>
+          <h1 class="editor__title">{{ currentTitle }}</h1>
+          <div class="editor__chips">
+            <span class="chip">{{ currentSubject }}</span>
+            <span class="chip mono">#{{ articleId }}</span>
+            <span class="chip" :class="dirty ? 'chip--amber' : 'chip--lime'">
+              {{ dirty ? '有未保存改动' : '已发布' }}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="editor__head-actions">
+        <button type="button" class="btn btn--ghost btn--sm" @click="guideOpen = true">
+          <i class="fas fa-book-open-reader" aria-hidden="true"></i>
+          发布教程
+        </button>
+        <button type="button" class="btn btn--primary btn--sm" :disabled="busy || !dirty" @click="save">
+          <i v-if="busy" class="fas fa-circle-notch fa-spin" aria-hidden="true"></i>
+          保存并更新
+        </button>
       </div>
     </section>
 
-    <div class="panel panel--tight editor__toolbar">
-      <label class="editor__field">
-        <span>科目</span>
-        <input v-model="subject" type="text" placeholder="例如 高中化学" />
-      </label>
-      <label class="editor__field">
-        <span>模板</span>
-        <select v-model="templateId">
-          <option :value="null">不用模板（按布局新建）</option>
-          <option v-for="template in templates" :key="template.id" :value="template.id">
-            {{ template.name }}{{ template.subject ? ` · ${template.subject}` : '' }}
-          </option>
-        </select>
-      </label>
-      <label class="editor__field">
-        <span>布局</span>
-        <select v-model="layoutId">
-          <option v-for="layout in layouts" :key="layout.layoutId" :value="layout.layoutId">
-            {{ layout.layoutId }} · {{ layout.name }}
-          </option>
-        </select>
-      </label>
-      <button type="button" class="editor__ghost" :disabled="busy" @click="insertLayout">插入布局</button>
-      <button type="button" class="editor__ghost" :disabled="busy" @click="insertQuestion">插入题目</button>
-      <button type="button" class="editor__ghost" :disabled="busy" @click="openImageModal">插入图片</button>
-      <button type="button" class="editor__ghost" :disabled="busy" @click="newDraft">新建草稿</button>
-      <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="saveAsTemplate">
-        存为模板
-      </button>
-    </div>
-
-    <div class="editor__body">
-      <aside class="panel panel--tight editor__list">
-        <h2 class="editor__list-title">大纲</h2>
-        <p v-if="!outline.length" class="editor__empty">正文里还没有 `# ` 章节。</p>
-        <ul v-else class="editor__outline">
-          <li v-for="(section, index) in outline" :key="index">
-            <span class="editor__outline-title">{{ section.title }}</span>
-            <em v-if="section.layout">{{ section.layout }}</em>
-            <span class="editor__outline-actions">
-              <button type="button" :disabled="index === 0" @click="moveSection(index, -1)">↑</button>
-              <button type="button" :disabled="index === outline.length - 1" @click="moveSection(index, 1)">↓</button>
-            </span>
-          </li>
-        </ul>
-
-        <h2 class="editor__list-title">我的草稿</h2>
-        <p v-if="!drafts.length" class="editor__empty">还没有草稿。选择布局后点「新建草稿」。</p>
-        <ul v-else class="editor__draft-list">
-          <li v-for="draft in drafts" :key="draft.articleId" class="editor__draft-item">
-            <button
-              type="button"
-              class="editor__list-item"
-              :class="{ 'is-active': articleId === draft.articleId }"
-              @click="openDraft(draft)"
-            >
-              <span>{{ draft.title || `草稿 ${draft.articleId}` }}</span>
-              <em>{{ draft.subject || '未归类' }}{{ draft.published ? ' · 已发布' : '' }}</em>
-            </button>
-            <button
-              type="button"
-              class="editor__ghost editor__draft-remove"
-              :disabled="busy"
-              :title="draft.published ? '删除草稿（已发布版本保留）' : '删除这份未发布的草稿'"
-              @click.stop="deleteDraftById(draft)"
-            >
-              删除
-            </button>
-          </li>
-        </ul>
-
-        <h2 class="editor__list-title">导入导出</h2>
-        <button type="button" class="editor__ghost" :disabled="busy" @click="exportZip">导出 zip</button>
-        <label class="editor__upload">
-          <input type="file" accept=".zip" @change="onImportFile" />
-          <span>导入 zip（落到草稿）</span>
-        </label>
-        <label class="editor__check">
-          <input v-model="importOverwrite" type="checkbox" />
-          <span>同路径覆盖</span>
-        </label>
-        <p v-if="importReport" class="editor__report">
-          导入 {{ importReport.imported }} · 覆盖 {{ importReport.overwritten }} · 跳过 {{ importReport.skipped }}
-        </p>
-      </aside>
-
-      <div class="editor__main">
-        <div class="panel panel--tight editor__pane">
-          <div class="editor__pane-head">
-            <span>Markdown 源码 · {{ currentTitle }}</span>
-            <span class="editor__pane-actions">
-              <span v-if="dirty" class="editor__tag">未保存</span>
-              <button type="button" class="editor__ghost editor__preview-btn" :disabled="busy || !markdown"
-                @click="openPreview()">
-                <i class="fas fa-eye" aria-hidden="true"></i> 学员样式预览
-              </button>
-              <button type="button" class="editor__ghost editor__preview-btn" :disabled="busy || !markdown"
-                @click="openPreview(true)">
-                <i class="fas fa-file-pdf" aria-hidden="true"></i> 导出 PDF
-              </button>
-            </span>
-          </div>
-          <textarea ref="editorTextarea" v-model="markdown" class="editor__code" spellcheck="false" @input="dirty = true" />
-          <ul v-if="precheck.errors.length" class="editor__errors">
-            <li v-for="(error, index) in precheck.errors" :key="index">{{ error }}</li>
-          </ul>
+    <template v-if="article">
+      <section class="panel editor__bar">
+        <div class="editor__insert">
+          <label class="editor__layout">
+            <span>布局</span>
+            <select v-model="layoutId">
+              <option v-for="layout in layouts" :key="layout.layoutId" :value="layout.layoutId">
+                {{ layout.layoutId }} · {{ layout.name }}
+              </option>
+            </select>
+          </label>
+          <button type="button" class="btn btn--soft btn--sm" :disabled="busy" @click="insertLayout">
+            插入布局
+          </button>
+          <button type="button" class="btn btn--soft btn--sm" :disabled="busy" @click="insertQuestion">
+            插入题目
+          </button>
+          <button type="button" class="btn btn--soft btn--sm" :disabled="busy" @click="openImageModal">
+            插入图片
+          </button>
         </div>
-      </div>
-    </div>
+        <div class="editor__view-actions">
+          <button type="button" class="btn btn--ghost btn--sm" :disabled="!markdown"
+            @click="openPreview()">
+            <i class="fas fa-eye" aria-hidden="true"></i>
+            预览
+          </button>
+          <button type="button" class="btn btn--ghost btn--sm" :disabled="!markdown"
+            @click="openPreview(true)">
+            <i class="fas fa-file-pdf" aria-hidden="true"></i>
+            PDF
+          </button>
+          <button type="button" class="btn btn--ghost btn--sm" :disabled="busy" @click="openAnswerSetting">
+            <i class="fas fa-key" aria-hidden="true"></i>
+            设置答案
+          </button>
+        </div>
+      </section>
 
-    <footer class="panel panel--tight editor__footer">
-      <button type="button" class="editor__ghost" :disabled="busy" @click="runPrecheck">校验</button>
-      <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="openPreview()">
-        学员样式预览
-      </button>
-      <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="openPreview(true)">
-        导出 PDF
-      </button>
-      <button type="button" class="editor__ghost" :disabled="busy || articleId == null" @click="openAnswerSetting">
-        设置答案
-      </button>
-      <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="save">保存草稿</button>
-      <button type="button" class="editor__ghost" :disabled="busy || !canDeleteDraft" @click="deleteCurrentDraft">
-        删除草稿
-      </button>
-      <button type="button" class="editor__primary" :disabled="busy || !subject" @click="publish">发布</button>
-    </footer>
+      <div class="editor__workspace">
+        <aside class="panel editor__outline">
+          <header class="editor__outline-head">
+            <h2>大纲</h2>
+            <span class="editor__outline-count">{{ outline.length }}</span>
+          </header>
+          <p v-if="!outline.length" class="editor__outline-empty">正文里还没有 `# ` 章节。</p>
+          <ul v-else class="editor__outline-list">
+            <li v-for="(section, index) in outline" :key="index">
+              <div class="editor__outline-item">
+                <span class="editor__outline-no">{{ String(index + 1).padStart(2, '0') }}</span>
+                <div class="editor__outline-text">
+                  <strong>{{ section.title }}</strong>
+                  <em v-if="section.layout">布局 {{ section.layout }}</em>
+                </div>
+                <span class="editor__outline-move">
+                  <button type="button" aria-label="上移章节" :disabled="index === 0"
+                    @click="moveSection(index, -1)">↑</button>
+                  <button type="button" aria-label="下移章节" :disabled="index === outline.length - 1"
+                    @click="moveSection(index, 1)">↓</button>
+                </span>
+              </div>
+            </li>
+          </ul>
+        </aside>
+
+        <section class="panel editor__pane">
+          <header class="editor__pane-head">
+            <span class="editor__pane-title">Markdown</span>
+            <span v-if="dirty" class="editor__pane-dirty">未保存</span>
+          </header>
+          <textarea ref="editorTextarea" v-model="markdown" class="editor__code" spellcheck="false"
+            @input="dirty = true" />
+        </section>
+      </div>
+    </template>
+
+    <section v-else class="panel editor__empty">
+      <div class="editor__empty-icon">
+        <i :class="loading ? 'fas fa-circle-notch fa-spin' : 'fas fa-file-lines'" aria-hidden="true"></i>
+      </div>
+      <h2>{{ loading ? '正在载入课件…' : '请从课件页选择一篇课件' }}</h2>
+      <p v-if="loadError">{{ loadError }}</p>
+      <div v-if="!loading" class="editor__empty-actions">
+        <button type="button" class="btn btn--primary btn--sm" @click="goCourseware">返回课件页</button>
+        <button v-if="loadError" type="button" class="btn btn--ghost btn--sm" @click="retryLoad">重试</button>
+      </div>
+    </section>
 
     <CoursewarePublishGuide :open="guideOpen" @close="guideOpen = false" />
 
@@ -168,19 +123,11 @@
       @click.self="closeImageModal">
       <div class="editor__modal-card">
         <header class="editor__modal-head">
-          <div>
-            <p class="eyebrow">插入图片</p>
-            <h2>上传到课件图片桶</h2>
-          </div>
-          <button type="button" class="editor__ghost" :disabled="imageUploading" @click="closeImageModal">
-            关闭
+          <h2>插入图片</h2>
+          <button type="button" class="editor__modal-close" :disabled="imageUploading" @click="closeImageModal">
+            <i class="fas fa-times" aria-hidden="true"></i>
           </button>
         </header>
-
-        <p class="editor__modal-hint">
-          文件名按“科目 + 插入位置”自动生成，可手动修改。文件名只能用小写字母、数字、连字符和下划线；
-          桶里已有同名文件时会提示并阻止上传。
-        </p>
 
         <label class="editor__upload editor__upload--image">
           <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" @change="onImageFile" />
@@ -198,12 +145,12 @@
         </label>
 
         <p class="editor__modal-meta">
-          插入位置：第 {{ imageSection }} 节 · 本节第 {{ imageFigure }} 张
+          第 {{ imageSection }} 节 · 本节第 {{ imageFigure }} 张
         </p>
 
         <p v-if="imageChecking" class="editor__modal-hint">正在检查是否重名…</p>
         <p v-else-if="imageConflict" class="editor__modal-alert">
-          已有同名文件。建议使用
+          已有同名文件，建议使用
           <button type="button" class="editor__inline-link" @click="applySuggestedName">
             {{ imageSuggested }}
           </button>
@@ -217,10 +164,10 @@
         <p v-if="imageError" class="editor__modal-alert">{{ imageError }}</p>
 
         <footer class="editor__modal-actions">
-          <button type="button" class="editor__ghost" :disabled="imageUploading" @click="closeImageModal">
+          <button type="button" class="btn btn--ghost btn--sm" :disabled="imageUploading" @click="closeImageModal">
             取消
           </button>
-          <button type="button" class="editor__primary"
+          <button type="button" class="btn btn--primary btn--sm"
             :disabled="imageUploading || imageChecking || !imageFile || !imageNameValid || imageConflict || !imageChecked"
             @click="confirmImage">
             {{ imageUploading ? '上传中…' : '上传并插入' }}
@@ -232,12 +179,10 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CoursewarePublishGuide from '@/components/admin/CoursewarePublishGuide.vue'
 import { coursewareGateway } from '@/gateways/coursewareGateway'
-import { loadArticleMarkdownForEditing, loadCoursewareLibrary } from '@/utils/coursewareLibrary'
-import { articleStatus } from '@/utils/coursewareTree'
 import { sectionAtCursor, suggestedImageName } from '@/utils/coursewareMediaName'
 import { showToast } from '@/utils/toast'
 
@@ -245,21 +190,21 @@ const route = useRoute()
 const router = useRouter()
 
 const layouts = ref([])
-const templates = ref([])
-const templateId = ref(null)
-const drafts = ref([])
-// 「我的课件」清单：已发布篇目 + 尚未发布的草稿（正文全部由数据库托管），作为选择器的唯一数据源
-const articles = ref([])
+const article = ref(null)
 const articleId = ref(null)
-const subject = ref('')
 const layoutId = ref('A')
 const markdown = ref('')
 const dirty = ref(false)
 const busy = ref(false)
-const importOverwrite = ref(false)
-const importReport = ref(null)
+const loading = ref(false)
+const loadError = ref('')
 const guideOpen = ref(false)
-const precheck = reactive({ checked: false, errors: [] })
+
+const currentTitle = computed(
+  () => article.value?.title || (articleId.value ? `课件 #${articleId.value}` : '')
+)
+const currentSubject = computed(() => article.value?.subject || '')
+const currentPath = computed(() => article.value?.logicalPath || '')
 
 // 插入图片：上传到 Supabase Storage，文件名按当前科目与光标所在章节生成
 const editorTextarea = ref(null)
@@ -279,77 +224,7 @@ let imageCursor = 0
 let imageTimer = null
 
 const IMAGE_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,120}\.(png|jpg|jpeg|webp|gif)$/
-
 const imageNameValid = computed(() => IMAGE_NAME_PATTERN.test(String(imageName.value || '').trim()))
-
-// 当前这篇在服务端有没有草稿行：决定「删除草稿」是否可用
-const currentHasDraft = ref(false)
-const canDeleteDraft = computed(() => Boolean(articleId.value) && currentHasDraft.value)
-
-/** 当前编辑对象：标题 / 科目 / ID / 发布态都从「我的课件」清单里取，避免只剩一个裸 ID。 */
-const currentArticle = computed(
-  () => articles.value.find(item => Number(item.articleId) === Number(articleId.value)) || null
-)
-
-const currentTitle = computed(
-  () => currentArticle.value?.title || (articleId.value ? `课件 #${articleId.value}` : '新课件（未命名）')
-)
-
-const currentSubject = computed(() => currentArticle.value?.subject || subject.value || '未归类')
-
-const currentPath = computed(() => currentArticle.value?.logicalPath || '')
-
-// 正文里的状态提示（草稿 / 已发布 / 正文缺失 / 有未保存改动）
-const currentStatus = computed(() => {
-  if (!articleId.value) return '新草稿 · 尚未保存'
-  const current = currentArticle.value
-  const missing = current?.contentMissing
-  if (missing) return dirty.value ? '正文缺失 · 有未保存改动' : '正文缺失 · 需服务端恢复'
-  const status = articleStatus(current)?.label || '草稿 · 未发布'
-  return dirty.value ? `${status} · 有未保存改动` : status
-})
-
-const currentStatusTone = computed(() => {
-  if (!articleId.value) return 'draft'
-  if (currentArticle.value?.contentMissing) return 'missing'
-  return articleStatus(currentArticle.value)?.tone || 'draft'
-})
-
-/** 选择器按科目分组，跨科目也能直接跳着编辑。 */
-const articleGroups = computed(() => {
-  const groups = new Map()
-  for (const item of [...articles.value].sort((left, right) => {
-    const subjectOrder = String(left.subject || '').localeCompare(String(right.subject || ''), 'zh-Hans-CN')
-    if (subjectOrder !== 0) return subjectOrder
-    return String(left.logicalPath || left.title || '').localeCompare(
-      String(right.logicalPath || right.title || ''),
-      'zh-Hans-CN'
-    )
-  })) {
-    const key = item.subject || '未归类'
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key).push(item)
-  }
-  return [...groups.entries()].map(([subjectKey, items]) => ({ subject: subjectKey, items }))
-})
-
-function onPickArticle(event) {
-  const value = event.target.value
-  const target = articles.value.find(item => String(item.articleId) === String(value))
-  if (!target) {
-    event.target.value = articleId.value ?? ''
-    return
-  }
-  if (Number(target.articleId) === Number(articleId.value)) return
-  openDraft(target).then((opened) => {
-    if (!opened) event.target.value = articleId.value ?? ''
-  })
-}
-
-function confirmDiscard() {
-  if (!dirty.value) return true
-  return window.confirm('当前课件有未保存的改动，切换后会丢失，继续切换吗？')
-}
 
 /** 大纲：按 `# ` 切 section，带布局标签与索引，供上移/下移。 */
 const outline = computed(() => splitSections(markdown.value))
@@ -419,121 +294,41 @@ function reportError(error) {
   showToast(error?.message || '操作失败，请稍后重试', 'error')
 }
 
-async function loadDrafts() {
-  try {
-    drafts.value = await coursewareGateway.listDrafts()
-  } catch (error) {
-    reportError(error)
-  }
+function goCourseware() {
+  router.push('/admin/courseware')
 }
 
-async function loadArticles() {
-  try {
-    const { articles: list } = await loadCoursewareLibrary()
-    articles.value = list
-  } catch (error) {
-    reportError(error)
-  }
+function requestedArticleId() {
+  const value = Number(route.query.articleId)
+  return Number.isFinite(value) && value > 0 ? value : null
 }
 
-async function newDraft() {
-  if (!confirmDiscard()) return
-  busy.value = true
+async function loadArticle(id) {
+  loading.value = true
+  loadError.value = ''
   try {
-    markdown.value = templateId.value
-      ? await coursewareGateway.getTemplate(templateId.value)
-      : await coursewareGateway.getLayoutSkeleton(layoutId.value, subject.value || '新课件')
-    articleId.value = null
-    currentHasDraft.value = false
-    dirty.value = true
-    precheck.checked = false
-    precheck.errors = []
-  } catch (error) {
-    reportError(error)
-  } finally {
-    busy.value = false
-  }
-}
-
-async function saveAsTemplate() {
-  const name = window.prompt('模板名（同科目同类型同名会覆盖）', '新模板')
-  if (!name) return
-  busy.value = true
-  try {
-    await coursewareGateway.saveTemplate({
-      subject: subject.value || undefined,
-      kind: 'new_lesson',
-      name,
-      markdown: markdown.value
-    })
-    showToast('已存为模板', 'success')
-    templates.value = await coursewareGateway.listTemplates(subject.value || undefined)
-  } catch (error) {
-    reportError(error)
-  } finally {
-    busy.value = false
-  }
-}
-
-async function openDraft(draft) {
-  if (!confirmDiscard()) return false
-  busy.value = true
-  try {
-    const loaded = await loadArticleMarkdownForEditing(draft)
-    articleId.value = loaded.articleId
-    markdown.value = loaded.markdown
-    currentHasDraft.value = loaded.hasDraft
-    if (draft.subject) subject.value = draft.subject
+    const content = await coursewareGateway.getArticle(id)
+    article.value = content
+    articleId.value = Number(content?.articleId) || id
+    markdown.value = String(content?.markdown || '')
     dirty.value = false
-    precheck.checked = false
-    precheck.errors = []
-    return true
+    const directive = markdown.value.match(/<!--\s*@layout:\s*([A-Za-z0-9_-]+)\s*-->/)
+    if (directive && layouts.value.some(layout => layout.layoutId === directive[1])) {
+      layoutId.value = directive[1]
+    }
   } catch (error) {
-    reportError(error)
-    return false
+    article.value = null
+    articleId.value = id
+    markdown.value = ''
+    loadError.value = error?.message || '课件载入失败'
   } finally {
-    busy.value = false
+    loading.value = false
   }
 }
 
-/** 删除一份草稿：只丢未上线的改动，已发布版本不受影响。 */
-async function deleteDraftById(draft) {
-  const label = draft.title || `草稿 ${draft.articleId}`
-  const hint = draft.published
-    ? `删除「${label}」的草稿？已经发布的版本会保留，学员看到的仍是上一版。`
-    : `删除「${label}」？这份草稿还没有发布过，删除后无法恢复。`
-  if (!window.confirm(hint)) return false
-  busy.value = true
-  try {
-    await coursewareGateway.deleteDraft(draft.articleId)
-    showToast('草稿已删除', 'success')
-    if (Number(articleId.value) === Number(draft.articleId)) resetEditor()
-    await Promise.all([loadDrafts(), loadArticles()])
-    return true
-  } catch (error) {
-    reportError(error)
-    return false
-  } finally {
-    busy.value = false
-  }
-}
-
-function deleteCurrentDraft() {
-  if (!articleId.value) return
-  return deleteDraftById({
-    articleId: articleId.value,
-    title: currentTitle.value,
-    published: Boolean(currentArticle.value?.published)
-  })
-}
-
-function resetEditor() {
-  articleId.value = null
-  markdown.value = ''
-  currentHasDraft.value = false
-  dirty.value = false
-  precheck.checked = false
-  precheck.errors = []
+function retryLoad() {
+  const id = requestedArticleId()
+  if (id) loadArticle(id)
 }
 
 function insertLayout() {
@@ -682,173 +477,104 @@ async function confirmImage() {
   }
 }
 
-async function runPrecheck() {
+/** 保存即更新线上版本：同一科目版本号 +1，学员立即看到。 */
+async function save() {
+  if (busy.value || !articleId.value) return false
+  if (!markdown.value.trim()) {
+    showToast('正文不能为空', 'warning')
+    return false
+  }
+  busy.value = true
   try {
-    const result = await coursewareGateway.precheckDraft(markdown.value)
-    precheck.checked = true
-    precheck.errors = result.errors
-    showToast(result.ok ? '校验通过' : `发现 ${result.errors.length} 个问题`, result.ok ? 'success' : 'warning')
+    const result = await coursewareGateway.saveArticle(articleId.value, markdown.value)
+    dirty.value = false
+    const heading = markdown.value.match(/^#\s+(.+)$/m)
+    article.value = {
+      ...article.value,
+      markdown: markdown.value,
+      title: heading ? heading[1].trim() : article.value?.title
+    }
+    showToast(`已更新到 v${result?.version ?? ''}`, 'success')
+    return true
   } catch (error) {
     reportError(error)
+    return false
+  } finally {
+    busy.value = false
   }
 }
 
 /**
- * 打开学员视角预览：先落一次草稿，再在新标签页打开完整的学员阅读器。
+ * 学员视角预览：有未保存改动时把当前正文放到 localStorage，预览页直接读它，
+ * 不落库、不发布；已保存时则读线上版本。
  *
  * @param {boolean} print 直接以打印视图打开（浏览器里选「另存为 PDF」）
  */
-async function openPreview(print = false) {
+function openPreview(print = false) {
   if (!markdown.value.trim()) {
     showToast('正文还是空的，先写点内容再预览', 'warning')
     return
   }
-  busy.value = true
-  try {
-    let id = articleId.value
-    if (dirty.value || id == null) {
-      const saved = await coursewareGateway.saveDraft(id, markdown.value)
-      id = saved.articleId
-      articleId.value = id
-      currentHasDraft.value = true
-      dirty.value = false
-      await Promise.all([loadDrafts(), loadArticles()])
-    }
-    const query = { mode: 'preview' }
-    const course = subject.value || currentArticle.value?.subject
-    if (course) query.subject = course
-    if (currentTitle.value) query.title = currentTitle.value
-    if (currentPath.value) query.path = currentPath.value
-    if (print) query.print = '1'
-    const target = router.resolve({ name: 'CoursewarePreview', params: { id }, query })
-    window.open(target.href, '_blank', 'noopener')
-    showToast(print ? '已保存草稿，正在打开打印视图（可另存为 PDF）' : '已保存草稿，并在新标签页打开学员视角预览',
-      'success')
-  } catch (error) {
-    reportError(error)
-  } finally {
-    busy.value = false
+  const id = articleId.value
+  if (!id) return
+  const query = { mode: 'preview' }
+  if (dirty.value) {
+    window.localStorage.setItem(`courseware-preview:${id}`, markdown.value)
+    query.localPreview = '1'
   }
+  if (currentSubject.value) query.subject = currentSubject.value
+  if (currentTitle.value) query.title = currentTitle.value
+  if (currentPath.value) query.path = currentPath.value
+  if (print) query.print = '1'
+  const target = router.resolve({ name: 'CoursewarePreview', params: { id }, query })
+  window.open(target.href, '_blank', 'noopener')
+  showToast(print ? '正在打开打印视图' : '正在打开学员视角预览', 'success')
 }
 
-/** 打开这篇文章的标准答案设置页：有未保存改动先落草稿，保证答案对应最新题号。 */
+/** 设置答案：有未保存改动先保存并更新，保证答案对应最新题号。 */
 async function openAnswerSetting() {
-  if (articleId.value == null) {
-    showToast('先保存一份草稿，再设置答案', 'warning')
-    return
-  }
-  busy.value = true
-  try {
-    let id = articleId.value
-    if (dirty.value) {
-      const saved = await coursewareGateway.saveDraft(id, markdown.value)
-      id = saved.articleId
-      articleId.value = id
-      currentHasDraft.value = true
-      dirty.value = false
-      await Promise.all([loadDrafts(), loadArticles()])
-    }
-    const target = router.resolve({ name: 'ArticleDetail', params: { id }, query: { mode: 'answer' } })
-    window.open(target.href, '_blank', 'noopener')
-    showToast('已在新标签页打开标准答案设置页', 'success')
-  } catch (error) {
-    reportError(error)
-  } finally {
-    busy.value = false
-  }
-}
-
-async function save() {
-  busy.value = true
-  try {
-    const saved = await coursewareGateway.saveDraft(articleId.value, markdown.value)
-    articleId.value = saved.articleId
-    currentHasDraft.value = true
-    dirty.value = false
-    showToast('草稿已保存', 'success')
-    await Promise.all([loadDrafts(), loadArticles()])
-  } catch (error) {
-    reportError(error)
-  } finally {
-    busy.value = false
-  }
-}
-
-async function publish() {
-  busy.value = true
-  try {
-    if (dirty.value || articleId.value == null) {
-      const saved = await coursewareGateway.saveDraft(articleId.value, markdown.value)
-      articleId.value = saved.articleId
-      currentHasDraft.value = true
-      dirty.value = false
-    }
-    const published = await coursewareGateway.publishDrafts(subject.value)
-    // 发布成功后服务端会清掉本次并入版本的草稿，编辑器随之回到"已发布正文"状态
-    currentHasDraft.value = false
-    showToast(`已发布 v${published.version}（${published.articleCount} 篇），草稿已自动清空`, 'success')
-    await Promise.all([loadDrafts(), loadArticles()])
-  } catch (error) {
-    reportError(error)
-  } finally {
-    busy.value = false
-  }
-}
-
-async function exportZip() {
-  busy.value = true
-  try {
-    const blob = await coursewareGateway.exportZip({ subject: subject.value || undefined })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `courseware-${subject.value || 'all'}.zip`
-    link.click()
-    URL.revokeObjectURL(url)
-  } catch (error) {
-    reportError(error)
-  } finally {
-    busy.value = false
-  }
-}
-
-async function onImportFile(event) {
-  const file = event.target.files?.[0]
-  if (!file) return
-  busy.value = true
-  try {
-    importReport.value = await coursewareGateway.importZip(file, importOverwrite.value)
-    showToast(`导入完成：新增 ${importReport.value.imported} 篇`, 'success')
-    await Promise.all([loadDrafts(), loadArticles()])
-  } catch (error) {
-    reportError(error)
-  } finally {
-    busy.value = false
-    event.target.value = ''
-  }
+  if (!articleId.value) return
+  if (dirty.value && !(await save())) return
+  const target = router.resolve({
+    name: 'ArticleDetail',
+    params: { id: articleId.value },
+    query: { mode: 'answer' }
+  })
+  window.open(target.href, '_blank', 'noopener')
+  showToast('正在打开标准答案设置页', 'success')
 }
 
 onMounted(async () => {
   try {
     layouts.value = await coursewareGateway.listLayouts()
     if (layouts.value.length) layoutId.value = layouts.value[0].layoutId
-    templates.value = await coursewareGateway.listTemplates()
   } catch (error) {
     reportError(error)
   }
-  await Promise.all([loadDrafts(), loadArticles()])
-  // 支持从「课件」页/链接直达某篇课件：?subject=高中化学&articleId=12
-  const querySubject = typeof route.query.subject === 'string' ? route.query.subject.trim() : ''
-  if (querySubject) subject.value = querySubject
-  const queryArticleId = Number(route.query.articleId)
-  if (Number.isFinite(queryArticleId) && queryArticleId > 0) {
-    const target = articles.value.find(item => Number(item.articleId) === queryArticleId)
-    if (target) {
-      await openDraft(target)
-    } else {
-      showToast(`没有找到课件 #${queryArticleId}，可从上方选择器切换`, 'warning')
-    }
+  const id = requestedArticleId()
+  if (id) {
+    await loadArticle(id)
+  } else {
+    loadError.value = ''
   }
+})
+
+onBeforeUnmount(() => {
+  if (imageTimer) clearTimeout(imageTimer)
+  if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value)
+})
+
+watch(() => route.query.articleId, () => {
+  const id = requestedArticleId()
+  if (!id) {
+    article.value = null
+    articleId.value = null
+    markdown.value = ''
+    dirty.value = false
+    loadError.value = ''
+    return
+  }
+  if (id !== Number(article.value?.articleId)) loadArticle(id)
 })
 </script>
 
@@ -856,551 +582,508 @@ onMounted(async () => {
 .editor {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
-.editor__identity {
+.editor__head {
   display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
+  gap: 20px;
+  padding: 16px 20px;
 }
 
-.editor__identity-side {
+.editor__head-main {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.editor__identity-main {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 14px;
   min-width: 0;
 }
 
-.editor__identity-title {
-  margin: 0;
-  font-size: 1.05rem;
-  line-height: 1.35;
-  color: var(--ink);
-}
-
-.editor__identity-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-}
-
-.editor__identity-hint {
-  margin: 2px 0 0;
-  font-size: 0.72rem;
-  color: var(--text-2);
-}
-
-.editor__identity-hint code {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-}
-
-.editor__chip {
+.editor__back {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line, #d9d5cb);
+  border-radius: 12px;
+  background: var(--paper-1, #fffdf8);
+  color: var(--text-2, #5b574e);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.editor__back:hover {
+  border-color: var(--ink, #22201c);
+  color: var(--ink, #22201c);
+  transform: translateX(-2px);
+}
+
+.editor__head-text {
+  min-width: 0;
+}
+
+.editor__crumb {
+  margin: 0 0 4px;
   font-family: var(--font-mono);
-  font-size: 0.68rem;
-  color: var(--text-2);
-  background: var(--paper-2);
-}
-
-.editor__chip--path {
-  border-style: dashed;
-  word-break: break-all;
-}
-
-.editor__chip.is-live {
-  border-color: #2f7a4d;
-  color: #2f7a4d;
-}
-
-.editor__chip.is-draft {
-  border-color: #b07d1f;
-  color: #b07d1f;
-}
-
-.editor__chip.is-static {
-  border-color: var(--line);
-  color: var(--text-2);
-}
-
-.editor__chip.is-missing {
-  border-color: var(--vermilion);
-  color: var(--vermilion);
-}
-
-.editor__identity-hint.is-warning {
-  color: var(--vermilion);
-}
-
-.editor__field--picker {
-  width: 320px;
-  max-width: 100%;
-  min-width: 260px;
-}
-
-.editor__toolbar,
-.editor__footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: flex-end;
-}
-
-.editor__footer {
-  justify-content: flex-end;
-}
-
-.editor__field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   font-size: 0.74rem;
-  color: var(--text-2);
-  min-width: 180px;
+  color: var(--text-dim, #8c877c);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.editor__field input,
-.editor__field select {
-  padding: 7px 10px;
-  border: 1.5px solid var(--ink);
-  border-radius: var(--r-sm);
-  background: var(--paper-1);
-  color: var(--ink);
-  font-family: inherit;
+.editor__title {
+  margin: 0;
+  font-size: 1.45rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--ink, #22201c);
+}
+
+.editor__chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.editor__head-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+}
+
+.editor__insert,
+.editor__view-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.editor__layout {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 4px;
+}
+
+.editor__layout span {
+  font-size: 0.76rem;
+  color: var(--text-dim, #8c877c);
+}
+
+.editor__layout select {
+  height: 34px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--line, #d9d5cb);
+  border-radius: 10px;
+  background: var(--paper-1, #fffdf8);
+  color: var(--ink, #22201c);
   font-size: 0.82rem;
+  cursor: pointer;
 }
 
-.editor__body {
+.editor__workspace {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) 264px;
+  gap: 14px;
   align-items: start;
 }
 
-.editor__list {
+.editor__outline {
+  order: 2;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 170px);
+  overflow: auto;
+  padding: 14px;
+}
+
+.editor__outline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.editor__outline-head h2 {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--ink, #22201c);
+}
+
+.editor__outline-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--paper-2, #f4f0e6);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-2, #5b574e);
+}
+
+.editor__outline-empty {
+  margin: 16px 0;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--text-dim, #8c877c);
+}
+
+.editor__outline-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.editor__list-title {
-  margin: 6px 0 0;
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-
-.editor__list ul {
-  list-style: none;
+  gap: 6px;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  list-style: none;
 }
 
-.editor__list-item {
-  width: 100%;
-  text-align: left;
-  border: 1.5px solid var(--ink);
-  background: var(--paper-1);
-  border-radius: var(--r-sm);
-  padding: 7px 9px;
-  cursor: pointer;
+.editor__outline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  transition: background 0.15s ease;
+}
+
+.editor__outline-item:hover {
+  background: var(--paper-2, #f4f0e6);
+}
+
+.editor__outline-no {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  line-height: 1.7;
+  color: var(--text-dim, #8c877c);
+}
+
+.editor__outline-text {
+  min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-size: 0.8rem;
-  color: var(--ink);
-  box-shadow: 2px 2px 0 var(--ink);
-  transition: transform 0.14s var(--ease-out), box-shadow 0.14s var(--ease-out);
 }
 
-.editor__list-item:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 3px 3px 0 var(--ink);
+.editor__outline-text strong {
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--ink, #22201c);
+  overflow-wrap: anywhere;
 }
 
-.editor__list-item.is-active {
-  background: var(--lime);
-}
-
-.editor__draft-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.editor__draft-item {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
-}
-
-.editor__draft-item .editor__list-item {
-  flex: 1;
-  min-width: 0;
-}
-
-.editor__draft-remove {
-  flex: none;
-  align-self: center;
-  padding: 4px 8px;
-  font-size: 0.72rem;
-  color: var(--vermilion);
-}
-
-.editor__list-item em {
-  color: var(--text-3);
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
+.editor__outline-text em {
   font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  color: var(--text-dim, #8c877c);
 }
 
-.editor__main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+.editor__outline-move {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.editor__outline-item:hover .editor__outline-move,
+.editor__outline-move:focus-within {
+  opacity: 1;
+}
+
+.editor__outline-move button {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line, #d9d5cb);
+  border-radius: 6px;
+  background: var(--paper-1, #fffdf8);
+  color: var(--text-2, #5b574e);
+  font-size: 0.66rem;
+  cursor: pointer;
+}
+
+.editor__outline-move button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .editor__pane {
+  order: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  min-height: 460px;
+  overflow: hidden;
 }
 
 .editor__pane-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line, #d9d5cb);
+}
+
+.editor__pane-title {
   font-family: var(--font-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.08em;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--text-3);
+  color: var(--text-dim, #8c877c);
+}
+
+.editor__pane-dirty {
+  font-size: 0.7rem;
+  color: #a5691a;
 }
 
 .editor__code {
-  flex: 1;
-  min-height: 400px;
-  border: 1.5px dashed var(--ink);
-  border-radius: var(--r-sm);
-  background: var(--paper-2);
-  color: var(--ink);
-  padding: 10px;
-  outline: none;
-  resize: vertical;
+  width: 100%;
+  min-height: calc(100vh - 320px);
+  padding: 18px 20px 24px;
+  border: 0;
+  background: transparent;
+  color: var(--ink, #22201c);
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: 0.88rem;
   line-height: 1.75;
+  resize: vertical;
+  outline: none;
+  tab-size: 2;
 }
 
-.editor__pane-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.editor__preview-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
-  font-size: 0.7rem;
-  letter-spacing: 0;
-  text-transform: none;
-  font-family: var(--font-body);
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.editor__errors {
-  margin: 0;
-  padding-left: 18px;
-  color: var(--vermilion);
-  font-size: 0.78rem;
-}
-
-.editor__tag {
-  font-family: var(--font-mono);
-  font-size: 0.64rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-
-.editor__tag.is-error {
-  color: var(--vermilion);
-}
-
-.editor__tag.is-ok {
-  color: var(--teal);
+.editor__code::selection {
+  background: rgba(255, 214, 102, 0.45);
 }
 
 .editor__empty {
-  margin: 0;
-  color: var(--text-3);
-  font-size: 0.78rem;
-}
-
-.editor__outline {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-
-.editor__outline li {
-  display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.76rem;
-  color: var(--text-2);
-  border: 1.5px solid var(--paper-2);
-  border-radius: var(--r-sm);
-  padding: 4px 8px;
-  background: var(--paper-2);
+  justify-content: center;
+  gap: 10px;
+  padding: 72px 24px;
+  text-align: center;
 }
 
-.editor__outline-title {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--ink);
+.editor__empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--line, #d9d5cb);
+  border-radius: 16px;
+  background: var(--paper-2, #f4f0e6);
+  color: var(--text-dim, #8c877c);
+  font-size: 1.1rem;
 }
 
-.editor__outline em {
-  color: var(--ink);
-  font-family: var(--font-mono);
-  font-style: normal;
-  font-size: 0.62rem;
-  background: var(--butter);
-  border-radius: var(--r-full);
-  padding: 0 6px;
+.editor__empty h2 {
+  margin: 4px 0 0;
+  font-size: 1rem;
+  color: var(--ink, #22201c);
 }
 
-.editor__outline-actions {
-  display: flex;
-  gap: 2px;
-}
-
-.editor__outline-actions button {
-  border: 1.5px solid var(--ink);
-  background: var(--paper-1);
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.68rem;
-  padding: 1px 5px;
-  color: var(--ink);
-}
-
-.editor__outline-actions button:disabled {
-  color: var(--text-3);
-  border-color: var(--paper-2);
-  background: var(--paper-2);
-  cursor: not-allowed;
-}
-
-.editor__report {
+.editor__empty p {
+  max-width: 520px;
   margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  color: var(--text-2);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--text-2, #5b574e);
 }
 
-.editor__upload {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 0.74rem;
-  color: var(--text-2);
+.editor__empty-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
 }
 
-.editor__check {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  color: var(--text-2);
-}
-
-.editor__check input[type='checkbox'] {
-  accent-color: var(--cobalt);
-  width: 15px;
-  height: 15px;
-}
-
-.editor__primary,
-.editor__ghost {
-  padding: 8px 16px;
-  border: 1.5px solid var(--ink);
-  border-radius: var(--r-full);
-  font-family: var(--font-display);
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 0.14s var(--ease-out), box-shadow 0.14s var(--ease-out);
-}
-
-.editor__primary {
-  background: var(--vermilion);
-  color: var(--paper-1);
-  box-shadow: 3px 3px 0 var(--ink);
-}
-
-.editor__primary:hover:not(:disabled) {
-  transform: translate(-1px, -1px);
-  box-shadow: 4px 4px 0 var(--ink);
-}
-
-.editor__primary:disabled {
-  background: var(--paper-2);
-  color: var(--text-3);
-  box-shadow: none;
-  cursor: not-allowed;
-}
-
-.editor__ghost {
-  background: var(--paper-1);
-  color: var(--ink);
-  box-shadow: 2px 2px 0 var(--ink);
-}
-
-.editor__ghost:hover:not(:disabled) {
-  transform: translate(-1px, -1px);
-  box-shadow: 3px 3px 0 var(--ink);
-}
-
-.editor__ghost:disabled {
-  color: var(--text-3);
-  border-color: var(--text-3);
-  box-shadow: none;
-  cursor: not-allowed;
-}
-
-/* 插入图片弹窗 */
 .editor__modal {
   position: fixed;
   inset: 0;
-  z-index: 300;
+  z-index: 60;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
-  background: rgba(20, 18, 14, 0.52);
+  padding: 20px;
+  background: rgba(24, 22, 18, 0.42);
+  backdrop-filter: blur(3px);
 }
 
 .editor__modal-card {
-  width: min(560px, 100%);
-  max-height: calc(100vh - 48px);
+  width: min(440px, 100%);
+  max-height: calc(100vh - 40px);
   overflow: auto;
-  padding: 24px;
-  background: var(--paper-1);
-  border: 2px solid var(--ink);
-  border-radius: var(--r-lg);
-  box-shadow: 8px 8px 0 var(--ink);
+  padding: 18px;
+  border: 1px solid var(--line, #d9d5cb);
+  border-radius: 18px;
+  background: var(--paper-1, #fffdf8);
+  box-shadow: 0 18px 50px rgba(24, 22, 18, 0.18);
 }
 
 .editor__modal-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .editor__modal-head h2 {
-  margin: 4px 0 0;
-  font-family: var(--font-display);
-  font-size: 1.05rem;
+  margin: 0;
+  font-size: 1rem;
+  color: var(--ink, #22201c);
 }
 
-.editor__modal-hint,
-.editor__modal-meta {
-  margin: 0 0 14px;
-  font-size: 0.78rem;
-  color: var(--text-2);
-  line-height: 1.6;
+.editor__modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-dim, #8c877c);
+  cursor: pointer;
+}
+
+.editor__modal-close:hover {
+  background: var(--paper-2, #f4f0e6);
+  color: var(--ink, #22201c);
+}
+
+.editor__upload {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px dashed var(--line, #d9d5cb);
+  border-radius: 12px;
+  background: var(--paper-2, #f4f0e6);
+  color: var(--text-2, #5b574e);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.editor__upload:hover {
+  border-color: var(--ink, #22201c);
+}
+
+.editor__upload input {
+  display: none;
 }
 
 .editor__upload--image {
-  display: flex;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .editor__image-preview {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-  padding: 10px;
-  background: var(--paper-2);
-  border: 1.5px dashed var(--ink);
-  border-radius: var(--r-md);
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
 }
 
 .editor__image-preview img {
-  width: 92px;
-  height: 72px;
+  width: 100%;
+  max-height: 220px;
   object-fit: contain;
-  background: #fff;
-  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper-2, #f4f0e6);
 }
 
 .editor__image-preview span {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim, #8c877c);
+}
+
+.editor__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.editor__field span {
   font-size: 0.76rem;
-  color: var(--text-2);
-  word-break: break-all;
+  color: var(--text-dim, #8c877c);
+}
+
+.editor__field input {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line, #d9d5cb);
+  border-radius: 10px;
+  background: var(--paper-1, #fffdf8);
+  color: var(--ink, #22201c);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  outline: none;
+}
+
+.editor__field input:focus {
+  border-color: var(--ink, #22201c);
+}
+
+.editor__modal-meta {
+  margin: 10px 0 0;
+  font-size: 0.72rem;
+  color: var(--text-dim, #8c877c);
+}
+
+.editor__modal-hint,
+.editor__modal-alert,
+.editor__modal-ok {
+  margin: 8px 0 0;
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.editor__modal-hint {
+  color: var(--text-dim, #8c877c);
 }
 
 .editor__modal-alert {
-  margin: 0 0 12px;
-  padding: 9px 12px;
-  font-size: 0.78rem;
-  color: var(--vermilion);
-  background: rgba(196, 62, 44, 0.08);
-  border-left: 3px solid var(--vermilion);
+  color: #b42318;
 }
 
 .editor__modal-ok {
-  margin: 0 0 12px;
-  font-size: 0.78rem;
-  color: #2f7a4f;
+  color: #2f7d4f;
 }
 
 .editor__inline-link {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--cobalt);
+  color: var(--ink, #22201c);
   font-family: var(--font-mono);
-  font-size: inherit;
   text-decoration: underline;
   cursor: pointer;
 }
@@ -1408,28 +1091,50 @@ onMounted(async () => {
 .editor__modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 18px;
+  gap: 8px;
+  margin-top: 16px;
 }
 
-@media (max-width: 1100px) {
-  .editor__body {
-    grid-template-columns: 1fr;
+@media (max-width: 900px) {
+  .editor__workspace {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .editor__main {
-    grid-template-columns: 1fr;
+  .editor__outline {
+    order: 1;
+    position: static;
+    max-height: none;
+  }
+
+  .editor__pane {
+    order: 2;
   }
 }
 
-@media (max-width: 768px) {
-  .editor__identity-side {
+@media (max-width: 680px) {
+  .editor__head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .editor__head-actions {
     width: 100%;
-    align-items: stretch;
+    justify-content: flex-end;
   }
 
-  .editor__field {
-    min-width: 100%;
+  .editor__title {
+    font-size: 1.2rem;
+  }
+
+  .editor__insert,
+  .editor__view-actions {
+    width: 100%;
+  }
+
+  .editor__code {
+    min-height: 58vh;
+    padding: 14px 16px 20px;
   }
 }
 </style>

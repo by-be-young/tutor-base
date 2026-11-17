@@ -363,12 +363,10 @@ class CoursewareEditorHttpContractTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.hasDraft").value(true));
 
-            // 草稿正文已经进数据库，可以作为未发布篇目出现在清单里
+            // 草稿不进入课件清单：编辑页只认已发布篇目
             mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$[?(@.articleId == 901)].title", contains("口语训练-1")))
-                    .andExpect(jsonPath("$[?(@.articleId == 901)].published", contains(false)))
-                    .andExpect(jsonPath("$[?(@.articleId == 901)].hasDraft", contains(true)));
+                    .andExpect(jsonPath("$[?(@.articleId == 901)]", org.hamcrest.Matchers.empty()));
 
             mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")
                             .cookie(cookie)
@@ -377,6 +375,13 @@ class CoursewareEditorHttpContractTest {
                             .content(objectMapper.writeValueAsString(Map.of("subject", subject))))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.articleCount").value(1));
+
+            // 发布后才进入清单，且不再有草稿状态
+            mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.articleId == 901)].title", contains("口语训练-1")))
+                    .andExpect(jsonPath("$[?(@.articleId == 901)].published", contains(true)))
+                    .andExpect(jsonPath("$[?(@.articleId == 901)].hasDraft", contains(false)));
 
             // 发布后仍挂回 legacy 篇目：学员端看到的是原篇目的新版本，而不是凭空多出一篇
             Long publishedLegacyId = jdbc.queryForObject("""
@@ -1010,6 +1015,59 @@ class CoursewareEditorHttpContractTest {
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "kind", "unknown", "name", "x", "markdown", "y"))))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createAndSaveArticlePublishesImmediatelyWithoutDraft() throws Exception {
+        Cookie cookie = login(csrf(null), "alpha", "Alpha-password-2026");
+        String csrf = csrf(cookie).csrfToken();
+
+        String skeleton = objectMapper.readTree(mockMvc.perform(
+                        get("/api/v1/admin/courseware/layouts/B/skeleton").param("title", "直接编辑").cookie(cookie))
+                .andReturn().getResponse().getContentAsString()).get("markdown").asString();
+
+        MvcResult created = mockMvc.perform(post("/api/v1/admin/courseware/articles")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "subject", "高中英语",
+                                "title", "直接编辑",
+                                "logicalPath", "高中英语/直接编辑.md",
+                                "markdown", skeleton))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articleId").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1000)))
+                .andExpect(jsonPath("$.subject").value("高中英语"))
+                .andExpect(jsonPath("$.version").value(1))
+                .andReturn();
+        long articleId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("articleId").asLong();
+
+        mockMvc.perform(get("/api/v1/admin/courseware/articles/{articleId}", articleId).cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.subject").value("高中英语"))
+                .andExpect(jsonPath("$.logicalPath").value("高中英语/直接编辑.md"))
+                .andExpect(jsonPath("$.published").value(true))
+                .andExpect(jsonPath("$.markdown").value(skeleton));
+
+        String edited = skeleton.replace("在这里写题干", "他 ___ (go) to school every day.");
+        mockMvc.perform(put("/api/v1/admin/courseware/articles/{articleId}", articleId)
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("markdown", edited))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articleId").value(articleId))
+                .andExpect(jsonPath("$.version").value(2));
+
+        mockMvc.perform(get("/api/v1/admin/courseware/articles/{articleId}", articleId).cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.markdown").value(edited));
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.course_draft", Long.class)).isZero();
+        assertThat(jdbc.queryForObject(
+                "SELECT version FROM public.course_release_head WHERE subject = '高中英语'", Integer.class))
+                .isEqualTo(2);
     }
 
     @Test

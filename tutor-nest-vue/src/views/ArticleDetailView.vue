@@ -357,7 +357,7 @@ const activeArticle = computed(() => (isPreviewMode.value ? previewArticle.value
 
 const previewNote = computed(() => {
     if (!isPreviewMode.value) return ''
-    if (previewSource.value === 'draft') return '草稿预览 · 学员还看不到'
+    if (previewSource.value === 'local') return '未保存预览 · 学员还看不到'
     return '已发布 · 学员看到的就是这版'
 })
 
@@ -1412,19 +1412,35 @@ function resetDetailState() {
 let isRendering = false
 
 /**
- * 管理端预览：从「我的课件」清单找到这一篇，按草稿 → 已发布正文取正文。
+ * 管理端预览：从「我的课件」清单找到这一篇，读取当前发布版本正文。
  * 清单里没有时（例如刚导入还没刷新）用路由 query 里的元信息兜底；正文仍只走后端。
  */
 async function loadPreviewArticle() {
+    const query = route.query
+    const localPreview = query.localPreview === '1'
+    if (localPreview) {
+        const key = `courseware-preview:${blogId.value}`
+        const markdown = window.localStorage.getItem(key)
+        if (markdown != null) {
+            window.localStorage.removeItem(key)
+            previewSource.value = 'local'
+            previewArticle.value = {
+                id: blogId.value,
+                title: typeof query.title === 'string' ? query.title : `课件 ${blogId.value}`,
+                series: typeof query.subject === 'string' ? query.subject : '',
+                date: ''
+            }
+            return { article: previewArticle.value, markdown }
+        }
+    }
+
     const { articles } = await loadCoursewareLibrary()
     const found = (articles || []).find(item => Number(item.articleId) === Number(blogId.value)) || null
-    const query = route.query
     const target = found || {
         articleId: blogId.value,
         title: typeof query.title === 'string' ? query.title : '',
         series: typeof query.subject === 'string' ? query.subject : '',
-        logicalPath: typeof query.path === 'string' ? query.path : '',
-        hasDraft: false
+        logicalPath: typeof query.path === 'string' ? query.path : ''
     }
 
     const loaded = await loadArticleMarkdownForEditing(target)

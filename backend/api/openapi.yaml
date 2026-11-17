@@ -2092,11 +2092,10 @@ paths:
   /admin/courseware/articles:
     get:
       operationId: listCoursewareArticles
-      summary: 我的课件清单（已发布篇目 + 未发布草稿）
+      summary: 我的课件清单（当前发布版本）
       description: |
-        科目目录与在线编辑器选择器共用此清单。只包含数据库已托管的当前发布版本篇目与
-        尚未发布的草稿；正文一律从服务端托管 blob 读取，尚未导入的静态课件不会返回。
-        仅有草稿、还没发布过的篇目 subject 为空。
+        科目目录与在线编辑器共用此清单。只包含数据库已托管的当前发布版本篇目；
+        正文一律从服务端托管 blob 读取，尚未导入的静态课件不会返回。
       security:
         - sessionCookie: []
       responses:
@@ -2112,7 +2111,107 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+    post:
+      operationId: createCoursewareArticle
+      summary: 新建并立即发布一篇课件
+      description: |
+        从课件页新建课件时使用：直接生成一篇已发布课件（该科目版本号 +1），不走草稿。
+        同科目其他篇目按上一版结转，不重算正文。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareArticleCreateRequest'
+      responses:
+        '200':
+          description: 已创建并发布。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareArticleWriteResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
   /admin/courseware/articles/{articleId}:
+    get:
+      operationId: getCoursewareArticle
+      summary: 读取当前发布版本的一篇课件
+      description: |
+        直接读取当前发布版本的正文与元数据，不返回草稿。
+        正文 blob 缺失时返回 409 `courseware_content_missing`。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 课件正文与元数据。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareArticleContent'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: saveCoursewareArticle
+      summary: 保存并立即更新一篇课件
+      description: |
+        只替换这一篇的正文并立即发布（该科目版本号 +1），不走草稿。
+        保存成功后删除该文章残留草稿；同科目其他篇目按上一版结转。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoursewareArticleSaveRequest'
+      responses:
+        '200':
+          description: 已保存并发布。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareArticleWriteResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
     delete:
       operationId: deleteCoursewareArticle
       summary: 删除一篇课件（连同草稿、答案、共享、副本与学员授权）
@@ -4661,6 +4760,66 @@ components:
           description: 本次新写入的目录路径（含新登记的父目录）；全部已存在时为空数组。
           items:
             type: string
+    CoursewareArticleCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [subject, logicalPath, markdown]
+      properties:
+        subject:
+          type: string
+          maxLength: 200
+        title:
+          type: [string, 'null']
+          maxLength: 200
+          description: 留空时取路径里的文件名。
+        logicalPath:
+          type: string
+          maxLength: 500
+          description: 含学科前缀、以 .md 结尾，如 `高中英语/语法课讲义/虚拟语气.md`。
+        markdown:
+          type: string
+          maxLength: 1048576
+    CoursewareArticleSaveRequest:
+      type: object
+      additionalProperties: false
+      required: [markdown]
+      properties:
+        markdown:
+          type: string
+          maxLength: 1048576
+    CoursewareArticleContent:
+      type: object
+      additionalProperties: false
+      required: [articleId, subject, title, series, logicalPath, markdown, published]
+      properties:
+        articleId:
+          type: integer
+          format: int64
+        subject:
+          type: string
+        title:
+          type: [string, 'null']
+        series:
+          type: [string, 'null']
+        logicalPath:
+          type: string
+        markdown:
+          type: string
+        published:
+          type: boolean
+    CoursewareArticleWriteResult:
+      type: object
+      additionalProperties: false
+      required: [articleId, subject, version]
+      properties:
+        articleId:
+          type: integer
+          format: int64
+        subject:
+          type: string
+        version:
+          type: integer
+          minimum: 1
     CoursewareArticleDeleted:
       type: object
       additionalProperties: false
