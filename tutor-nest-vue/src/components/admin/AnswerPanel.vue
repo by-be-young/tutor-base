@@ -8,19 +8,10 @@
                     设置答案
                 </h2>
             </div>
-            <div class="row row--wrap answer-head__chips">
-                <span class="chip chip--cyan">
-                    <i aria-hidden="true" class="fas fa-user-graduate"></i>
-                    {{ currentStudentName }}
-                </span>
-            </div>
         </header>
 
         <div class="panel-body answer-body">
-            <EmptyState v-if="!selectedStudentId" icon="fas fa-user-graduate" title="尚未选择学员"
-                text="在顶部切换学员。" />
-
-            <div v-else-if="coursewareStatus === 'loading'" class="answer-skeletons" aria-hidden="true">
+            <div v-if="coursewareStatus === 'loading'" class="answer-skeletons" aria-hidden="true">
                 <div class="skeleton answer-skeleton"></div>
                 <div class="skeleton answer-skeleton"></div>
                 <div class="skeleton answer-skeleton"></div>
@@ -36,10 +27,6 @@
             <EmptyState v-else-if="coursewareStatus === 'empty'" icon="fas fa-hand-holding-heart"
                 title="你还没有可见课件"
                 text="先到课件页认领学科或课件。" />
-
-            <EmptyState v-else-if="scopedArticles.length === 0" icon="fas fa-shield-halved"
-                title="该学员尚未开通任何内容授权"
-                text="先到「权限管理」开通内容授权。" />
 
             <template v-else>
                 <div class="answer-subjects" role="group" aria-label="学科筛选">
@@ -83,7 +70,7 @@
 
                         <div v-else class="answer-tree">
                             <ClickableTreeNode v-for="node in treeData" :key="node.name + (node.isFile ? node.blogId : '')"
-                                :node="node" :marked-ids="answerKeyIds" marked-label="已设置" :tone="currentTone"
+                                :node="node" :marked-ids="completeArticleIds" marked-label="已设置" :tone="currentTone"
                                 :initially-expanded="activeFilter === 'unset'" @file-click="openArticle" />
                         </div>
                     </section>
@@ -216,10 +203,9 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useArticleStore } from '@/stores/blogStore'
 import { useCoursewareStore } from '@/stores/coursewareStore'
-import { grantedArticles } from '@/utils/adminSubjects'
 import { loadArticleMarkdown } from '@/utils/articleContent'
 import { extractAnswerIds } from '@/utils/questionText'
-import { needsAnswer as articleNeedsAnswer } from '@/utils/coursewareAnswerFilter'
+import { isAnswerComplete, needsAnswer as articleNeedsAnswer } from '@/utils/coursewareAnswerFilter'
 import { learningGateway } from '@/gateways/learningGateway'
 import { showToast } from '@/utils/toast'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -227,9 +213,7 @@ import ClickableTreeNode from './ClickableTreeNode.vue'
 
 const props = defineProps({
     blogData: { type: Array, default: () => [] },
-    allSubjects: { type: Array, default: () => [] },
-    students: { type: Array, default: () => [] },
-    selectedStudentId: { type: [String, Number], default: null }
+    allSubjects: { type: Array, default: () => [] }
 })
 
 const router = useRouter()
@@ -240,7 +224,7 @@ const currentSubject = ref('')
 const activeFilter = ref('unset')
 const keyword = ref('')
 
-const answerKeyIds = ref([])
+const answerKeyCounts = ref(new Map())
 const loadingKeys = ref(false)
 
 const selectedArticle = ref(null)
@@ -257,12 +241,6 @@ function subjectTone(subject) {
 
 const currentTone = computed(() => subjectTone(currentSubject.value))
 
-// 只允许在当前学员「在学」的科目与「已授权」文章里设置答案：
-// 未授权文章对该学员不可见，也不需要维护标准答案；同时限定在我的课件范围内。
-const currentStudent = computed(() => props.students
-    .find(item => String(item.id) === String(props.selectedStudentId)) || null)
-const currentStudentName = computed(() => currentStudent.value?.username || '未选择学员')
-
 const coursewareStatus = computed(() => {
     if (!coursewareStore.loaded) return coursewareStore.error ? 'error' : 'loading'
     return coursewareStore.visibleArticleIds.size === 0 ? 'empty' : 'ready'
@@ -278,34 +256,42 @@ watch(() => [props.blogData, articleStore.loaded, articleStore.isLoading],
         coursewareStore.ensureWorkspace(Array.isArray(articles) ? articles : []).catch(() => {})
     }, { immediate: true })
 
-const scopedArticles = computed(() => grantedArticles({
-    articles: props.blogData,
-    permissions: currentStudent.value?.permissions || [],
-    hasLearner: Boolean(props.selectedStudentId)
-}).filter(blog => coursewareStore.visibleArticleIds.has(Number(blog.id))))
+// 答案属于课件本身，不再按学员授权过滤。
+const scopedArticles = computed(() => props.blogData
+    .filter(blog => coursewareStore.visibleArticleIds.has(Number(blog.id))))
 
 const subjectArticles = computed(() => scopedArticles.value.filter(blog => blog.series === currentSubject.value))
+
+// 清单已带题目数；只有打开过、确认无题的旧数据才回退到本地集合。
+const noQuestionIds = ref(new Set())
+
+function answerCountOf(blog) {
+    return answerKeyCounts.value.get(Number(blog.id)) || 0
+}
+
+function isComplete(blog) {
+    return isAnswerComplete(blog, answerCountOf(blog), Array.from(noQuestionIds.value))
+}
+
+const completeArticleIds = computed(() => scopedArticles.value.filter(isComplete).map(blog => Number(blog.id)))
 
 const subjectStats = computed(() => props.allSubjects
     .map(subject => {
         const articles = scopedArticles.value.filter(blog => blog.series === subject)
         if (articles.length === 0) return null
-        const setCount = articles.filter(blog => answerKeyIds.value.includes(Number(blog.id))).length
+        const setCount = articles.filter(isComplete).length
         return { subject, tone: subjectTone(subject), total: articles.length, setCount }
     })
     .filter(Boolean))
 
-// 清单已带题目数；只有打开过、确认无题的旧数据才回退到本地集合。
-const noQuestionIds = ref(new Set())
-
 function needsAnswer(blog) {
-    return articleNeedsAnswer(blog, answerKeyIds.value, Array.from(noQuestionIds.value))
+    return articleNeedsAnswer(blog, answerCountOf(blog), Array.from(noQuestionIds.value))
 }
 
 // 筛选标签右侧保留数量（待设置/已设置/全部），只针对当前学科；纯讲义不进入待设置。
 const filters = computed(() => {
     const articles = subjectArticles.value
-    const setCount = articles.filter(blog => answerKeyIds.value.includes(Number(blog.id))).length
+    const setCount = articles.filter(isComplete).length
     const pendingCount = articles.filter(needsAnswer).length
     return [
         { value: 'unset', label: '待设置', count: pendingCount },
@@ -319,7 +305,7 @@ const filteredArticles = computed(() => {
     let articles = subjectArticles.value
 
     if (activeFilter.value === 'set') {
-        articles = articles.filter(blog => answerKeyIds.value.includes(Number(blog.id)))
+        articles = articles.filter(isComplete)
     } else if (activeFilter.value === 'unset') {
         articles = articles.filter(needsAnswer)
     }
@@ -486,8 +472,13 @@ function selectSubject(subject) {
 async function loadAnswerKeysCache() {
     loadingKeys.value = true
     try {
-        const articleIds = await learningGateway.getAnswerKeyArticleIds()
-        answerKeyIds.value = articleIds.map(Number).filter(Number.isFinite)
+        const counts = await learningGateway.getAnswerKeyCounts()
+        const next = new Map()
+        for (const item of counts || []) {
+            const id = Number(item.articleId)
+            if (Number.isFinite(id)) next.set(id, Number(item.answerCount) || 0)
+        }
+        answerKeyCounts.value = next
     } catch (error) {
         console.error('加载答案数据失败:', error)
     } finally {
@@ -495,11 +486,10 @@ async function loadAnswerKeysCache() {
     }
 }
 
-function rememberAsSet(articleId) {
-    const id = Number(articleId)
-    if (!answerKeyIds.value.includes(id)) {
-        answerKeyIds.value = [...answerKeyIds.value, id]
-    }
+function rememberAnswerCount(articleId, count) {
+    const next = new Map(answerKeyCounts.value)
+    next.set(Number(articleId), Number(count) || 0)
+    answerKeyCounts.value = next
 }
 
 async function saveAnswerKeys() {
@@ -524,7 +514,8 @@ async function saveAnswerKeys() {
             question.wasSet = String(question.answerText || '').trim() !== '' || Boolean(question.autoGrade)
         })
         snapshot.value = JSON.stringify(article.questions.map(rowsOf))
-        rememberAsSet(article.id)
+        rememberAnswerCount(article.id, rows.filter(row =>
+            row.answerText.trim() !== '' || row.autoGrade).length)
         showToast(`「${article.title}」答案已保存`, 'success')
     } catch (error) {
         showToast(error.message || '答案保存失败，请稍后重试', 'error')
@@ -533,21 +524,15 @@ async function saveAnswerKeys() {
     }
 }
 
-// 学科/学员变化后保证当前学科仍在授权范围内；切换学员时关闭旧文章，避免跨学员误改答案。
-watch([subjectStats, () => props.selectedStudentId], ([stats], previous) => {
+// 学科变化后保证当前学科仍有内容；文章列表变化时关闭已消失的文章。
+watch(subjectStats, (stats) => {
     const subjects = stats.map(item => item.subject)
     if (!subjects.includes(currentSubject.value)) {
         currentSubject.value = subjects[0] || ''
     }
-    if (previous && previous[1] !== props.selectedStudentId) {
-        selectedArticle.value = null
-        snapshot.value = ''
-        keyword.value = ''
-        activeFilter.value = 'unset'
-    }
 }, { immediate: true })
 
-// 已选文章不再属于当前学员授权范围时关闭编辑器
+// 已选文章不在当前课件范围时关闭编辑器
 watch(scopedArticles, (articles) => {
     const article = selectedArticle.value
     if (!article) return
@@ -569,13 +554,6 @@ onMounted(() => {
 
 .answer-head {
     align-items: flex-start;
-}
-
-.answer-head__chips {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
 }
 
 .answer-head__copy {

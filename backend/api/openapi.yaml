@@ -637,6 +637,22 @@ paths:
                 items: { type: integer, format: int64 }
         '401': { $ref: '#/components/responses/Problem' }
         '403': { $ref: '#/components/responses/CoursewareNotClaimed' }
+  /admin/articles/answer-key-counts:
+    get:
+      operationId: listAnswerKeyCounts
+      summary: 列出每篇文章已填写的答案题数
+      description: 只统计答案非空或开启自动批阅的题；用于区分未设置、部分设置与全部设置。
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 已填写答案的文章与题数。
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AnswerKeyCount' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/CoursewareNotClaimed' }
   /admin/articles/{articleId}/answer-keys:
     get:
       operationId: getArticleAnswerKeys
@@ -3617,6 +3633,16 @@ components:
         answerText: { type: string }
         autoGrade: { type: boolean }
         updatedAt: { type: string, format: date-time }
+    AnswerKeyCount:
+      type: object
+      additionalProperties: false
+      required: [articleId, answerCount]
+      properties:
+        articleId: { type: integer, format: int64 }
+        answerCount:
+          type: integer
+          minimum: 0
+          description: 答案非空或已开启自动批阅的题数。
     ReplaceAnswerKeysRequest:
       type: object
       additionalProperties: false

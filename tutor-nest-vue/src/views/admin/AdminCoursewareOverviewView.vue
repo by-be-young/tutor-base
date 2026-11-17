@@ -106,13 +106,7 @@
     </template>
 
     <section v-else-if="activeTab === 'answers'" id="courseware-tab-answers" class="overview__panel" role="tabpanel">
-      <div class="panel panel--tight answers-bar">
-        <div class="answers-bar__switcher">
-          <StudentSwitcher @select="handleSelectStudent" />
-        </div>
-      </div>
-      <AnswerPanel :blog-data="blogData" :all-subjects="allSubjects" :students="adminStore.students"
-        :selected-student-id="adminStore.currentStudentId" />
+      <AnswerPanel :blog-data="blogData" :all-subjects="allSubjects" />
     </section>
 
     <section v-else id="courseware-tab-sharing" class="overview__panel" role="tabpanel">
@@ -188,13 +182,10 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FolderNode from '@/components/articles/FolderNode.vue'
 import AnswerPanel from '@/components/admin/AnswerPanel.vue'
-import StudentSwitcher from '@/components/admin/StudentSwitcher.vue'
 import AdminSharingView from '@/views/admin/AdminSharingView.vue'
 import { coursewareGateway } from '@/gateways/coursewareGateway'
 import { ensureArticleData } from '@/composables/useAdminWorkspace'
-import { useAdminStore } from '@/stores/adminStore'
 import { useArticleStore } from '@/stores/blogStore'
-import { useAuthStore } from '@/stores/authStore'
 import { useCoursewareStore } from '@/stores/coursewareStore'
 import { loadCoursewareLibrary } from '@/utils/coursewareLibrary'
 import { buildCoursewareTree } from '@/utils/coursewareTree'
@@ -202,9 +193,7 @@ import { showToast } from '@/utils/toast'
 
 const router = useRouter()
 const route = useRoute()
-const adminStore = useAdminStore()
 const blogStore = useArticleStore()
-const authStore = useAuthStore()
 const coursewareStore = useCoursewareStore()
 
 /** 课件 / 设置答案 / 共享 三个标签；答案与共享原本是独立导航项，现已并入本页。 */
@@ -235,12 +224,6 @@ const allSubjects = computed(() => {
   }
   return Array.from(subjects).sort((left, right) => left.localeCompare(right, 'zh-CN'))
 })
-
-const accountId = computed(() => authStore.currentUser?.accountId ?? null)
-
-function handleSelectStudent(studentId) {
-  adminStore.selectStudent(studentId)
-}
 
 const loading = ref(true)
 const data = reactive({
@@ -569,19 +552,8 @@ async function loadFolders() {
   }
 }
 
-async function ensureStudents() {
-  if (adminStore.students.length > 0) return
-  try {
-    await adminStore.loadStudents()
-    adminStore.selectInitialStudent(accountId.value)
-  } catch (error) {
-    showToast(error?.message || '加载学员列表失败，请稍后重试', 'error')
-  }
-}
-
 onMounted(async () => {
-  // 课件页内置「设置答案」：与答案面板共用同一份已托管课件清单与学员列表
-  const jobs = [loadOverview(), loadUsage(), loadArticles(), loadFolders(), ensureStudents()]
+  const jobs = [loadOverview(), loadUsage(), loadArticles(), loadFolders()]
   jobs.push(ensureArticleData(blogStore).then(() => coursewareStore.loadWorkspace(blogStore.blogData)))
   await Promise.all(jobs.map(job => job.catch(() => {})))
   loading.value = false
@@ -607,32 +579,6 @@ onMounted(async () => {
   flex-direction: column;
   gap: 16px;
   min-width: 0;
-}
-
-.answers-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.answers-bar__switcher {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 0 1 360px;
-  min-width: 240px;
-}
-
-@media (max-width: 760px) {
-  .answers-bar {
-    align-items: flex-start;
-  }
-
-  .answers-bar__switcher {
-    flex-basis: 100%;
-  }
 }
 
 .overview__head {

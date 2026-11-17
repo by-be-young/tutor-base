@@ -64,6 +64,13 @@ public class LearningController {
         return noStore(learning.answerKeyArticleIds(administrator.accountId()));
     }
 
+    @GetMapping("/admin/articles/answer-key-counts")
+    ResponseEntity<List<AnswerKeyCountResponse>> answerKeyCounts(
+            @AuthenticationPrincipal AccountPrincipal administrator) {
+        return noStore(learning.answerKeyCounts(administrator.accountId()).stream()
+                .map(AnswerKeyCountResponse::from).toList());
+    }
+
     @GetMapping("/articles/study-progress")
     ResponseEntity<List<ArticleProgressResponse>> learnerProgress(
             @AuthenticationPrincipal AccountPrincipal principal) {
@@ -147,6 +154,12 @@ public class LearningController {
     record AnswerKeyResponse(String questionId, String answerText, boolean autoGrade, Instant updatedAt) {
         static AnswerKeyResponse from(LearningService.AnswerKey key) {
             return new AnswerKeyResponse(key.questionId(), key.answerText(), key.autoGrade(), key.updatedAt());
+        }
+    }
+
+    record AnswerKeyCountResponse(long articleId, int answerCount) {
+        static AnswerKeyCountResponse from(LearningService.AnswerKeyCount count) {
+            return new AnswerKeyCountResponse(count.articleId(), count.answerCount());
         }
     }
 

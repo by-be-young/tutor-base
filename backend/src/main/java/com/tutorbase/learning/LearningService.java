@@ -58,6 +58,24 @@ class LearningService {
                 .list();
     }
 
+    /** 每篇已填写答案的题数；空答案且未开启自动批阅的行不算已设置。 */
+    @Transactional(readOnly = true)
+    List<AnswerKeyCount> answerKeyCounts(long administratorAccountId) {
+        return jdbc.sql("""
+                SELECT answer.blog_id,
+                       count(*) FILTER (
+                           WHERE btrim(answer.answer_text) <> '' OR answer.auto_grade
+                       ) AS answer_count
+                FROM public.article_answer_keys AS answer
+                WHERE %s
+                GROUP BY answer.blog_id
+                ORDER BY answer.blog_id
+                """.formatted(coursewareScope.visibleArticlePredicate("answer.blog_id")))
+                .param("administratorAccountId", administratorAccountId)
+                .query(AnswerKeyCount::map)
+                .list();
+    }
+
     @Transactional(readOnly = true)
     List<ArticleProgress> learnerProgress(long learnerId) {
         return jdbc.sql("""
@@ -419,6 +437,12 @@ class LearningService {
         static ArticleProgress map(ResultSet row, int rowNumber) throws SQLException {
             return new ArticleProgress(row.getLong("blog_id"), row.getInt("total_questions"),
                     row.getInt("submitted_questions"), row.getInt("pending_reviews"));
+        }
+    }
+
+    record AnswerKeyCount(long articleId, int answerCount) {
+        static AnswerKeyCount map(ResultSet row, int rowNumber) throws SQLException {
+            return new AnswerKeyCount(row.getLong("blog_id"), row.getInt("answer_count"));
         }
     }
 }

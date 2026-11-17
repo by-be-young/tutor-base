@@ -17,6 +17,9 @@ export const learningGateway = {
   getAnswerKeyArticleIds() {
     return backendClient.request('/admin/articles/answer-key-article-ids')
   },
+  getAnswerKeyCounts() {
+    return backendClient.request('/admin/articles/answer-key-counts')
+  },
   getLearnerProgress() {
     return backendClient.request('/articles/study-progress')
   },

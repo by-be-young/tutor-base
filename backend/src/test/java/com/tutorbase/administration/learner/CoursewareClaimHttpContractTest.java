@@ -439,7 +439,15 @@ class CoursewareClaimHttpContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0]").value(101));
+        mockMvc.perform(get("/api/v1/admin/articles/answer-key-counts").cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].articleId").value(101))
+                .andExpect(jsonPath("$[0].answerCount").value(1));
         mockMvc.perform(get("/api/v1/admin/articles/answer-key-article-ids").cookie(adminTwoCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+        mockMvc.perform(get("/api/v1/admin/articles/answer-key-counts").cookie(adminTwoCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
 
