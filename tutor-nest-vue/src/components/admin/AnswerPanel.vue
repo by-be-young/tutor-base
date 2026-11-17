@@ -1,15 +1,6 @@
 <!-- src/components/admin/AnswerPanel.vue -->
 <template>
     <div class="panel answer-panel">
-        <header class="panel-head answer-head">
-            <div class="answer-head__copy">
-                <h2 class="panel-title">
-                    <i aria-hidden="true" class="fas fa-key"></i>
-                    设置答案
-                </h2>
-            </div>
-        </header>
-
         <div class="panel-body answer-body">
             <div v-if="coursewareStatus === 'loading'" class="answer-skeletons" aria-hidden="true">
                 <div class="skeleton answer-skeleton"></div>
@@ -25,8 +16,7 @@
             </EmptyState>
 
             <EmptyState v-else-if="coursewareStatus === 'empty'" icon="fas fa-hand-holding-heart"
-                title="你还没有可见课件"
-                text="先到课件页认领学科或课件。" />
+                title="你还没有可见课件" />
 
             <template v-else>
                 <div class="answer-subjects" role="group" aria-label="学科筛选">
@@ -62,11 +52,10 @@
                             <div class="skeleton answer-skeleton"></div>
                         </div>
 
-                        <EmptyState v-else-if="!currentSubject" icon="fas fa-folder-open" title="未选择学科"
-                            text="选择学科后浏览文章。" />
+                        <EmptyState v-else-if="!currentSubject" icon="fas fa-folder-open" title="未选择学科" />
 
                         <EmptyState v-else-if="filteredArticles.length === 0" icon="fas fa-filter"
-                            title="没有符合条件的文章" text="切换筛选条件或学科。" />
+                            title="没有符合条件的文章" />
 
                         <div v-else class="answer-tree">
                             <ClickableTreeNode v-for="node in treeData" :key="node.name + (node.isFile ? node.blogId : '')"
@@ -76,8 +65,8 @@
                     </section>
 
                     <section class="answer-editor" aria-live="polite">
-                        <EmptyState v-if="!selectedArticle" icon="fas fa-pen-to-square" title="选择一篇文章开始设置答案"
-                            text="点击左侧文章后在这里填写。" />
+                        <EmptyState v-if="!selectedArticle" icon="fas fa-pen-to-square"
+                            title="选择一篇文章开始设置答案" />
 
                         <div v-else-if="selectedArticle.loading" class="answer-editor__loading">
                             <div class="answer-editor__loading-head">
@@ -552,16 +541,6 @@ onMounted(() => {
     overflow: hidden;
 }
 
-.answer-head {
-    align-items: flex-start;
-}
-
-.answer-head__copy {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
 .answer-body {
     display: flex;
     flex-direction: column;
@@ -920,10 +899,6 @@ onMounted(() => {
    ========================================================================== */
 .panel-title i {
     color: var(--vermilion);
-}
-
-.answer-head .chip {
-    box-shadow: 2px 2px 0 var(--ink);
 }
 
 .answer-subject {

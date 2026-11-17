@@ -59,7 +59,6 @@
       <div v-else-if="!subjects.length" class="empty">
         <i class="fas fa-folder-open empty__icon" aria-hidden="true"></i>
         <p class="empty__title">还没有任何科目</p>
-        <p class="empty__text">在目录里新建第一篇课件。</p>
       </div>
 
       <div v-else class="overview__workspace">

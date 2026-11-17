@@ -64,8 +64,8 @@
       </div>
     </header>
 
-    <!-- 页面标题：沿用学员端 page-head 的位置与字号 -->
-    <div class="admin-pagehead">
+    <!-- 页面标题：课件页由标签直接导航，不再重复标题 -->
+    <div v-if="route.name !== 'AdminCoursewareOverview'" class="admin-pagehead">
       <h1 class="admin-pagehead__title">{{ pageTitle }}</h1>
     </div>
 
