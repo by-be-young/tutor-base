@@ -4,9 +4,7 @@
     <!-- 欢迎语 + 页面级快捷操作 -->
     <section class="panel dash-head">
       <div class="dash-head__copy">
-        <span class="eyebrow">{{ todayLabel }} / 管理工作台</span>
         <h2 class="dash-head__title">{{ authStore.username }}，<span class="text-gradient">今天先看谁</span></h2>
-        <p class="dash-head__sub">学员动态与待办批阅一屏掌握，点击“去批阅”可直接落到最早一条待批阅习题。</p>
       </div>
 
       <div class="dash-quick">
@@ -26,7 +24,6 @@
     <section class="panel panel--pad dash-overview" aria-labelledby="dash-overview-title">
       <div class="section-head">
         <div>
-          <span class="eyebrow">OVERVIEW / 管理概览</span>
           <h2 id="dash-overview-title" class="section-title">近 7 天概况</h2>
         </div>
         <button v-if="overviewError" type="button" class="btn btn--ghost btn--sm"
@@ -52,14 +49,9 @@
           <li v-for="metric in metrics" :key="metric.key" class="stat-card" :class="metric.tone">
             <span class="stat-value">{{ metric.value }}</span>
             <span class="stat-label">{{ metric.label }}</span>
-            <span class="stat-sub">{{ metric.hint }}</span>
           </li>
         </ul>
 
-        <p v-if="!overviewError && overview" class="dash-overview__note">
-          学员 {{ overview.learners }} 人 · 我已认领 {{ overview.claimedLearners }} · 未认领 {{ overview.unclaimedLearners }}
-          · 可见课件 {{ overview.courseware.visible }} 篇
-        </p>
       </template>
     </section>
 
@@ -67,7 +59,6 @@
     <section class="panel panel--pad trend-panel" aria-labelledby="dash-trend-title">
       <div class="section-head">
         <div>
-          <span class="eyebrow">TREND / 30 天趋势</span>
           <h2 id="dash-trend-title" class="section-title">提交与批阅走势</h2>
         </div>
         <div class="trend-panel__tools">
@@ -129,19 +120,15 @@
     <section class="panel panel--pad activity-panel">
       <div class="section-head">
         <div>
-          <span class="eyebrow">ACTIVITY / 学员动态</span>
           <h2 class="section-title">最近活跃的学员</h2>
         </div>
-        <span class="section-note">按最近动态倒序 · 只看我认领的学员 · 前 {{ recentStudents.length }} 名</span>
       </div>
 
       <div v-if="recentStudents.length === 0" class="empty empty--inline">
         <span class="empty__icon"><i class="fas fa-user-plus" aria-hidden="true"></i></span>
         <p class="empty__title">{{ ownStudents.length ? '暂无普通学员动态' : '还没有你认领的学员' }}</p>
         <p class="empty__text">
-          {{ ownStudents.length
-            ? '我的学员还没有学习动态；测试学员不计入活跃度统计与学员动态列表。'
-            : '到「学员」页认领一位学员，认领后即可查看其动态、配置内容授权与批阅。' }}
+          {{ ownStudents.length ? '暂无学习动态。' : '先到「学员」页认领一位学员。' }}
         </p>
         <router-link to="/admin/learners" class="btn btn--soft btn--sm">
           {{ ownStudents.length ? '去学员列表' : '去认领学员' }}
@@ -217,10 +204,6 @@ const activityDays = ref(30)
 const activityLoading = ref(false)
 const activityError = ref('')
 
-const todayLabel = computed(() => new Intl.DateTimeFormat('zh-CN', {
-  month: 'long', day: 'numeric', weekday: 'long'
-}).format(new Date()))
-
 function analysisErrorMessage(error, subject) {
   const status = error?.status
   if (status === 404) return `${subject}接口暂不可用，后端可能尚未部署该功能，请稍后重试。`
@@ -267,28 +250,24 @@ const overviewMetrics = computed(() => {
       key: 'mine',
       label: '我的学员',
       value: data.claimedLearners ?? 0,
-      hint: `共 ${data.learners ?? 0} 名学员`,
       tone: 'stat-card--cyan'
     },
     {
       key: 'active',
       label: '活跃学员',
       value: data.activeLearners7d ?? 0,
-      hint: '我的学员近 7 天有动态',
       tone: 'stat-card--lime'
     },
     {
       key: 'pending',
       label: '待批阅',
       value: data.pendingReviews ?? 0,
-      hint: '等待批阅的作答',
       tone: 'stat-card--coral'
     },
     {
       key: 'submissions',
       label: '近 7 日提交',
       value: data.submissions7d ?? 0,
-      hint: '学员提交次数',
       tone: 'stat-card--amber'
     }
   ]
@@ -470,11 +449,6 @@ onMounted(() => {
   font-size: clamp(1.5rem, 2.6vw, 2.1rem);
 }
 
-.dash-head__sub {
-  font-size: 0.88rem;
-  color: var(--text-2);
-}
-
 .dash-quick {
   display: flex;
   align-items: center;
@@ -500,12 +474,6 @@ onMounted(() => {
   font-variant-numeric: tabular-nums;
 }
 
-.dash-overview__note {
-  margin-top: 12px;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--text-3);
-}
 
 .dash-skeleton {
   display: flex;

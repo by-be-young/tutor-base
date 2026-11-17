@@ -7,9 +7,6 @@
                     <i aria-hidden="true" class="fas fa-book-open"></i>
                     学员科目
                 </h2>
-                <p class="text-sm text-muted">
-                    先在这里给学员开通科目：开通只建立科目归属，初始不授权该科目下任何文章。保存后到「权限管理」按需选择具体文章；取消科目会一并移除该科目下已授权的文章。
-                </p>
             </div>
             <span class="chip chip--cyan subject-head__student">
                 <i aria-hidden="true" class="fas fa-user-graduate"></i>

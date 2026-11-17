@@ -16,11 +16,7 @@
         <!-- ========== 页头 ========== -->
         <header class="page-head page-head--row tasks-head">
             <div class="head-copy">
-                <span class="eyebrow">NEST / MISSION CONTROL</span>
                 <h1 class="page-title">任务中心</h1>
-                <p class="page-sub">
-                    完成每日、每周与限时任务，解锁分级成就，提升成长等级。
-                </p>
             </div>
 
             <!-- 标签页：任务 / 成就 / 收藏室 -->

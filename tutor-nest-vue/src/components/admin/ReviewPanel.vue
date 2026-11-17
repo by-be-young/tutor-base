@@ -7,7 +7,6 @@
                     <i aria-hidden="true" class="fas fa-pen-nib"></i>
                     批阅中心
                 </h2>
-                <p class="text-sm text-muted">查看学员作答、对照参考答案，一键完成三态批阅。</p>
             </div>
             <div class="review-head__chips">
                 <span class="chip chip--cyan">
@@ -56,7 +55,7 @@
                     </div>
 
                     <EmptyState v-else-if="!selectedStudentId" icon="fas fa-user-graduate" title="尚未选择学员"
-                        text="在顶部切换学员后，即可查看他的待批阅内容。" />
+                        text="在顶部切换学员。" />
 
                     <div v-else-if="coursewareStatus === 'loading'" class="review-skeletons" aria-hidden="true">
                         <div class="skeleton review-skeleton"></div>
@@ -73,17 +72,17 @@
 
                     <EmptyState v-else-if="coursewareStatus === 'empty'" icon="fas fa-hand-holding-heart"
                         title="你还没有可见课件"
-                        text="你先到课件页认领学科或课件，认领后即可批阅这些课件下的作答。" />
+                        text="先到课件页认领学科或课件。" />
 
                     <EmptyState v-else-if="grantedArticleCount === 0" icon="fas fa-shield-halved"
                         title="该学员尚未开通内容授权"
-                        text="请到「权限管理」为该学员开通文章权限后，再回到批阅中心查看作答。" />
+                        text="先到「权限管理」开通内容授权。" />
 
                     <EmptyState v-else-if="!currentSubject" icon="fas fa-folder-open" title="未选择学科"
-                        text="选择一个学科开始批阅。" />
+                        text="选择一个学科。" />
 
                     <EmptyState v-else-if="filteredArticles.length === 0" icon="fas fa-mug-hot"
-                        title="没有符合条件的文章" text="切换筛选条件，或等待学员提交新的作答。" />
+                        title="没有符合条件的文章" text="切换筛选条件。" />
 
                     <div v-else class="review-tree">
                         <ClickableTreeNode v-for="node in treeData" :key="node.name + (node.isFile ? node.blogId : '')"
@@ -114,7 +113,6 @@
                     <template v-else>
                         <header class="review-detail__head">
                             <div class="review-detail__title-wrap">
-                                <span class="eyebrow">REVIEW</span>
                                 <h3 class="review-detail__title">{{ selectedArticle.title }}</h3>
                                 <div class="row row--wrap review-detail__meta">
                                     <span class="chip" :class="`chip--${currentTone}`">{{ selectedArticle.series }}</span>

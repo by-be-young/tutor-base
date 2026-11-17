@@ -1,18 +1,7 @@
 <template>
   <div class="editor">
-    <section class="panel panel--tight editor__lead">
-      <div class="editor__lead-main">
-        <p class="eyebrow">课件托管</p>
-        <h1 class="editor__lead-title">在线编辑器</h1>
-      </div>
-      <button type="button" class="btn btn--soft btn--sm" @click="guideOpen = true">
-        <i class="fas fa-circle-question" aria-hidden="true"></i> 发布教程
-      </button>
-    </section>
-
     <section class="panel panel--tight editor__identity">
       <div class="editor__identity-main">
-        <p class="eyebrow">正在编辑</p>
         <h1 class="editor__identity-title">{{ currentTitle }}</h1>
         <p class="editor__identity-meta">
           <span class="editor__chip">{{ currentSubject }}</span>
@@ -27,17 +16,22 @@
           请重新保存并发布一份正文来恢复。
         </p>
       </div>
-      <label class="editor__field editor__field--picker">
-        <span>选择要编辑的课件</span>
-        <select :value="articleId ?? ''" @change="onPickArticle">
-          <option value="">— 从我的课件里选一篇 —</option>
-          <optgroup v-for="group in articleGroups" :key="group.subject" :label="group.subject">
-            <option v-for="item in group.items" :key="item.articleId" :value="item.articleId">
-              {{ item.title || `课件 ${item.articleId}` }}{{ item.published ? ' · 已发布' : ' · 草稿' }}
-            </option>
-          </optgroup>
-        </select>
-      </label>
+      <div class="editor__identity-side">
+        <button type="button" class="btn btn--soft btn--sm" @click="guideOpen = true">
+          <i class="fas fa-circle-question" aria-hidden="true"></i> 发布教程
+        </button>
+        <label class="editor__field editor__field--picker">
+          <span>选择要编辑的课件</span>
+          <select :value="articleId ?? ''" @change="onPickArticle">
+            <option value="">— 从我的课件里选一篇 —</option>
+            <optgroup v-for="group in articleGroups" :key="group.subject" :label="group.subject">
+              <option v-for="item in group.items" :key="item.articleId" :value="item.articleId">
+                {{ item.title || `课件 ${item.articleId}` }}{{ item.published ? ' · 已发布' : ' · 草稿' }}
+              </option>
+            </optgroup>
+          </select>
+        </label>
+      </div>
     </section>
 
     <div class="panel panel--tight editor__toolbar">
@@ -865,32 +859,19 @@ onMounted(async () => {
   gap: 16px;
 }
 
-.editor__lead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.editor__lead-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.editor__lead-title {
-  margin: 0;
-  font-size: 1.05rem;
-  color: var(--ink);
-}
-
 .editor__identity {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
   align-items: flex-end;
   justify-content: space-between;
+}
+
+.editor__identity-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
 }
 
 .editor__identity-main {
@@ -1441,6 +1422,11 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
+  .editor__identity-side {
+    width: 100%;
+    align-items: stretch;
+  }
+
   .editor__field {
     min-width: 100%;
   }

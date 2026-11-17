@@ -25,9 +25,7 @@
             <!-- ============ 头部 ============ -->
             <header class="page-head page-head--row">
                 <div class="wq-head">
-                    <span class="eyebrow">NEST / 错题作战室</span>
                     <h1 class="page-title">错题<span class="text-gradient">作战室</span></h1>
-                    <p class="page-sub">把每一道错题拆开、弄懂、逐个击破 —— 直到掌握率逼近 100%。</p>
                 </div>
                 <div class="wq-head__actions">
                     <button type="button" class="btn wq-only-toggle"

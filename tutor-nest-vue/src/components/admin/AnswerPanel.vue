@@ -7,9 +7,6 @@
                     <i aria-hidden="true" class="fas fa-key"></i>
                     设置答案
                 </h2>
-                <p class="text-sm text-muted">
-                    只显示当前学员在学的科目与已授权文章；填写标准答案后可开启自动批阅，一次保存全部题目。
-                </p>
             </div>
             <div class="row row--wrap answer-head__chips">
                 <span class="chip chip--cyan">
@@ -21,7 +18,7 @@
 
         <div class="panel-body answer-body">
             <EmptyState v-if="!selectedStudentId" icon="fas fa-user-graduate" title="尚未选择学员"
-                text="在顶部切换学员后，这里只显示他在学的科目与已授权文章。" />
+                text="在顶部切换学员。" />
 
             <div v-else-if="coursewareStatus === 'loading'" class="answer-skeletons" aria-hidden="true">
                 <div class="skeleton answer-skeleton"></div>
@@ -38,11 +35,11 @@
 
             <EmptyState v-else-if="coursewareStatus === 'empty'" icon="fas fa-hand-holding-heart"
                 title="你还没有可见课件"
-                text="你先到课件页认领学科或课件，认领后即可为这些课件设置标准答案。" />
+                text="先到课件页认领学科或课件。" />
 
             <EmptyState v-else-if="scopedArticles.length === 0" icon="fas fa-shield-halved"
                 title="该学员尚未开通任何内容授权"
-                text="先到「权限管理」为该学员整科开通在学科目，再回到这里设置标准答案。" />
+                text="先到「权限管理」开通内容授权。" />
 
             <template v-else>
                 <div class="answer-subjects" role="group" aria-label="学科筛选">
@@ -79,10 +76,10 @@
                         </div>
 
                         <EmptyState v-else-if="!currentSubject" icon="fas fa-folder-open" title="未选择学科"
-                            text="选择学科后浏览文章，点击文章填写标准答案。" />
+                            text="选择学科后浏览文章。" />
 
                         <EmptyState v-else-if="filteredArticles.length === 0" icon="fas fa-filter"
-                            title="没有符合条件的文章" text="切换筛选条件，或选择其他学科。" />
+                            title="没有符合条件的文章" text="切换筛选条件或学科。" />
 
                         <div v-else class="answer-tree">
                             <ClickableTreeNode v-for="node in treeData" :key="node.name + (node.isFile ? node.blogId : '')"
@@ -93,12 +90,11 @@
 
                     <section class="answer-editor" aria-live="polite">
                         <EmptyState v-if="!selectedArticle" icon="fas fa-pen-to-square" title="选择一篇文章开始设置答案"
-                            text="左侧点击文章后，这里会列出题号、标准答案与自动批阅开关。" />
+                            text="点击左侧文章后在这里填写。" />
 
                         <div v-else-if="selectedArticle.loading" class="answer-editor__loading">
                             <div class="answer-editor__loading-head">
                                 <div class="answer-editor__title-wrap">
-                                    <span class="eyebrow">ANSWER KEYS</span>
                                     <h3 class="answer-editor__title">{{ selectedArticle.title }}</h3>
                                 </div>
                                 <button type="button" class="btn btn--soft btn--sm" @click="openOriginal">
@@ -128,7 +124,6 @@
                         <template v-else>
                             <header class="answer-editor__head">
                                 <div class="answer-editor__title-wrap">
-                                    <span class="eyebrow">ANSWER KEYS</span>
                                     <h3 class="answer-editor__title">{{ selectedArticle.title }}</h3>
                                     <div class="row row--wrap answer-editor__meta">
                                         <span class="chip" :class="`chip--${currentTone}`">{{ selectedArticle.series }}</span>
@@ -151,7 +146,7 @@
 
                             <EmptyState v-if="selectedArticle.questions.length === 0 && selectedArticle.noQuestions"
                                 icon="fas fa-circle-info" title="该文章暂无题目"
-                                text="正文里没有检测到【@题号】作答占位符，纯讲义不需要设置标准答案。" />
+                                text="正文里没有【@题号】占位符，无需设置答案。" />
 
                             <EmptyState v-else-if="selectedArticle.questions.length === 0" icon="fas fa-circle-question"
                                 title="这篇文章里没有识别到题目"
@@ -224,6 +219,7 @@ import { useCoursewareStore } from '@/stores/coursewareStore'
 import { grantedArticles } from '@/utils/adminSubjects'
 import { loadArticleMarkdown } from '@/utils/articleContent'
 import { extractAnswerIds } from '@/utils/questionText'
+import { needsAnswer as articleNeedsAnswer } from '@/utils/coursewareAnswerFilter'
 import { learningGateway } from '@/gateways/learningGateway'
 import { showToast } from '@/utils/toast'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -299,20 +295,18 @@ const subjectStats = computed(() => props.allSubjects
     })
     .filter(Boolean))
 
-// 题目只能从托管正文里的 `【@】` 占位符解析，清单本身不带题目信息：
-// 打开过的无题课件记在这里，避免「待设置」反复把它们算进去。
+// 清单已带题目数；只有打开过、确认无题的旧数据才回退到本地集合。
 const noQuestionIds = ref(new Set())
 
-function isNoQuestion(id) {
-    return noQuestionIds.value.has(Number(id))
+function needsAnswer(blog) {
+    return articleNeedsAnswer(blog, answerKeyIds.value, Array.from(noQuestionIds.value))
 }
 
-// 筛选标签右侧保留数量（待设置/已设置/全部），只针对当前学科；待设置排除已确认无题的课件。
+// 筛选标签右侧保留数量（待设置/已设置/全部），只针对当前学科；纯讲义不进入待设置。
 const filters = computed(() => {
     const articles = subjectArticles.value
     const setCount = articles.filter(blog => answerKeyIds.value.includes(Number(blog.id))).length
-    const pendingCount = articles.filter(blog =>
-        !answerKeyIds.value.includes(Number(blog.id)) && !isNoQuestion(blog.id)).length
+    const pendingCount = articles.filter(needsAnswer).length
     return [
         { value: 'unset', label: '待设置', count: pendingCount },
         { value: 'set', label: '已设置', count: setCount },
@@ -327,8 +321,7 @@ const filteredArticles = computed(() => {
     if (activeFilter.value === 'set') {
         articles = articles.filter(blog => answerKeyIds.value.includes(Number(blog.id)))
     } else if (activeFilter.value === 'unset') {
-        articles = articles.filter(blog =>
-            !answerKeyIds.value.includes(Number(blog.id)) && !isNoQuestion(blog.id))
+        articles = articles.filter(needsAnswer)
     }
 
     if (search) {

@@ -3,11 +3,7 @@
   <div class="admin-page">
     <section class="panel applications-head">
       <div class="applications-head__copy">
-        <span class="eyebrow">REGISTRATION / 教师注册</span>
         <h2 class="applications-head__title">教师注册审核</h2>
-        <p class="applications-head__sub">
-          只有超级管理员可以审批。通过后申请人立即成为管理员，原密码可直接登录管理台；驳回不影响其重新申请。
-        </p>
         <p class="applications-head__who">
           <i class="fas fa-user-shield" aria-hidden="true"></i>
           当前超级管理员 · {{ authStore.username }}
@@ -321,14 +317,6 @@ onMounted(() => load('pending'))
   font-size: clamp(1.25rem, 2.2vw, 1.6rem);
   font-weight: 800;
   color: var(--ink);
-}
-
-.applications-head__sub {
-  max-width: 720px;
-  margin: 0;
-  color: var(--text-2);
-  font-size: 0.86rem;
-  line-height: 1.65;
 }
 
 .applications-head__who {

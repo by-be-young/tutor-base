@@ -32,12 +32,10 @@
     -->
     <template v-if="!authStore.isLoggedIn">
       <header class="page-head">
-        <span class="eyebrow">NEST / 学科知识地图</span>
         <h1 class="page-title">请先登录后查看</h1>
-        <p class="page-sub">登录后即可进入你被授权的学科知识地图。</p>
       </header>
       <EmptyState icon="fas fa-lock" title="目录需要登录后展开"
-        text="请先登录后查看。登录后这里会展示你被授权的学科文档、文件夹结构与待提交任务。">
+        text="请先登录后查看。">
         <router-link to="/" class="btn btn--primary">
           <i class="fas fa-right-to-bracket"></i> 返回首页登录
         </router-link>
@@ -64,12 +62,10 @@
     -->
     <template v-else-if="!currentSubject || filteredArticles.length === 0">
       <header class="page-head">
-        <span class="eyebrow">NEST / 学科知识地图</span>
         <h1 class="page-title">请从首页选择科目</h1>
-        <p class="page-sub">在学科大厅选择一门科目，知识地图会在这里展开。</p>
       </header>
       <EmptyState icon="fas fa-compass" title="还没有可展示的目录"
-        text="请从首页选择科目。如果科目卡片为空，请联系管理员开放学习权限。">
+        text="请从首页选择科目；科目为空请联系管理员开放权限。">
         <router-link to="/" class="btn btn--primary">
           <i class="fas fa-house"></i> 返回首页
         </router-link>

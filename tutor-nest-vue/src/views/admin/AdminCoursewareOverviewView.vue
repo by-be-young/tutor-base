@@ -12,36 +12,22 @@
     </div>
 
     <template v-if="activeTab === 'tree'">
-      <section class="panel panel--tight overview__lead">
-        <p class="eyebrow">课件托管</p>
-        <p class="overview__lead-text">
-          每个科目一个发布版本：草稿只有你自己能看到，点「发布」才生效；删除草稿不会影响已发布内容。
-          点目录里的篇目会在新页面里用学员阅读器完整预览（草稿会标注「学员还看不到」），要改内容再点「去编辑」。
-          正文从数据库发布版本读取，图片由 Supabase Storage 提供，页面不再依赖仓库里的静态文件。
-          删除一篇课件会同时清掉它的草稿、答案、共享与学员权限，并从当前发布版本里移除。
-        </p>
-      </section>
-
       <div class="stat-grid">
         <div class="stat-card">
           <span class="stat-label">科目</span>
           <span class="stat-value">{{ subjects.length }}</span>
-          <span class="stat-sub">已发布版本 + 草稿</span>
         </div>
         <div class="stat-card stat-card--amber">
           <span class="stat-label">待发布草稿</span>
           <span class="stat-value">{{ data.pendingDrafts }}</span>
-          <span class="stat-sub">草稿需点发布才生效</span>
         </div>
         <div class="stat-card stat-card--cyan">
           <span class="stat-label">获取的课件</span>
           <span class="stat-value">{{ data.acquiredCount }}</span>
-          <span class="stat-sub">来自其他老师</span>
         </div>
         <div class="stat-card" :class="{ 'stat-card--coral': data.pendingUpdates > 0 }">
           <span class="stat-label">有更新</span>
           <span class="stat-value">{{ data.pendingUpdates }}</span>
-          <span class="stat-sub">来源发布了新版本</span>
         </div>
       </div>
 
@@ -73,9 +59,7 @@
       <div v-else-if="!subjects.length" class="empty">
         <i class="fas fa-folder-open empty__icon" aria-hidden="true"></i>
         <p class="empty__title">还没有任何科目</p>
-        <p class="empty__text">
-          在目录的「＋」里新建课件会同时建好科目目录；正文会保存到服务端托管版本，供学员端和预览统一读取。
-        </p>
+        <p class="empty__text">在目录里新建第一篇课件。</p>
       </div>
 
       <div v-else class="overview__workspace">
@@ -83,7 +67,6 @@
           <header class="panel-head overview__tree-head">
             <h2 class="panel-title">课件目录</h2>
             <div class="overview__tree-actions">
-              <span class="overview__tree-hint">＋ 新建课件 · 文件夹＋ 新建子目录 · 点篇目预览</span>
               <button type="button" class="btn btn--ghost btn--sm" @click="toggleAll">
                 {{ expanded ? '全部收起' : '全部展开' }}
               </button>
@@ -125,13 +108,8 @@
     <section v-else-if="activeTab === 'answers'" id="courseware-tab-answers" class="overview__panel" role="tabpanel">
       <div class="panel panel--tight answers-bar">
         <div class="answers-bar__switcher">
-          <span class="eyebrow">CURRENT LEARNER</span>
           <StudentSwitcher @select="handleSelectStudent" />
         </div>
-        <p class="answers-bar__hint">
-          <i aria-hidden="true" class="fas fa-circle-info"></i>
-          答案按学员范围维护：只列出你名下、且该学员已开通科目里已授权的课件。
-        </p>
       </div>
       <AnswerPanel :blog-data="blogData" :all-subjects="allSubjects" :students="adminStore.students"
         :selected-student-id="adminStore.currentStudentId" />
@@ -647,20 +625,6 @@ onMounted(async () => {
   min-width: 240px;
 }
 
-.answers-bar__hint {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0;
-  font-size: 0.78rem;
-  line-height: 1.5;
-  color: var(--text-2);
-}
-
-.answers-bar__hint i {
-  color: var(--text-3);
-}
-
 @media (max-width: 760px) {
   .answers-bar {
     align-items: flex-start;
@@ -669,19 +633,6 @@ onMounted(async () => {
   .answers-bar__switcher {
     flex-basis: 100%;
   }
-}
-
-.overview__lead {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.overview__lead-text {
-  margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.6;
-  color: var(--text-2);
 }
 
 .overview__head {
@@ -727,17 +678,6 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.overview__tree-hint {
-  font-size: 0.74rem;
-  color: var(--text-3);
-}
-
-@media (max-width: 720px) {
-  .overview__tree-hint {
-    display: none;
-  }
 }
 
 .overview__subject {

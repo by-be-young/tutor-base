@@ -131,7 +131,7 @@ public class CoursewareOverviewService {
                 .collect(java.util.stream.Collectors.toSet());
         List<ArticleSummary> published = jdbc.sql("""
                 SELECT h.subject, ca.article_id, ca.legacy_article_id, ca.title, ca.series,
-                       ca.logical_path, ca.content_hash,
+                       ca.logical_path, ca.content_hash, ca.question_count,
                        d.markdown IS NOT NULL AS has_draft,
                        COALESCE(length(d.markdown), 0) AS size,
                        d.updated_at AS draft_updated_at
@@ -156,6 +156,7 @@ public class CoursewareOverviewService {
                         true,
                         rs.getBoolean("has_draft"),
                         rs.getInt("size"),
+                        rs.getInt("question_count"),
                         toInstant(rs, "draft_updated_at"),
                         !storedHashes.contains(
                                 com.tutorbase.courseware.storage.CoursewareHashes.normalize(
@@ -201,6 +202,7 @@ public class CoursewareOverviewService {
                             false,
                             true,
                             markdown.length(),
+                            com.tutorbase.courseware.publish.CoursewareValidator.answerIds(markdown).size(),
                             toInstant(rs, "updated_at"),
                             false);
                 })
@@ -239,6 +241,8 @@ public class CoursewareOverviewService {
             boolean published,
             boolean hasDraft,
             int size,
+            /** 正文里的作答占位符数量；0 表示纯讲义，不进入「待设置答案」。 */
+            int questionCount,
             Instant updatedAt,
             /** true = 已发布篇目的正文文件（blob）不在了：编辑器提示重新发布。 */
             boolean contentMissing) {

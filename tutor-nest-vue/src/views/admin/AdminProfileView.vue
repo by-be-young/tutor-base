@@ -4,7 +4,6 @@
     <section class="panel profile-card">
       <span class="avatar profile-card__avatar" aria-hidden="true">{{ userInitial }}</span>
       <div class="profile-card__main">
-        <span class="eyebrow">ADMINISTRATOR / 管理员</span>
         <h2 class="profile-card__name">{{ authStore.username }}</h2>
         <div class="profile-card__chips">
           <span class="chip chip--coral"><i class="fas fa-shield-halved" aria-hidden="true"></i> 管理员</span>
@@ -16,7 +15,6 @@
     <section class="panel panel--pad claim-panel">
       <div class="section-head">
         <div>
-          <span class="eyebrow">CLAIMS / 认领概览</span>
           <h2 class="section-title">我负责的内容</h2>
         </div>
         <router-link to="/admin/courseware" class="btn btn--soft btn--sm">
@@ -39,14 +37,13 @@
         <span v-for="subject in subjects" :key="subject" class="chip chip--lime">{{ subject }}</span>
       </div>
       <p v-else class="claim-empty">
-        还没有可管理的课件，去「课件」页新建或导入后即可管理学员的内容授权与批阅。
+        还没有可管理的课件。
       </p>
     </section>
 
     <section class="panel panel--pad action-panel">
       <div class="section-head">
         <div>
-          <span class="eyebrow">ACCOUNT / 账户操作</span>
           <h2 class="section-title">账户与入口</h2>
         </div>
       </div>

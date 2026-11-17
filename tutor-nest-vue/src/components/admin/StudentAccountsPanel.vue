@@ -8,7 +8,6 @@
                         <i class="fas fa-users-gear" aria-hidden="true"></i>
                         学生账户
                     </h2>
-                    <p class="text-sm text-muted">为学员设置或重置登录密码，也可以免密进入学员账号查看学习现场。</p>
                     <p v-if="passwordNotice" class="student-notice" role="status">
                         <i class="fas fa-circle-check"></i>
                         {{ passwordNotice }}

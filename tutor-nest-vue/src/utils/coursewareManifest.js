@@ -54,7 +54,8 @@ export function flattenManifests(manifests) {
         teacherName: manifest.teacherName,
         teacherArticleId: article.articleId,
         contentHash: article.contentHash,
-        releaseVersion: manifest.version
+        releaseVersion: manifest.version,
+        questionCount: article.questionCount == null ? null : Number(article.questionCount)
       })
     }
   }
@@ -88,7 +89,8 @@ export function flattenHostedArticles(list, account) {
       path: item.logicalPath || '',
       teacherId: account?.accountId ?? null,
       teacherName: account?.username || '',
-      teacherArticleId: item.articleId
+      teacherArticleId: item.articleId,
+      questionCount: item.questionCount == null ? null : Number(item.questionCount)
     })
   }
   return articles

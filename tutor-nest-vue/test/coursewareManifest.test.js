@@ -48,8 +48,10 @@ test('清单展平后保留全局 id，日期与路径都来自发布清单', ()
     teacherName: 'young',
     teacherArticleId: 3,
     contentHash: 'sha256:aaa',
-    releaseVersion: 3
+    releaseVersion: 3,
+    questionCount: 19
   })
+  assert.equal(articles[1].questionCount, 0)
   assert.equal(articles[1].date, '2026-10-30')
   assert.equal(articles[1].path, '高中化学/理论课讲义/新讲义.md')
   assert.equal(articles[1].teacherId, 7)
@@ -123,7 +125,8 @@ test('管理员托管清单展平为同构文章列表，跳过草稿条目', ()
       title: '3 虚拟语气',
       subject: '高中英语',
       logicalPath: '高中英语/语法课讲义/3 虚拟语气.md',
-      published: true
+      published: true,
+      questionCount: 6
     },
     {
       articleId: 1001,
@@ -143,7 +146,8 @@ test('管理员托管清单展平为同构文章列表，跳过草稿条目', ()
     path: '高中英语/语法课讲义/3 虚拟语气.md',
     teacherId: 6,
     teacherName: 'young',
-    teacherArticleId: 50
+    teacherArticleId: 50,
+    questionCount: 6
   }])
 })
 

@@ -25,9 +25,7 @@
             <template v-if="phase === 'setup'">
                 <header class="page-head page-head--row">
                     <div class="wt-head">
-                        <span class="eyebrow">NEST / 训练舱</span>
                         <h1 class="page-title">训练<span class="text-gradient">舱</span></h1>
-                        <p class="page-sub">温故而知新 —— 重做错题，直到它们不再是错题。</p>
                     </div>
                     <router-link to="/wrong-questions" class="btn btn--ghost">
                         <i class="fas fa-arrow-left"></i> 返回错题本

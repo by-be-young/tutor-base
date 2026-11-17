@@ -4699,7 +4699,7 @@ components:
     CoursewareArticleSummary:
       type: object
       additionalProperties: false
-      required: [articleId, published, hasDraft, size, contentMissing]
+      required: [articleId, published, hasDraft, size, questionCount, contentMissing]
       properties:
         articleId:
           type: integer
@@ -4724,6 +4724,10 @@ components:
           type: integer
           minimum: 0
           description: 草稿正文长度；无草稿时为 0。
+        questionCount:
+          type: integer
+          minimum: 0
+          description: 正文里的作答占位符数量；0 表示纯讲义，不进入「待设置答案」。
         updatedAt:
           type: [string, 'null']
           format: date-time

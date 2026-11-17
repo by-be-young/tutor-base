@@ -7,15 +7,12 @@
                     <i class="fas fa-shield-halved" aria-hidden="true"></i>
                     权限管理
                 </h2>
-                <p class="text-sm text-muted">
-                    按文章微调授权：勾选即授权当前学员访问，保存后立即生效。整科学科请在「学员科目」里设定。
-                </p>
             </div>
         </header>
 
         <div class="panel-body perm-body">
             <EmptyState v-if="!selectedStudentId" icon="fas fa-user-graduate" title="尚未选择学员"
-                text="在顶部切换或新增测试学员后，即可配置内容授权。" />
+                text="先选择学员。" />
 
             <div v-else-if="coursewareStatus === 'loading'" class="perm-skeletons" aria-hidden="true">
                 <div class="skeleton perm-skeleton"></div>

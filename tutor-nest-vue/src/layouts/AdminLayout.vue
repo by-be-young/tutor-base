@@ -67,7 +67,6 @@
     <!-- 页面标题：沿用学员端 page-head 的位置与字号 -->
     <div class="admin-pagehead">
       <h1 class="admin-pagehead__title">{{ pageTitle }}</h1>
-      <p class="admin-pagehead__sub">学员管理、批阅、课件与注册审核</p>
     </div>
 
     <div class="admin-content">
@@ -450,14 +449,6 @@ onBeforeUnmount(() => {
   font-weight: 800;
   letter-spacing: -0.01em;
   color: var(--ink);
-}
-
-.admin-pagehead__sub {
-  margin-top: 4px;
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.1em;
-  color: var(--text-3);
 }
 
 .admin-content {
