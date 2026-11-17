@@ -368,7 +368,6 @@ class CoursewareEditorHttpContractTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$[?(@.articleId == 901)].title", contains("口语训练-1")))
                     .andExpect(jsonPath("$[?(@.articleId == 901)].published", contains(false)))
-                    .andExpect(jsonPath("$[?(@.articleId == 901)].hosted", contains(true)))
                     .andExpect(jsonPath("$[?(@.articleId == 901)].hasDraft", contains(true)));
 
             mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")

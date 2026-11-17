@@ -22,6 +22,11 @@ spring:
     locations: classpath:db/migration
     validate-migration-naming: true
     clean-disabled: true
+  servlet:
+    multipart:
+      # 图片业务上限 10 MB（CoursewareMediaService 再校验一次）；请求上限留给 zip 导入。
+      max-file-size: ${TUTOR_MULTIPART_MAX_FILE_SIZE:12MB}
+      max-request-size: ${TUTOR_MULTIPART_MAX_REQUEST_SIZE:64MB}
 
 server:
   forward-headers-strategy: framework
@@ -53,15 +58,15 @@ tutor:
       password: ${TUTOR_BOOTSTRAP_PASSWORD:}
   courseware:
     root: ${TUTOR_COURSEWARE_ROOT:./var/courseware}
-    source: ${TUTOR_COURSEWARE_SOURCE:storage}
     max-article-bytes: ${TUTOR_COURSEWARE_MAX_ARTICLE_BYTES:1048576}
     # 旧「认领」模型：false 后认领写入接口返回 410（读接口保留），改用「我的课件 + 资源目录」
     legacy-claims-enabled: ${TUTOR_COURSEWARE_LEGACY_CLAIMS:true}
     # 每个老师的正文存储配额（字节，默认 2 GB，0 表示不限）
     quota-bytes: ${TUTOR_COURSEWARE_QUOTA_BYTES:2147483648}
-    seed:
-      enabled: ${TUTOR_COURSEWARE_SEED_ENABLED:false}
-      index: ${TUTOR_COURSEWARE_SEED_INDEX:../tutor-nest-vue/public/data/articles.json}
-      root: ${TUTOR_COURSEWARE_SEED_ROOT:../tutor-nest-vue/public/articles}
-      teacher-username: ${TUTOR_COURSEWARE_SEED_TEACHER:young}
-      overwrite: ${TUTOR_COURSEWARE_SEED_OVERWRITE:false}
+    # 课件图片：Supabase Storage 公开桶；上传账号只具备该桶 INSERT 权限
+    max-media-bytes: ${TUTOR_COURSEWARE_MAX_MEDIA_BYTES:10485760}
+    media-supabase-url: ${TUTOR_COURSEWARE_MEDIA_SUPABASE_URL:}
+    media-supabase-anon-key: ${TUTOR_COURSEWARE_MEDIA_SUPABASE_ANON_KEY:}
+    media-supabase-email: ${TUTOR_COURSEWARE_MEDIA_SUPABASE_EMAIL:}
+    media-supabase-password: ${TUTOR_COURSEWARE_MEDIA_SUPABASE_PASSWORD:}
+    media-bucket: ${TUTOR_COURSEWARE_MEDIA_BUCKET:courseware-media}

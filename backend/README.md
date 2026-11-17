@@ -91,6 +91,23 @@ Spring Boot 会从当前 `backend` 工作目录自动读取 `.env`。该文件�
 系统环境变量的优先级高于 `.env`，因此仍可以在 CI、Docker 或云服务器中直接注入变量。生产环境不要复制本地示例值；
 推荐通过 systemd `EnvironmentFile`、容器 secret 或云服务密钥管理配置，并限制配置文件读取权限。
 
+#### 课件图片上传（可选）
+
+编辑器「插入图片」通过后端写入 Supabase Storage 的 `courseware-media` 桶。需要配置：
+
+```text
+TUTOR_COURSEWARE_MEDIA_SUPABASE_URL=https://<project-ref>.supabase.co
+TUTOR_COURSEWARE_MEDIA_SUPABASE_ANON_KEY=<anon-key>
+TUTOR_COURSEWARE_MEDIA_SUPABASE_EMAIL=<upload-bot-email>
+TUTOR_COURSEWARE_MEDIA_SUPABASE_PASSWORD=<upload-bot-password>
+TUTOR_COURSEWARE_MEDIA_BUCKET=courseware-media
+```
+
+上传账号只需要该桶的 `INSERT` 策略（`authenticated` 角色，`WITH CHECK` 限定 bucket 与账号 UID），
+不要使用 `service_role` 密钥。未配置这些变量时，阅读与已有图片不受影响，插图接口返回 503。
+单图上限由 `TUTOR_COURSEWARE_MAX_MEDIA_BYTES` 控制，默认 10 MB；Servlet multipart 单文件上限
+`TUTOR_MULTIPART_MAX_FILE_SIZE` 默认 12 MB（留出表单开销），二者需要一起调整。
+
 ### 4. 验证后端
 
 再打开一个 PowerShell 窗口：

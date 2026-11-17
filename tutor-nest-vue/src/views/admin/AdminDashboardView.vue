@@ -374,7 +374,7 @@ const allSubjects = computed(() => {
   return Array.from(subjects).sort()
 })
 
-// 管理端只看自己认领的课件：学员科目数按「认领课件 ∩ 学员授权」计算。
+// 管理端只看自己的托管课件：学员科目数按「数据库课件 ∩ 学员授权」计算。
 const visibleArticles = computed(() => {
   const ids = coursewareStore.visibleArticleIds
   if (!(ids instanceof Set)) return blogData.value

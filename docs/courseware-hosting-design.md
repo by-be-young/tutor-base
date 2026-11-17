@@ -1,6 +1,6 @@
 # 课件托管化改造方案
 
-> **状态**：设计稿（本文件不含代码改动）
+> **状态**：历史设计稿（2026-11-17 起，静态课件已全部下线；本文件中涉及 `public/articles`、`public/data`、`courseware-static`、`source=static` 的段落仅记录当时的迁移过程）
 > **日期**：2026-10-30
 > **代码基线**：`feat/high-school-subject-rename` 分支，提交 `746bd0e`
 > **技术栈**：Vue 3 + Vite 前端 / Spring Boot 后端 / Supabase PostgreSQL

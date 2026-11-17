@@ -1,5 +1,5 @@
 // src/gateways/coursewareGateway.js
-// 课件目录同步与管理员认领：/admin/courseware-catalog、/admin/courseware-claims。
+// 课件发布、编辑、共享与「我的课件」：全部数据来自后端数据库。
 import { backendClient } from './backendClient.js'
 import {
   normalizeCopyResult,
@@ -9,32 +9,6 @@ import {
   normalizeSharedSubject,
   normalizeShares
 } from '../utils/coursewareSharing.js'
-
-function normalizeClaims(response) {
-  return {
-    subjectClaims: Array.isArray(response?.subjectClaims)
-      ? response.subjectClaims.map(subject => String(subject))
-      : [],
-    articleClaims: Array.isArray(response?.articleClaims)
-      ? response.articleClaims.map(Number).filter(Number.isFinite)
-      : [],
-    // 学科认领范围内被单篇释放的排除项；旧后端缺失时按空数组处理。
-    excludedArticleIds: Array.isArray(response?.excludedArticleIds)
-      ? response.excludedArticleIds.map(Number).filter(Number.isFinite)
-      : [],
-    // 管理员主动放弃的课件；放弃后不再计入其“待认领”。
-    abandonedArticleIds: Array.isArray(response?.abandonedArticleIds)
-      ? response.abandonedArticleIds.map(Number).filter(Number.isFinite)
-      : []
-  }
-}
-
-function normalizeCatalog(response) {
-  return {
-    subjects: Array.isArray(response?.subjects) ? response.subjects : [],
-    items: Array.isArray(response?.items) ? response.items : []
-  }
-}
 
 export const coursewareGateway = {
   /** 当前学习者可见的课件清单（老师 → 科目 → 版本）。 */
@@ -219,6 +193,27 @@ export const coursewareGateway = {
     return { ok: Boolean(response?.ok), errors: Array.isArray(response?.errors) ? response.errors : [] }
   },
 
+  /** 图片文件名是否已在桶里；重名时返回 suggested（第一个可用后缀）。 */
+  async checkMedia(fileName) {
+    const response = await backendClient.request(
+      `/admin/courseware/media/check?${new URLSearchParams({ fileName })}`
+    )
+    return {
+      exists: Boolean(response?.exists),
+      fileName: String(response?.fileName || fileName),
+      suggested: String(response?.suggested || fileName),
+      url: String(response?.url || '')
+    }
+  },
+
+  /** 上传课件图片（multipart），成功返回桶内文件名与公开 URL。 */
+  uploadMedia(file, fileName) {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('fileName', fileName)
+    return backendClient.requestForm('/admin/courseware/media', form)
+  },
+
   publishDrafts(subject, expectVersion) {
     const body = { subject }
     if (expectVersion != null) body.expectVersion = expectVersion
@@ -315,55 +310,6 @@ export const coursewareGateway = {
 
   dismissUpdate(copyId) {
     return backendClient.request(`/admin/courseware/copies/${encodeURIComponent(copyId)}/updates/dismiss`, {
-      method: 'POST'
-    })
-  },
-
-  /** 同步前端静态课件目录；重复调用幂等。 */
-  syncCatalog(items) {
-    return backendClient.request('/admin/courseware-catalog/sync', {
-      method: 'POST',
-      body: { items }
-    })
-  },
-
-  async getClaims() {
-    const response = await backendClient.request('/admin/courseware-claims')
-    return normalizeClaims(response)
-  },
-
-  async getCatalog(scope = 'mine') {
-    const parameters = new URLSearchParams({ scope })
-    const response = await backendClient.request(`/admin/courseware-claims/catalog?${parameters}`)
-    return normalizeCatalog(response)
-  },
-
-  claimSubject(subject) {
-    return backendClient.request(`/admin/courseware-claims/subjects/${encodeURIComponent(subject)}`, {
-      method: 'PUT'
-    })
-  },
-
-  releaseSubject(subject) {
-    return backendClient.request(`/admin/courseware-claims/subjects/${encodeURIComponent(subject)}`, {
-      method: 'DELETE'
-    })
-  },
-
-  claimArticle(articleId) {
-    return backendClient.request(`/admin/courseware-claims/articles/${encodeURIComponent(articleId)}`, {
-      method: 'PUT'
-    })
-  },
-
-  releaseArticle(articleId) {
-    return backendClient.request(`/admin/courseware-claims/articles/${encodeURIComponent(articleId)}`, {
-      method: 'DELETE'
-    })
-  },
-
-  abandonArticle(articleId) {
-    return backendClient.request(`/admin/courseware-claims/articles/${encodeURIComponent(articleId)}/abandonment`, {
       method: 'POST'
     })
   },

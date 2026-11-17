@@ -2,6 +2,8 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { identityGateway } from '@/gateways/identityGateway'
 import { learnerGateway } from '@/gateways/learnerGateway'
+import { coursewareGateway } from '@/gateways/coursewareGateway'
+import { flattenManifests } from '@/utils/coursewareManifest'
 
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref(null)
@@ -20,20 +22,29 @@ export const useAuthStore = defineStore('auth', () => {
     return permissionIds.value
   }
 
+  /** 管理员：自己托管且已发布的课件 ID（列表接口已排除未托管条目）。 */
+  async function loadAdministratorArticleIds() {
+    const articles = await coursewareGateway.listArticles()
+    return (articles || [])
+      .filter(article => article && article.published !== false)
+      .map(article => Number(article.legacyArticleId ?? article.articleId))
+      .filter(Number.isFinite)
+  }
+
+  /**
+   * 特殊测试学员：全部课件 ID 来自数据库清单。
+   * 没有可读课件时返回空数组，不再回退静态目录。
+   */
   async function loadAllArticleIds() {
-    const response = await fetch(`${import.meta.env.BASE_URL}data/articles.json`)
-    if (!response.ok) return []
-    const articles = await response.json()
-    return Array.isArray(articles)
-      ? articles.map(article => Number(article?.id)).filter(Number.isFinite)
-      : []
+    const manifests = await coursewareGateway.fetchManifests()
+    return flattenManifests(manifests).map(article => Number(article.id)).filter(Number.isFinite)
   }
 
   async function loadLearningPermissions(session) {
-    if (session.roles.includes('ADMINISTRATOR')) return loadAllArticleIds()
+    if (session.roles.includes('ADMINISTRATOR')) return loadAdministratorArticleIds()
     if (!session.learnerId) return []
     const grants = await learnerGateway.getCurrentContentGrants()
-    // 特殊测试学员拥有全部文章权限：即使课件目录尚未同步，也按静态目录全量放行。
+    // 特殊测试学员拥有全部文章权限：按数据库清单全量放行。
     if (grants.allArticles) return loadAllArticleIds()
     return grants.articleIds
   }

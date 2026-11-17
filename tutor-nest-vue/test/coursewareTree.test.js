@@ -73,12 +73,10 @@ test('登记的科目根目录本身不会多建一层', () => {
   assert.deepEqual(tree.children, [])
 })
 
-test('状态文案区分已发布、草稿、未托管与正文缺失', () => {
+test('状态文案区分已发布、草稿与正文缺失', () => {
   assert.equal(articleStatus({ published: true, hasDraft: false }).label, '已发布')
   assert.equal(articleStatus({ published: true, hasDraft: true }).tone, 'draft')
   assert.equal(articleStatus({ published: false, hasDraft: true }).label, '草稿 · 未发布')
-  assert.equal(articleStatus({ hosted: false, hasDraft: false }).label, '未托管 · 需服务端导入')
-  assert.equal(articleStatus({ hosted: false, hasDraft: true }).label, '未托管 · 有草稿')
   assert.deepEqual(articleStatus({ published: true, contentMissing: true }), {
     label: '正文缺失 · 需重新发布',
     tone: 'missing'

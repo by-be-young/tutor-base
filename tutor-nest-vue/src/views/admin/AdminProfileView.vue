@@ -27,15 +27,11 @@
       <div class="claim-grid">
         <article class="claim-item claim-item--lime">
           <p class="claim-item__value">{{ subjectCount }}</p>
-          <p class="claim-item__label">认领学科</p>
+          <p class="claim-item__label">学科</p>
         </article>
         <article class="claim-item claim-item--sky">
           <p class="claim-item__value">{{ articleCount }}</p>
-          <p class="claim-item__label">认领课件</p>
-        </article>
-        <article class="claim-item claim-item--amber">
-          <p class="claim-item__value">{{ unclaimedCount }}</p>
-          <p class="claim-item__label">待认领课件</p>
+          <p class="claim-item__label">课件</p>
         </article>
       </div>
 
@@ -43,7 +39,7 @@
         <span v-for="subject in subjects" :key="subject" class="chip chip--lime">{{ subject }}</span>
       </div>
       <p v-else class="claim-empty">
-        还没有认领任何学科，去「课件」页认领后即可管理对应学员的内容授权与批阅。
+        还没有可管理的课件，去「课件」页新建或导入后即可管理学员的内容授权与批阅。
       </p>
     </section>
 
@@ -84,12 +80,11 @@ const accountId = computed(() => authStore.currentUser?.accountId ?? null)
 const userInitial = computed(() => (authStore.username || 'A').slice(0, 1).toUpperCase())
 const subjects = computed(() => coursewareStore.visibleSubjects || [])
 const subjectCount = computed(() => subjects.value.length)
-// 课件数包含「整科认领」带出的文章，因此用 visibleArticleIds 而不是单独的 articleClaims。
+// 课件数直接用数据库清单里的可见篇目。
 const articleCount = computed(() => {
   const ids = coursewareStore.visibleArticleIds
   return ids instanceof Set ? ids.size : 0
 })
-const unclaimedCount = computed(() => coursewareStore.unclaimedCount ?? 0)
 
 async function handleLogout() {
   if (loggingOut.value) return

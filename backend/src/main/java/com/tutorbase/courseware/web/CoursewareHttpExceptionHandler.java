@@ -74,6 +74,12 @@ class CoursewareHttpExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(CoursewareFailures.MediaExists.class)
+    ProblemDetail mediaExists(CoursewareFailures.MediaExists exception, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, "courseware_media_exists", "图片文件名已存在",
+                exception.getMessage(), request);
+    }
+
     /** 课件存储（本地卷/对象存储）不可用：属于运行环境问题，按依赖不可用返回 503。 */
     @ExceptionHandler(CoursewareFailures.StorageUnavailable.class)
     ProblemDetail storageUnavailable(CoursewareFailures.StorageUnavailable exception,

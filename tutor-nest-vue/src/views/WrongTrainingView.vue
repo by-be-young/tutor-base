@@ -411,9 +411,8 @@ const wrongQuestionsStore = useWrongQuestionsStore()
 const { resolvedOf, resolveQuestions } = useWrongQuestionsResolve()
 const { renderMath } = useKatex()
 
-// 图片嵌入解析（与文章页一致：![[图片]] → <img>）
-const { processMarkdown, setBasePath } = useImageEmbed()
-setBasePath('articles/图片/')
+// 图片嵌入解析（与文章页一致：![[图片]] → <img>，图片由后端数据库提供）
+const { processMarkdown } = useImageEmbed()
 
 // ========== 渲染工具 ==========
 /** 题干内容渲染：markdown 表格 → <table>，图片嵌入（![[图片]] → <img>），换行转 <br>，$...$ 公式由 KaTeX 渲染 */

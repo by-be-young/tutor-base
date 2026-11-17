@@ -246,10 +246,6 @@ const { renderMath } = useKatex()
 const { processMarkdown, observe, disconnect } = useImageEmbed()
 useDrawingInDetail()
 
-// 配置图片基础路径
-const { setBasePath } = useImageEmbed()
-setBasePath('articles/图片/')
-
 // ========== 状态管理 ==========
 const detailBodyRef = ref(null)
 const blogTitle = ref('加载中...')
@@ -362,8 +358,6 @@ const activeArticle = computed(() => (isPreviewMode.value ? previewArticle.value
 const previewNote = computed(() => {
     if (!isPreviewMode.value) return ''
     if (previewSource.value === 'draft') return '草稿预览 · 学员还看不到'
-    if (previewSource.value === 'recovered') return '正文文件缺失 · 已用站内讲义'
-    if (previewSource.value === 'static') return '站内讲义 · 尚未托管'
     return '已发布 · 学员看到的就是这版'
 })
 

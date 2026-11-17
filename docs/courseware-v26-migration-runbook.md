@@ -64,7 +64,7 @@ V26 换主键后，任何"只按 `article_id` 定位目录行"的代码都会变
 
 1. `TUTOR_COURSEWARE_LEGACY_CLAIMS_ENABLED=false`（写入侧一律 410），并保持至少一个发布周期；
 2. 确认线上已无 `syncCatalog` 调用（旧认领页「旧版认领」入口已隐藏）；
-3. 确认 `tutor.courseware.source=storage` 或 `static` 两种模式下前端都能取到课件（迁移不影响正文）。
+3. 确认前端能正常取到课件正文（只走数据库当前发布版本，没有静态模式可切换）。
 
 ---
 

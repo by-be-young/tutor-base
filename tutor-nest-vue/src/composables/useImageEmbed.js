@@ -5,8 +5,29 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 // 一、配置（可响应式修改）
 // ================================================================
 
-/** 图片存储的基础路径 */
-const IMAGE_BASE_PATH = ref('articles/图片/')
+/** 课件图片：Supabase Storage 公开桶。中文原名会被 Storage 拒绝，
+ *  因此按固定词表转成可读的 ASCII slug（存库文件名与桶内文件名一一对应）。 */
+const MEDIA_BASE = (import.meta.env.VITE_COURSEWARE_MEDIA_BASE
+    || 'https://kfbtgndqlecpgknxtreo.supabase.co/storage/v1/object/public/courseware-media/')
+    .replace(/\/?$/, '/')
+
+const MEDIA_WORDS = [
+    ['含氯物质转化图', 'chlorine-conversion'],
+    ['元素周期表', 'periodic-table'],
+    ['高中化学', 'chemistry'],
+    ['课后', 'exercise'],
+    ['制取', 'preparation']
+]
+
+function assetKey(filename) {
+    let key = filename
+    for (const [source, target] of MEDIA_WORDS) {
+        key = key.replaceAll(source, target)
+    }
+    return key
+}
+
+const IMAGE_BASE_PATH = ref(MEDIA_BASE)
 
 /** 是否启用懒加载（默认关闭：图片数量有限，懒加载在 Edge 下会因
  *  opacity:0 被判定不可见而延迟 load 事件，导致图片永不显示） */
@@ -130,7 +151,8 @@ function generateImageHTML(options) {
         return ''
     }
 
-    const imagePath = IMAGE_BASE_PATH.value + filename
+    // 中文原名 → 可读 ASCII slug（见 MEDIA_WORDS）
+    const imagePath = IMAGE_BASE_PATH.value + assetKey(filename)
 
     // 构建属性数组
     let attributes = []
@@ -397,13 +419,6 @@ export function useImageEmbed() {
     let observerTarget = null
 
     /**
-     * 设置图片基础路径
-     */
-    function setBasePath(path) {
-        IMAGE_BASE_PATH.value = path
-    }
-
-    /**
      * 设置是否启用懒加载
      */
     function setLazyLoad(enabled) {
@@ -548,7 +563,6 @@ export function useImageEmbed() {
     return {
         isReady,
         IMAGE_BASE_PATH,
-        setBasePath,
         setLazyLoad,
         processMarkdown,
         processElement,

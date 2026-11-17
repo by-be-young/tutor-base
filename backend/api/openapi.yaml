@@ -2348,6 +2348,82 @@ paths:
         '403':
           $ref: '#/components/responses/Problem'
 
+  /admin/courseware/media/check:
+    get:
+      operationId: checkCoursewareMedia
+      summary: 检查课件图片文件名是否已被占用
+      description: >-
+        读取 `courseware-media` 桶内同名对象的公开地址。重名时返回 `exists=true` 和
+        `suggested`（自动追加 `-2`、`-3` 的第一个可用名）。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: fileName
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9][a-z0-9._-]{0,120}\.(png|jpg|jpeg|webp|gif)$'
+      responses:
+        '200':
+          description: 检查结果。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareMediaCheck'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+
+  /admin/courseware/media:
+    post:
+      operationId: uploadCoursewareMedia
+      summary: 上传课件图片到 courseware-media 桶
+      description: >-
+        使用只具备该桶 INSERT 权限的上传账号写入，`x-upsert: false`；同名对象已存在时返回
+        409 `courseware_media_exists`。支持 PNG/JPEG/WebP/GIF，单图默认上限 10 MB，
+        扩展名必须与内容魔数一致。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, fileName]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                fileName:
+                  type: string
+                  pattern: '^[a-z0-9][a-z0-9._-]{0,120}\.(png|jpg|jpeg|webp|gif)$'
+      responses:
+        '200':
+          description: 上传成功。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursewareMediaUpload'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+
   /admin/courseware/templates:
     get:
       operationId: listCoursewareTemplates
@@ -4623,7 +4699,7 @@ components:
     CoursewareArticleSummary:
       type: object
       additionalProperties: false
-      required: [articleId, published, hasDraft, size, hosted, contentMissing]
+      required: [articleId, published, hasDraft, size, contentMissing]
       properties:
         articleId:
           type: integer
@@ -4652,18 +4728,12 @@ components:
           type: [string, 'null']
           format: date-time
           description: 草稿最后保存时间；无草稿时为空。
-        hosted:
-          type: boolean
-          description: >-
-            true = 正文已在服务端托管（当前发布版本或草稿）。当前接口只返回托管篇目；
-            保留该字段用于兼容旧客户端，尚未导入的静态课件不再出现在清单里。
         contentMissing:
           type: boolean
           description: >-
             true = 该篇在版本清单里，但正文文件（blob）不在存储中（存储卷重建、历史临时目录被清空等）。
             此时 `GET /admin/courseware/drafts/{articleId}` 返回 409 `courseware_content_missing`。
-            客户端不回退静态文件；服务端启动时会从已打包课件补写 blob，仍缺失时由管理员恢复后再发布。
-            草稿恒为 false。
+            客户端不回退任何静态文件；管理员重新保存并发布即可恢复。草稿恒为 false。
     CoursewarePrecheck:
       type: object
       additionalProperties: false
@@ -4700,6 +4770,34 @@ components:
           enum: [imported, overwritten, skipped]
         message:
           type: [string, 'null']
+    CoursewareMediaCheck:
+      type: object
+      required: [exists, fileName, suggested, url]
+      properties:
+        exists:
+          type: boolean
+        fileName:
+          type: string
+        suggested:
+          type: string
+          description: 重名时的第一个可用文件名；不重名时等于 fileName。
+        url:
+          type: string
+          format: uri
+
+    CoursewareMediaUpload:
+      type: object
+      required: [fileName, url, bytes]
+      properties:
+        fileName:
+          type: string
+        url:
+          type: string
+          format: uri
+        bytes:
+          type: integer
+          format: int64
+
     CoursewareImportReport:
       type: object
       additionalProperties: false

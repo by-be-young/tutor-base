@@ -8,6 +8,7 @@ import com.tutorbase.courseware.draft.CoursewareDraftService;
 import com.tutorbase.courseware.folder.CoursewareFolderService;
 import com.tutorbase.courseware.layout.CoursewareLayoutService;
 import com.tutorbase.courseware.layout.CoursewareTemplateService;
+import com.tutorbase.courseware.media.CoursewareMediaService;
 import com.tutorbase.courseware.publish.CoursewareArticleDeletionService;
 import com.tutorbase.courseware.publish.CoursewarePublisher;
 import com.tutorbase.courseware.query.CoursewareOverviewService;
@@ -48,11 +49,13 @@ public class CoursewareEditorController {
     private final CoursewareOverviewService overview;
     private final CoursewareFolderService folders;
     private final CoursewareArticleDeletionService deletions;
+    private final CoursewareMediaService media;
 
     CoursewareEditorController(CoursewareLayoutService layouts, CoursewareDraftService drafts,
             CoursewareTransferService transfers, CoursewareTemplateService templates,
             CoursewareWorkspaceService workspace, CoursewareOverviewService overview,
-            CoursewareFolderService folders, CoursewareArticleDeletionService deletions) {
+            CoursewareFolderService folders, CoursewareArticleDeletionService deletions,
+            CoursewareMediaService media) {
         this.layouts = layouts;
         this.drafts = drafts;
         this.transfers = transfers;
@@ -61,6 +64,7 @@ public class CoursewareEditorController {
         this.overview = overview;
         this.folders = folders;
         this.deletions = deletions;
+        this.media = media;
     }
 
     @GetMapping("/workspace/manifest")
@@ -259,6 +263,28 @@ public class CoursewareEditorController {
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .cacheControl(CacheControl.noStore())
                 .body(export.content());
+    }
+
+    @GetMapping("/media/check")
+    ResponseEntity<MediaCheckResponse> checkMedia(@RequestParam String fileName) {
+        CoursewareMediaService.Check check = media.check(fileName);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new MediaCheckResponse(check.exists(), check.fileName(), check.suggested(), check.url()));
+    }
+
+    @PostMapping(path = "/media", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    ResponseEntity<MediaUploadResponse> uploadMedia(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam String fileName) throws java.io.IOException {
+        if (file == null || file.isEmpty()) {
+            throw new CoursewareFailures.Validation(List.of("请选择要插入的图片"));
+        }
+        CoursewareMediaService.Stored stored = media.upload(
+                fileName, file.getBytes(), file.getContentType());
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new MediaUploadResponse(stored.fileName(), stored.url(), stored.bytes()));
     }
 
     @PostMapping(path = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -492,18 +518,23 @@ public class CoursewareEditorController {
             boolean hasDraft,
             int size,
             Instant updatedAt,
-            boolean hosted,
             boolean contentMissing) {
 
         static ArticleSummaryResponse from(CoursewareOverviewService.ArticleSummary summary) {
             return new ArticleSummaryResponse(summary.articleId(), summary.legacyArticleId(),
                     summary.title(), summary.subject(), summary.series(), summary.logicalPath(),
                     summary.published(), summary.hasDraft(), summary.size(), summary.updatedAt(),
-                    summary.hosted(), summary.contentMissing());
+                    summary.contentMissing());
         }
     }
 
     record PrecheckResponse(boolean ok, List<String> errors) {
+    }
+
+    record MediaCheckResponse(boolean exists, String fileName, String suggested, String url) {
+    }
+
+    record MediaUploadResponse(String fileName, String url, long bytes) {
     }
 
     record PublishDraftsRequest(

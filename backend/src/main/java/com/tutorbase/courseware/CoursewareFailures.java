@@ -88,6 +88,13 @@ public final class CoursewareFailures {
         }
     }
 
+    /** 课件图片文件名已存在：需要换一个名字或使用建议名。 */
+    public static final class MediaExists extends RuntimeException {
+        public MediaExists(String message) {
+            super(message);
+        }
+    }
+
     /** 课件存储不可用：落盘目录不可写、磁盘满等，属于环境问题而非内容问题。 */
     public static final class StorageUnavailable extends RuntimeException {
         public StorageUnavailable(String message) {

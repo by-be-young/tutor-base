@@ -74,7 +74,7 @@ export function flattenHostedArticles(list, account) {
   const usedIds = new Set()
   const articles = []
   for (const item of list || []) {
-    if (!item || item.published === false || item.hosted === false) continue
+    if (!item || item.published === false) continue
     const legacyId = item.legacyArticleId ?? item.articleId
     let id = Number(legacyId)
     if (usedIds.has(id)) id = Number(item.articleId)

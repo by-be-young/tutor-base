@@ -21,7 +21,9 @@ chmod 600 .env backend.env migration.env
 
 - `.env`：`BACKEND_IMAGE=ghcr.io/by-be-young/tutor-base-backend:sha-<40位提交SHA>`。
 - `backend.env`：使用受限运行账户 `tutor_base_app`，保持 `DATABASE_MIGRATIONS_ENABLED=false`、
-  `TUTOR_BOOTSTRAP_ENABLED=false`，并精确配置前端 HTTPS origin。
+  `TUTOR_BOOTSTRAP_ENABLED=false`，并精确配置前端 HTTPS origin。需要编辑器插图时，再补
+  `TUTOR_COURSEWARE_MEDIA_SUPABASE_URL/ANON_KEY/EMAIL/PASSWORD/BUCKET`；上传账号只给
+  `courseware-media` 桶 INSERT 权限，不要使用 `service_role`。
 - `migration.env`：仅供一次性 migration 容器使用，填写 schema owner/migration 账户；不得使用运行账户。
 - 三个真实文件均被 Git 忽略，不要把内容发到聊天、日志或仓库。
 

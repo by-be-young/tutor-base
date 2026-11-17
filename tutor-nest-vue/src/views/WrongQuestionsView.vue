@@ -4,7 +4,7 @@
   功能说明：
     1. 展示当前学生的全部错题（手动添加 + 自动收集）
     2. 后端返回当前账户可见的错题和正确答案；页面从静态文章补充学科与题干
-       （subject ← articles.json series；题干 ← 文章 markdown 的【题干N】标记）
+       （subject ← 数据库清单 series；题干 ← 文章 markdown 的【题干N】标记）
     3. 统计、筛选（学科/状态/搜索）、排序、掌握标记、编辑、删除
     4. 手动添加：从文章选题（学科 → 文章 → 题号，实时预览题干）
   视觉：Riso Campus「批改作业本」—— 奶油纸底、墨线边框、错位硬阴影、学科色条。
@@ -408,8 +408,7 @@ const blogStore = useArticleStore()
 const wrongQuestionsStore = useWrongQuestionsStore()
 const { resolvedMap, resolvedReady, resolvedOf, resolveQuestions } = useWrongQuestionsResolve()
 const { renderMath } = useKatex()
-const { processMarkdown, setBasePath } = useImageEmbed()
-setBasePath('articles/图片/')
+const { processMarkdown } = useImageEmbed()
 
 // ========== 空状态插画（站内收藏卡，失败时色块兜底） ==========
 const emptyArt = `${import.meta.env.BASE_URL}cards/cosmos-r.png`

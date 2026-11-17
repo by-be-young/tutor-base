@@ -51,7 +51,9 @@
 flowchart LR
   B[浏览器 Vue 3 单页应用] -->|HTTPS + Cookie + CSRF| A[Java 21 模块化单体 /api/v1]
   A -->|JdbcClient| P[(PostgreSQL 17 Supabase 托管)]
-  B -->|静态 Markdown / 图片 / 卡片| G[GitHub Pages]
+  B -->|图片读取| S[Supabase Storage / courseware-media]
+  A -->|图片上传| S
+  B -->|收藏卡| G[GitHub Pages]
   A -->|Flyway| P
 ```
 
@@ -59,7 +61,7 @@ flowchart LR
 - **后端**：Java 21 LTS、Spring Boot 4.1、Spring Security、JdbcClient；按业务能力分包：`identity`、`learning`、`wrongbook`、`checkin`、`rewards`、`growth`、`administration`、`system`、`shared`。
 - **数据库**：PostgreSQL 17；Flyway `V1`–`V19`；应用使用受限角色 `tutor_base_runtime`（无 DDL 权限）。
 - **测试**：Node Test（前端 gateway/工具）、JUnit + MockMvc + Testcontainers PostgreSQL、Playwright 端到端。
-- **内容**：`public/articles/**/*.md` 为公开静态资源，构建前由脚本生成 `articles.json` / `id_map.json`。内容授权控制导航与学习数据，**不保证正文 URL 保密**。
+- **内容**：正文全部来自数据库（发布版本 blob）；仓库不再保存 Markdown 课件、文章索引或课件图片。课件图片存放在 Supabase Storage 公开桶 `courseware-media`，桶内用可读 ASCII slug（如 `chemistry-1-2-preparation-5.png`）。内容授权控制导航与学习数据，**不保证正文 URL 保密**。
 
 ---
 
@@ -112,7 +114,7 @@ cd ..
 npm run dev
 ```
 
-`predev` 会先同步文章索引。开发服务器把 `/api` 代理到 `http://127.0.0.1:8080`，无需处理 CORS。连其他后端时改 `tutor-nest-vue/.env.local` 的 `VITE_API_BASE_URL`，或设置 `VITE_DEV_API_TARGET`。
+`dev` 不再生成任何文章索引。开发服务器把 `/api` 代理到 `http://127.0.0.1:8080`，无需处理 CORS。连其他后端时改 `tutor-nest-vue/.env.local` 的 `VITE_API_BASE_URL`，或设置 `VITE_DEV_API_TARGET`。
 
 > 前端不持有任何数据库凭据；登录与业务数据全部经 `/api/v1`。
 
@@ -213,8 +215,6 @@ database/operations/provision_runtime_role.sql
 ```text
 tutor-base/
 ├─ tutor-nest-vue/           Vue 前端
-│  ├─ public/articles/       讲义 Markdown（按学科分目录）
-│  ├─ public/data/           自动生成的 articles.json / id_map.json
 │  ├─ public/cards/          收藏卡图片
 │  ├─ src/assets/theme.css   设计 token（Riso Campus）
 │  ├─ src/views/             页面：首页/目录/文章/任务/错题/训练/管理台
@@ -222,7 +222,7 @@ tutor-base/
 │  ├─ src/gateways/          按能力划分的 API 客户端
 │  ├─ src/stores/            Pinia 状态
 │  ├─ e2e/                   Playwright 全链路用例
-│  └─ scripts/               文章索引同步
+│  └─ scripts/               课件 Git 工作区 CLI
 ├─ backend/                  Java 模块化单体
 │  ├─ api/openapi.yaml       接口契约
 │  └─ src/main/resources/db/migration/  Flyway V1–V19
@@ -240,8 +240,8 @@ tutor-base/
 ## 常用命令
 
 ```powershell
-npm run dev            # 本地开发（含文章索引同步）
-npm run build          # 生产构建（含同步）
+npm run dev            # 本地开发
+npm run build          # 生产构建
 npm run preview        # 预览构建产物
 npm run check:sfc      # SFC/模板编译检查（不写文件）
 npm run test:frontend  # 前端 gateway/工具测试

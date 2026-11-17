@@ -18,14 +18,11 @@ public class CoursewareOverviewService {
 
     private final JdbcClient jdbc;
     private final com.tutorbase.courseware.storage.CoursewareStorage storage;
-    private final com.tutorbase.courseware.CoursewareProperties properties;
 
     CoursewareOverviewService(JdbcClient jdbc,
-            com.tutorbase.courseware.storage.CoursewareStorage storage,
-            com.tutorbase.courseware.CoursewareProperties properties) {
+            com.tutorbase.courseware.storage.CoursewareStorage storage) {
         this.jdbc = jdbc;
         this.storage = storage;
-        this.properties = properties;
     }
 
     @Transactional(readOnly = true)
@@ -129,12 +126,9 @@ public class CoursewareOverviewService {
     public List<ArticleSummary> articles(long teacherId) {
         // 已发布篇目的正文是否存在：卷重建/历史环境临时目录被清空后会丢 blob，
         // 清单必须如实标出来，否则点开只会得到一句"课件不存在"。
-        // 静态模式下正文不在服务端托管，不做这个判断（避免整片误报）。
-        java.util.Set<String> storedHashes = "storage".equals(properties.source())
-                ? storage.listBlobs(teacherId).keySet().stream()
-                        .map(com.tutorbase.courseware.storage.CoursewareHashes::normalize)
-                        .collect(java.util.stream.Collectors.toSet())
-                : null;
+        java.util.Set<String> storedHashes = storage.listBlobs(teacherId).keySet().stream()
+                .map(com.tutorbase.courseware.storage.CoursewareHashes::normalize)
+                .collect(java.util.stream.Collectors.toSet());
         List<ArticleSummary> published = jdbc.sql("""
                 SELECT h.subject, ca.article_id, ca.legacy_article_id, ca.title, ca.series,
                        ca.logical_path, ca.content_hash,
@@ -163,14 +157,13 @@ public class CoursewareOverviewService {
                         rs.getBoolean("has_draft"),
                         rs.getInt("size"),
                         toInstant(rs, "draft_updated_at"),
-                        true,
-                        storedHashes != null && !storedHashes.contains(
+                        !storedHashes.contains(
                                 com.tutorbase.courseware.storage.CoursewareHashes.normalize(
                                         rs.getString("content_hash")))))
                 .list();
 
-        // 静态课件不再在这里列出来：正文必须已经由服务端导入成发布版本（或草稿），
-        // 浏览器不直接读取 public/articles，避免「看得见却打不开」的条目。
+        // 草稿之后列出：只要正文已经托管在数据库（发布版本或草稿）就可见，
+        // 浏览器不再读取任何静态课件目录。
         List<ArticleSummary> drafts = jdbc.sql("""
                 SELECT d.article_id, d.markdown, d.updated_at, d.title, d.logical_path
                 FROM public.course_draft AS d
@@ -209,7 +202,6 @@ public class CoursewareOverviewService {
                             true,
                             markdown.length(),
                             toInstant(rs, "updated_at"),
-                            true,
                             false);
                 })
                 .list();
@@ -248,9 +240,7 @@ public class CoursewareOverviewService {
             boolean hasDraft,
             int size,
             Instant updatedAt,
-            /** 正文是否已由数据库托管；当前接口只返回托管篇目，保留字段兼容前端。 */
-            boolean hosted,
-            /** true = 已发布篇目的正文文件（blob）不在了：编辑器会回退到静态讲义并提示重新发布。 */
+            /** true = 已发布篇目的正文文件（blob）不在了：编辑器提示重新发布。 */
             boolean contentMissing) {
     }
 

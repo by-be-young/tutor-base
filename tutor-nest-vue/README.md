@@ -40,20 +40,10 @@
 ```
 tutor-nest-vue/
 ├── public/
-│   ├── articles/                      # Markdown 文章文件（.md 文件在此存放）
-│   │   ├── 高中化学/
-│   │   │   ├── 前导课讲义/
-│   │   │   ├── 理论课讲义/
-│   │   │   └── 课后练习/
-│   │   └── 高中英语/
-│   │       ├── 写作课讲义/
-│   │       ├── 语法课讲义/
-│   │       └── 课后练习/
-│   └── data/
-│       ├── articles.json              # 文章索引（自动生成）
-│       └── id_map.json             # 文章 ID 映射表（自动生成）
+│   ├── cards/                         # 收藏卡图片
+│   └── 课件规范文档.md                 # 课件格式契约（可下载）
 ├── scripts/
-│   └── sync-articles-data.js          # 博客数据同步脚本
+│   └── courseware-cli.mjs             # 课件 Git 工作区 CLI（pull/push 走数据库）
 ├── src/
 │   ├── assets/                     # 静态资源
 │   ├── components/                 # 可复用组件
@@ -134,45 +124,17 @@ tutor-nest-vue/
 
 ---
 
-### 3. 文章数据同步机制
+### 3. 文章数据来源（数据库）
 
-`public/data/articles.json` 和 `public/data/id_map.json` **无需手动维护**，由脚本自动生成。
+仓库里**不再保存** Markdown 课件与文章索引。运行时文章的标题、学科、目录、ID 与正文全部来自后端：
 
-**触发时机：**
-- `npm run dev` 启动前（`predev` hook）
-- `npm run build` 构建前（`prebuild` hook）
+- 清单：`GET /api/v1/courseware/manifests`（学员）或 `GET /api/v1/admin/courseware/articles`（管理员）
+- 正文：`GET /api/v1/courseware/articles/{teacherId}/{articleId}/content`
+- 图片：Supabase Storage 公开桶 `courseware-media`；桶内对象名是可读 ASCII slug，前端 `useImageEmbed` 负责映射。编辑器「插入图片」会按科目与章节自动命名（如 `chemistry-2-3-fig2.png`），也可手动改；重名会提示。历史中文文件名仍由固定词表映射，新图请用 ASCII 名。
 
-**执行流程：**
-
-```
-public/articles/ 下的 .md 文件
-        ↓ 扫描
-scripts/sync-articles-data.js
-        ├── 生成 id_map.json（路径 → ID 的映射关系）
-        └── 生成 articles.json（文章索引，按系列 + ID 排序）
-```
-
-**新增文章：** 只需在 `public/articles/` 下新建 `.md` 文件，下次 `npm run dev` 或 `npm run build` 时自动分配 ID 并同步到两个 JSON 文件。
-
-#### ID 分配规则与不重复保证
-
-```javascript
-const oldIdMap = readJson(ID_MAP_FILE)  // 读取现有映射
-const maxId = Math.max(...现有所有 id)   // 当前最大 ID
-let nextId = maxId + 1                  // 从 max+1 开始递增
-
-for (每个文件) {
-  if (已有) → 保留原 id                  // 已注册文件 ID 不变
-  else      → idMap[path] = nextId++    // 新文件分配递增 ID
-}
-```
-
-- **nextId 只增不减** — 从当前最大 ID 的下一编号起步，每次分配后 +1，永不回头
-- **已有文件不重分** — 每个文件注册后永久绑定其 ID，不会被覆盖或重新分配
-- **不受执行次数影响** — 无论运行多少次脚本、一次新增多少个文件，每个新文件都获得一个唯一的、从未使用过的 ID
-
-✅ **单次新增多个文件**：依次分配 `maxId+1`、`maxId+2`、`maxId+3` ...
-✅ **分多次新增文件**：首次新增得 `maxId+1`，登记进 `id_map.json`；下次再新增时以此为基数继续分配，已有文件纹丝不动。
+**编辑课件**：在管理台「课件」页的编辑器里改写并发布；批量同步用
+`node scripts/courseware-cli.mjs pull/push`（直连后端 API，不经过仓库文件）。
+`npm run dev` / `npm run build` 不再生成任何索引，也不需要 `public/articles`。
 
 ---
 
@@ -358,7 +320,7 @@ for (每个文件) {
 // state: blogData, isLoading, error
 // actions: loadArticleData, getArticlesBySubject, getArticleById
 ```
-- 从 `articles.json` 加载文章索引（路径自动适配 BASE_URL）
+- 从数据库托管清单（`/courseware/manifests` 或管理员列表）加载文章索引
 - 提供按学科、ID 查询方法
 
 #### adminStore.js — 管理员状态
@@ -449,13 +411,13 @@ npm install
 ```bash
 npm run dev
 ```
-（自动执行 `sync-articles-data.js` 同步文章数据后再启动）
+（不再执行任何索引同步；文章清单在登录后由后端返回）
 
 ### 构建生产版本
 ```bash
 npm run build
 ```
-（自动执行 `sync-articles-data.js` 同步文章数据后再构建）
+（不再执行任何索引同步；只需 Vue 源码，课件图片由 Supabase Storage 提供）
 
 ### 预览构建结果
 ```bash
@@ -466,14 +428,13 @@ npm run preview
 
 ## 📝 文章编写指南
 
-### 文章存放位置
+### 文章从哪里来
 
-所有 `.md` 文件存放在 `public/articles/` 下，按学科分目录存放。
+文章正文只存在数据库里，仓库中没有 `.md` 课件目录。
 
-**新建文章步骤：**
-1. 在 `public/articles/` 下创建 `.md` 文件
-2. 运行 `npm run dev`（或 `npm run build`）
-3. 脚本自动分配 ID、更新 `articles.json` 和 `id_map.json`
+**新增/修改文章：**
+1. 管理台「课件」页新建或编辑，保存后发布；
+2. 或用 `node scripts/courseware-cli.mjs push` 把本地工作区推到后端。
 
 ### Markdown 格式
 文章使用标准 Markdown 语法编写。

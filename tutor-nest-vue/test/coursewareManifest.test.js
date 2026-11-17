@@ -114,7 +114,7 @@ test('单老师时不额外分组', () => {
   assert.equal(groups[0].articles.length, 2)
 })
 
-test('管理员托管清单展平为同构文章列表，跳过草稿与未托管条目', () => {
+test('管理员托管清单展平为同构文章列表，跳过草稿条目', () => {
   const account = { accountId: 6, username: 'young' }
   const articles = flattenHostedArticles([
     {
@@ -123,8 +123,7 @@ test('管理员托管清单展平为同构文章列表，跳过草稿与未托�
       title: '3 虚拟语气',
       subject: '高中英语',
       logicalPath: '高中英语/语法课讲义/3 虚拟语气.md',
-      published: true,
-      hosted: true
+      published: true
     },
     {
       articleId: 1001,
@@ -132,16 +131,7 @@ test('管理员托管清单展平为同构文章列表，跳过草稿与未托�
       title: '未发布草稿',
       subject: '高中英语',
       logicalPath: '高中英语/草稿.md',
-      published: false,
-      hosted: true
-    },
-    {
-      articleId: 901,
-      legacyArticleId: 901,
-      title: '未托管',
-      subject: '高中英语',
-      published: true,
-      hosted: false
+      published: false
     }
   ], account)
 

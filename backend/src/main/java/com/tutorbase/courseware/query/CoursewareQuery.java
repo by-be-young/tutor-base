@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.tutorbase.courseware.CoursewareFailures;
-import com.tutorbase.courseware.CoursewareProperties;
 import com.tutorbase.courseware.storage.CoursewareStorage;
 import com.tutorbase.identity.AccountPrincipal;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -14,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 学员侧读取：按老师维度取清单与正文。
+ *
+ * <p>正文只来自数据库托管的发布版本；仓库里不再有静态课件兜底。
  *
  * <p>授权口径（P0，兼容存量全局 ID）：
  * <ul>
@@ -28,21 +29,15 @@ public class CoursewareQuery {
 
     private final JdbcClient jdbc;
     private final CoursewareStorage storage;
-    private final CoursewareProperties properties;
 
-    CoursewareQuery(JdbcClient jdbc, CoursewareStorage storage, CoursewareProperties properties) {
+    CoursewareQuery(JdbcClient jdbc, CoursewareStorage storage) {
         this.jdbc = jdbc;
         this.storage = storage;
-        this.properties = properties;
     }
 
     /** 学员可见的全部清单（老师 → 科目），无可见课件时省略该科目。 */
     @Transactional(readOnly = true)
     public List<Manifest> manifestsFor(long studentId) {
-        if (servesStatic()) {
-            // 静态模式：仍未托管正文，返回空清单让前端继续使用静态目录
-            return List.of();
-        }
         boolean special = isSpecialTest(studentId);
         int[] permissions = permissions(studentId);
 
@@ -99,9 +94,6 @@ public class CoursewareQuery {
     /** 取正文；鉴权失败抛 {@link CoursewareFailures.Forbidden}，不存在抛 {@link CoursewareFailures.NotFound}。 */
     @Transactional(readOnly = true)
     public Content content(AccountPrincipal principal, long teacherId, long articleId) {
-        if (servesStatic()) {
-            throw new CoursewareFailures.NotFound("课件托管未启用，请使用静态目录");
-        }
         ArticleRow row = jdbc.sql("""
                 SELECT ca.article_id, ca.legacy_article_id, ca.content_hash
                 FROM public.course_release_head AS h
@@ -162,10 +154,6 @@ public class CoursewareQuery {
         if (!allowed(permissions(learnerId), new Article(row.articleId(), row.legacyArticleId(), null, null, null, null, 0))) {
             throw new CoursewareFailures.Forbidden("未被授权该课件");
         }
-    }
-
-    private boolean servesStatic() {
-        return !"storage".equals(properties.source());
     }
 
     private boolean allowed(int[] permissions, Article article) {        long effective = article.legacyArticleId() != null ? article.legacyArticleId() : article.articleId();

@@ -104,7 +104,7 @@ public class CoursewareDraftService {
         }
         byte[] bytes = storage.getBlob(teacherId, hash);
         if (bytes == null) {
-            // 清单里还在，但正文文件丢了：明确告诉前端"缺文件"，让它回退到静态讲义恢复，
+            // 清单里还在，但正文文件丢了：明确告诉前端"缺文件"，由管理员重新保存并发布，
             // 而不是含糊地说"草稿与发布版本都不存在"。
             throw new CoursewareFailures.ContentMissing(
                     "课件 " + articleId + " 的正文文件缺失（" + hash + "），请重新导入或以新正文重新发布这一篇");

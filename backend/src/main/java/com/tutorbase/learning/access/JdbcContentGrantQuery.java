@@ -21,14 +21,17 @@ final class JdbcContentGrantQuery implements ContentGrantQuery {
 
     @Override
     public Optional<List<Long>> findArticleIds(long learnerId) {
-        // 特殊测试学员拥有全部课件权限：直接返回 courseware_catalog 全部 article_id；
-        // catalog 为空时回退到显式 permissions。普通学员仍只返回显式授权。
+        // 特殊测试学员拥有全部课件权限：直接返回当前生效发布版本里的全部 article_id；
+        // 没有发布内容时回退到显式 permissions。普通学员仍只返回显式授权。
         return jdbc.sql("""
                 SELECT CASE
                            WHEN learner.is_special_test THEN COALESCE(
-                               (SELECT array_agg(DISTINCT catalog.article_id::integer
-                                                 ORDER BY catalog.article_id::integer)
-                                FROM public.courseware_catalog AS catalog),
+                               (SELECT array_agg(DISTINCT COALESCE(ca.legacy_article_id, ca.article_id)::integer
+                                                 ORDER BY COALESCE(ca.legacy_article_id, ca.article_id)::integer)
+                                FROM public.course_release_head AS h
+                                JOIN public.course_article AS ca
+                                  ON ca.release_id = h.release_id
+                                 AND ca.teacher_account_id = h.teacher_account_id),
                                learner.permissions)
                            ELSE learner.permissions
                        END AS permissions

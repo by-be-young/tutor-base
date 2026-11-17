@@ -23,8 +23,8 @@
           </span>
         </p>
         <p v-if="currentArticle?.contentMissing" class="editor__identity-hint is-warning">
-          这篇课件的已发布正文文件在服务器上缺失。页面不会回退到静态文件；
-          服务端会在启动时从已打包的课件补写正文，仍缺失请联系管理员恢复后再发布。
+          这篇课件的已发布正文文件在服务器上缺失。页面不会回退到任何静态文件，
+          请重新保存并发布一份正文来恢复。
         </p>
       </div>
       <label class="editor__field editor__field--picker">
@@ -64,6 +64,7 @@
       </label>
       <button type="button" class="editor__ghost" :disabled="busy" @click="insertLayout">插入布局</button>
       <button type="button" class="editor__ghost" :disabled="busy" @click="insertQuestion">插入题目</button>
+      <button type="button" class="editor__ghost" :disabled="busy" @click="openImageModal">插入图片</button>
       <button type="button" class="editor__ghost" :disabled="busy" @click="newDraft">新建草稿</button>
       <button type="button" class="editor__ghost" :disabled="busy || !markdown" @click="saveAsTemplate">
         存为模板
@@ -141,7 +142,7 @@
               </button>
             </span>
           </div>
-          <textarea v-model="markdown" class="editor__code" spellcheck="false" @input="dirty = true" />
+          <textarea ref="editorTextarea" v-model="markdown" class="editor__code" spellcheck="false" @input="dirty = true" />
           <ul v-if="precheck.errors.length" class="editor__errors">
             <li v-for="(error, index) in precheck.errors" :key="index">{{ error }}</li>
           </ul>
@@ -168,16 +169,82 @@
     </footer>
 
     <CoursewarePublishGuide :open="guideOpen" @close="guideOpen = false" />
+
+    <div v-if="imageOpen" class="editor__modal" role="dialog" aria-modal="true" aria-label="插入图片"
+      @click.self="closeImageModal">
+      <div class="editor__modal-card">
+        <header class="editor__modal-head">
+          <div>
+            <p class="eyebrow">插入图片</p>
+            <h2>上传到课件图片桶</h2>
+          </div>
+          <button type="button" class="editor__ghost" :disabled="imageUploading" @click="closeImageModal">
+            关闭
+          </button>
+        </header>
+
+        <p class="editor__modal-hint">
+          文件名按“科目 + 插入位置”自动生成，可手动修改。文件名只能用小写字母、数字、连字符和下划线；
+          桶里已有同名文件时会提示并阻止上传。
+        </p>
+
+        <label class="editor__upload editor__upload--image">
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" @change="onImageFile" />
+          <span>{{ imageFile ? '重新选择图片' : '选择图片（PNG / JPG / WebP / GIF）' }}</span>
+        </label>
+
+        <div v-if="imagePreviewUrl" class="editor__image-preview">
+          <img :src="imagePreviewUrl" alt="待插入图片预览" />
+          <span>{{ imageFile?.name }} · {{ formatBytes(imageFile?.size) }}</span>
+        </div>
+
+        <label class="editor__field">
+          <span>文件名</span>
+          <input v-model="imageName" type="text" spellcheck="false" @input="onImageNameInput" />
+        </label>
+
+        <p class="editor__modal-meta">
+          插入位置：第 {{ imageSection }} 节 · 本节第 {{ imageFigure }} 张
+        </p>
+
+        <p v-if="imageChecking" class="editor__modal-hint">正在检查是否重名…</p>
+        <p v-else-if="imageConflict" class="editor__modal-alert">
+          已有同名文件。建议使用
+          <button type="button" class="editor__inline-link" @click="applySuggestedName">
+            {{ imageSuggested }}
+          </button>
+        </p>
+        <p v-else-if="imageName && !imageNameValid" class="editor__modal-alert">
+          文件名只能用小写字母、数字、点、下划线、连字符，并以 png/jpg/jpeg/webp/gif 结尾。
+        </p>
+        <p v-else-if="imageName && imageNameValid && imageChecked" class="editor__modal-ok">
+          文件名可用
+        </p>
+        <p v-if="imageError" class="editor__modal-alert">{{ imageError }}</p>
+
+        <footer class="editor__modal-actions">
+          <button type="button" class="editor__ghost" :disabled="imageUploading" @click="closeImageModal">
+            取消
+          </button>
+          <button type="button" class="editor__primary"
+            :disabled="imageUploading || imageChecking || !imageFile || !imageNameValid || imageConflict || !imageChecked"
+            @click="confirmImage">
+            {{ imageUploading ? '上传中…' : '上传并插入' }}
+          </button>
+        </footer>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CoursewarePublishGuide from '@/components/admin/CoursewarePublishGuide.vue'
 import { coursewareGateway } from '@/gateways/coursewareGateway'
 import { loadArticleMarkdownForEditing, loadCoursewareLibrary } from '@/utils/coursewareLibrary'
 import { articleStatus } from '@/utils/coursewareTree'
+import { sectionAtCursor, suggestedImageName } from '@/utils/coursewareMediaName'
 import { showToast } from '@/utils/toast'
 
 const route = useRoute()
@@ -199,6 +266,27 @@ const importOverwrite = ref(false)
 const importReport = ref(null)
 const guideOpen = ref(false)
 const precheck = reactive({ checked: false, errors: [] })
+
+// 插入图片：上传到 Supabase Storage，文件名按当前科目与光标所在章节生成
+const editorTextarea = ref(null)
+const imageOpen = ref(false)
+const imageFile = ref(null)
+const imageName = ref('')
+const imagePreviewUrl = ref('')
+const imageChecking = ref(false)
+const imageUploading = ref(false)
+const imageChecked = ref(false)
+const imageConflict = ref(false)
+const imageSuggested = ref('')
+const imageError = ref('')
+const imageSection = ref(1)
+const imageFigure = ref(1)
+let imageCursor = 0
+let imageTimer = null
+
+const IMAGE_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,120}\.(png|jpg|jpeg|webp|gif)$/
+
+const imageNameValid = computed(() => IMAGE_NAME_PATTERN.test(String(imageName.value || '').trim()))
 
 // 当前这篇在服务端有没有草稿行：决定「删除草稿」是否可用
 const currentHasDraft = ref(false)
@@ -464,6 +552,140 @@ function insertQuestion() {
   const next = numbers.length ? Math.max(...numbers) + 1 : 1
   markdown.value = `${markdown.value.replace(/\s+$/, '')}\n\n【题干${next}】题目内容\n\nA. 选项\n\n【@${next}】\n`
   dirty.value = true
+}
+
+function formatBytes(value) {
+  const bytes = Number(value) || 0
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${bytes} B`
+}
+
+function openImageModal() {
+  if (busy.value) return
+  const cursor = editorTextarea.value?.selectionStart ?? markdown.value.length
+  imageCursor = cursor
+  const position = sectionAtCursor(markdown.value, cursor)
+  imageSection.value = position.section
+  imageFigure.value = position.figure
+  imageFile.value = null
+  imageName.value = ''
+  imageChecked.value = false
+  imageConflict.value = false
+  imageSuggested.value = ''
+  imageError.value = ''
+  if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value)
+  imagePreviewUrl.value = ''
+  imageOpen.value = true
+}
+
+function closeImageModal(force = false) {
+  if (imageUploading.value && !force) return
+  if (imageTimer) {
+    clearTimeout(imageTimer)
+    imageTimer = null
+  }
+  if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value)
+  imagePreviewUrl.value = ''
+  imageOpen.value = false
+}
+
+function onImageFile(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) {
+    imageError.value = '只支持 PNG、JPG、WebP、GIF 图片'
+    imageFile.value = null
+    if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value)
+    imagePreviewUrl.value = ''
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    imageError.value = '图片不能超过 10 MB'
+    imageFile.value = null
+    if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value)
+    imagePreviewUrl.value = ''
+    return
+  }
+  const extension = (file.name.split('.').pop() || 'png').toLowerCase()
+  const normalized = extension === 'jpeg' ? 'jpg' : extension
+  imageError.value = ''
+  imageFile.value = file
+  imageName.value = suggestedImageName(markdown.value, imageCursor, currentSubject.value, normalized)
+  if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value)
+  imagePreviewUrl.value = URL.createObjectURL(file)
+  checkImageName()
+}
+
+function onImageNameInput() {
+  imageChecked.value = false
+  imageConflict.value = false
+  imageSuggested.value = ''
+  imageError.value = ''
+  checkImageName()
+}
+
+function checkImageName() {
+  if (imageTimer) clearTimeout(imageTimer)
+  const name = String(imageName.value || '').trim()
+  if (!IMAGE_NAME_PATTERN.test(name)) {
+    imageChecking.value = false
+    return
+  }
+  imageChecking.value = true
+  imageTimer = setTimeout(async () => {
+    try {
+      const result = await coursewareGateway.checkMedia(name)
+      imageName.value = result.fileName
+      imageConflict.value = result.exists
+      imageSuggested.value = result.suggested
+      imageChecked.value = true
+    } catch (error) {
+      imageError.value = error?.message || '检查文件名失败'
+      imageChecked.value = false
+    } finally {
+      imageChecking.value = false
+    }
+  }, 350)
+}
+
+function applySuggestedName() {
+  imageName.value = imageSuggested.value
+  onImageNameInput()
+}
+
+async function confirmImage() {
+  if (!imageFile.value || !imageNameValid.value || imageConflict.value) return
+  imageUploading.value = true
+  imageError.value = ''
+  try {
+    const uploaded = await coursewareGateway.uploadMedia(imageFile.value, imageName.value.trim())
+    const name = uploaded?.fileName || imageName.value.trim()
+    const cursor = Math.min(imageCursor, markdown.value.length)
+    const before = markdown.value.slice(0, cursor)
+    const after = markdown.value.slice(cursor)
+    const prefix = !before || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n'
+    const suffix = '\n\n'
+    const inserted = `${prefix}![[${name}]]${suffix}`
+    markdown.value = before + inserted + after.replace(/^\n+/, '')
+    dirty.value = true
+    closeImageModal(true)
+    showToast(`已插入图片 ${name}`, 'success')
+    await nextTick()
+    const position = cursor + inserted.length
+    editorTextarea.value?.focus()
+    editorTextarea.value?.setSelectionRange(position, position)
+  } catch (error) {
+    if (error?.code === 'courseware_media_exists' || error?.status === 409) {
+      imageConflict.value = true
+      checkImageName()
+      imageError.value = '这个文件名刚被别人用了，请换一个'
+    } else {
+      imageError.value = error?.message || '上传失败，请稍后重试'
+    }
+  } finally {
+    imageUploading.value = false
+  }
 }
 
 async function runPrecheck() {
@@ -1098,6 +1320,114 @@ onMounted(async () => {
   border-color: var(--text-3);
   box-shadow: none;
   cursor: not-allowed;
+}
+
+/* 插入图片弹窗 */
+.editor__modal {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 18, 14, 0.52);
+}
+
+.editor__modal-card {
+  width: min(560px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 24px;
+  background: var(--paper-1);
+  border: 2px solid var(--ink);
+  border-radius: var(--r-lg);
+  box-shadow: 8px 8px 0 var(--ink);
+}
+
+.editor__modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.editor__modal-head h2 {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+
+.editor__modal-hint,
+.editor__modal-meta {
+  margin: 0 0 14px;
+  font-size: 0.78rem;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+
+.editor__upload--image {
+  display: flex;
+  margin-bottom: 14px;
+}
+
+.editor__image-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px;
+  background: var(--paper-2);
+  border: 1.5px dashed var(--ink);
+  border-radius: var(--r-md);
+}
+
+.editor__image-preview img {
+  width: 92px;
+  height: 72px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+
+.editor__image-preview span {
+  font-size: 0.76rem;
+  color: var(--text-2);
+  word-break: break-all;
+}
+
+.editor__modal-alert {
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  font-size: 0.78rem;
+  color: var(--vermilion);
+  background: rgba(196, 62, 44, 0.08);
+  border-left: 3px solid var(--vermilion);
+}
+
+.editor__modal-ok {
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  color: #2f7a4f;
+}
+
+.editor__inline-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cobalt);
+  font-family: var(--font-mono);
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.editor__modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 18px;
 }
 
 @media (max-width: 1100px) {

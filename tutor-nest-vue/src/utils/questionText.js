@@ -1,6 +1,6 @@
 // src/utils/questionText.js
-// 课件（public/articles/**/*.md）题目解析工具：把课件原文解析成「题目 → 题干」映射。
-// 规范见 tutor-nest-vue/docs/文章格式规范.md，一致性由 scripts/check-courseware.mjs 守护。
+// 课件 Markdown 题目解析工具：把课件原文解析成「题目 → 题干」映射。
+// 规范见 tutor-nest-vue/docs/文章格式规范.md，发布时由后端 CoursewareValidator 守护。
 //
 // 占位符语法（全角，编号前后允许空格）：
 //   作答占位符：【@】自动编号 / 【@N】显式编号

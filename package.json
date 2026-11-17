@@ -4,17 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "frontend:sync": "node tutor-nest-vue/scripts/sync-articles-data.js",
-    "predev": "npm run frontend:sync",
     "dev": "vite tutor-nest-vue",
     "test:frontend": "node --test --test-concurrency=1 tutor-nest-vue/test/*.test.js",
-    "test:courseware": "node tutor-nest-vue/scripts/check-courseware.mjs",
     "check:sfc": "node scripts/check-sfc.mjs",
     "check:const": "node scripts/check-const-reassign.mjs",
     "test:openapi": "redocly lint backend/api/openapi.yaml",
     "test:secrets": "node scripts/ci/scan-tracked-secrets.mjs",
     "test:e2e": "playwright test",
-    "prebuild": "npm run frontend:sync",
     "build": "vite build tutor-nest-vue",
     "preview": "vite preview tutor-nest-vue"
   },
