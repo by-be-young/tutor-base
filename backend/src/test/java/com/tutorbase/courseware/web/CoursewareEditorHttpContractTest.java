@@ -44,7 +44,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * P2 编辑器：布局骨架、草稿保存与从草稿发布、导出 zip 与导入。
+ * P2 编辑器：布局骨架、篇目直读直存、保存即发布、导出 zip 与导入。
  */
 @Tag("integration")
 @Testcontainers
@@ -586,7 +586,7 @@ class CoursewareEditorHttpContractTest {
     }
 
     /**
-     * 从目录树某一级新建的空白课件：草稿要记住选定的路径与名称，发布后仍落在那一级目录。
+     * 目录树某一级创建的课件：草稿阶段不出现在清单，发布后仍落在选定的路径与名称。
      */
     @Test
     void draftCreatedInFolderKeepsChosenPathWhenPublished() throws Exception {
@@ -606,13 +606,11 @@ class CoursewareEditorHttpContractTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString()).get("articleId").asLong();
 
+        // 草稿阶段不进入课件清单
         mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].logicalPath",
-                        contains(logicalPath)))
-                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].title", contains("时态练习")))
-                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].subject", contains("高中英语")))
-                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].published", contains(false)));
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")]",
+                        org.hamcrest.Matchers.empty()));
 
         mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")
                         .cookie(cookie)
@@ -621,6 +619,14 @@ class CoursewareEditorHttpContractTest {
                         .content(objectMapper.writeValueAsString(Map.of("subject", "高中英语"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.version").value(1));
+
+        mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].logicalPath",
+                        contains(logicalPath)))
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].title", contains("时态练习")))
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].subject", contains("高中英语")))
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].published", contains(true)));
 
         long alphaId = jdbc.queryForObject(
                 "SELECT id FROM public.account WHERE username = 'alpha'", Long.class);
@@ -693,12 +699,27 @@ class CoursewareEditorHttpContractTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString()).get("articleId").asLong();
 
+        // 草稿阶段不进入课件清单
+        mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")]",
+                        org.hamcrest.Matchers.empty()));
+
+        mockMvc.perform(post("/api/v1/admin/courseware/drafts/publish")
+                        .cookie(cookie)
+                        .header("X-CSRF-TOKEN", csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("subject", "高中英语"))))
+                .andExpect(status().isOk());
+
         mockMvc.perform(get("/api/v1/admin/courseware/articles").cookie(cookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].logicalPath",
                         contains("高中英语/语法课讲义/从句专项/定语从句.md")))
                 .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].subject",
-                        contains("高中英语")));
+                        contains("高中英语")))
+                .andExpect(jsonPath("$[?(@.articleId == " + articleId + ")].published",
+                        contains(true)));
     }
 
     @Test
@@ -1065,8 +1086,14 @@ class CoursewareEditorHttpContractTest {
                 .andExpect(jsonPath("$.markdown").value(edited));
 
         assertThat(jdbc.queryForObject("SELECT count(*) FROM public.course_draft", Long.class)).isZero();
-        assertThat(jdbc.queryForObject(
-                "SELECT version FROM public.course_release_head WHERE subject = '高中英语'", Integer.class))
+        long alphaId = jdbc.queryForObject(
+                "SELECT id FROM public.account WHERE username = 'alpha'", Long.class);
+        assertThat(jdbc.queryForObject("""
+                SELECT r.version
+                FROM public.course_release_head AS h
+                JOIN public.course_release AS r ON r.id = h.release_id
+                WHERE h.teacher_account_id = ? AND h.subject = '高中英语'
+                """, Integer.class, alphaId))
                 .isEqualTo(2);
     }
 
