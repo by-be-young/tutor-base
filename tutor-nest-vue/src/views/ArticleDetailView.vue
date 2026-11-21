@@ -89,10 +89,10 @@
                 </button>
                 <button type="button" class="reader-tool reader-tool--pdf"
                     :class="{ 'is-busy': printBusy }" :disabled="printBusy"
-                    title="导出 PDF：在打印对话框里选择「另存为 PDF」" aria-label="导出 PDF"
+                    title="导出 PDF：桌面端打开打印，手机端生成文件" aria-label="导出 PDF"
                     @click="printArticle">
                     <i class="fas" :class="printBusy ? 'fa-circle-notch fa-spin' : 'fa-file-pdf'"></i>
-                    <span>PDF</span>
+                    <span>{{ printBusy ? '生成中' : 'PDF' }}</span>
                 </button>
 
                 <span v-if="submittedCount > 0" class="reader-tools__hint mono">{{ submittedCount }} 题已提交</span>
@@ -225,6 +225,44 @@
                 </div>
             </aside>
         </div>
+
+        <!-- PDF 导出专用版面：屏幕外渲染，不参与阅读交互 -->
+        <div class="pdf-export-stage" aria-hidden="true">
+            <div ref="pdfStagePaperRef" class="pdf-export-paper">
+                <h1 class="pdf-export-title">{{ blogTitle }}</h1>
+                <div ref="pdfStageBodyRef"></div>
+            </div>
+        </div>
+
+        <!-- PDF 导出结果：移动端生成文件后由用户点击保存 -->
+        <div v-if="pdfExport" ref="pdfModalRef" class="pdf-modal-overlay" @click.self="closePdfExport">
+            <div class="pdf-modal" role="dialog" aria-modal="true" aria-label="PDF 已生成">
+                <div class="pdf-modal__head">
+                    <span class="pdf-modal__icon" aria-hidden="true"><i class="fas fa-file-pdf"></i></span>
+                    <div class="pdf-modal__heading">
+                        <h2 class="pdf-modal__title">PDF 已生成</h2>
+                        <p class="pdf-modal__meta mono">{{ pdfExport.pages }} 页 · {{ pdfExport.sizeLabel }}</p>
+                    </div>
+                    <button type="button" class="pdf-modal__close" aria-label="关闭" @click="closePdfExport">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="pdf-modal__file">
+                    <i class="fas fa-file-pdf" aria-hidden="true"></i>
+                    <span>{{ pdfExport.filename }}</span>
+                </div>
+                <p class="pdf-modal__hint">
+                    手机浏览器不会弹出打印窗口，这里直接生成 PDF 文件。若点击后没有开始下载，可长按按钮选择「保存链接」。
+                </p>
+                <div class="pdf-modal__actions">
+                    <a data-pdf-save class="btn btn--primary btn--block" :href="pdfExport.url"
+                        :download="pdfExport.filename" target="_blank" rel="noopener" @click="handlePdfSave">
+                        <i class="fas fa-download"></i>保存 PDF
+                    </a>
+                    <button type="button" class="btn btn--ghost btn--block" @click="closePdfExport">关闭</button>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -239,6 +277,7 @@ import { useImageEmbed } from '@/composables/useImageEmbed'
 import { useDrawingInDetail } from '@/composables/useDrawing'
 import { learningGateway } from '@/gateways/learningGateway'
 import { showToast } from '@/utils/toast'
+import { createCoursewarePdf, prefersClientPdf, canUseBrowserPrint, formatFileSize } from '@/utils/coursewarePdf'
 import { loadArticleMarkdown } from '@/utils/articleContent'
 import { loadArticleMarkdownForEditing, loadCoursewareLibrary } from '@/utils/coursewareLibrary'
 import { ANSWER_TOKEN, STEM_TOKEN, STEM_TOKEN_ONE, buildQuestionTextMap, normalizeMarkerIndentation } from '@/utils/questionText'
@@ -255,6 +294,11 @@ useDrawingInDetail()
 
 // ========== 状态管理 ==========
 const detailBodyRef = ref(null)
+const pdfStagePaperRef = ref(null)
+const pdfStageBodyRef = ref(null)
+const pdfModalRef = ref(null)
+const pdfExport = ref(null)
+let pdfExportUrl = ''
 const blogTitle = ref('加载中...')
 const renderedContent = ref('')
 const currentMode = ref('study') // study, review, answer
@@ -339,6 +383,7 @@ function handleReaderScroll() {
 
 function handleReaderKeydown(event) {
     if (event.key !== 'Escape') return
+    if (pdfExport.value) closePdfExport()
     if (answerSheetVisible.value) closeAnswerSheet()
     if (tocVisible.value) closeToc()
 }
@@ -1586,11 +1631,11 @@ async function loadContent() {
     }
 }
 
-// 导出 PDF：走浏览器打印（打印样式只保留正文，页边距由 @page 控制）
+// 导出 PDF：桌面端走浏览器打印；手机端直接生成 PDF 文件并下载
 const PRINT_ASSET_TIMEOUT = 1200
 const printBusy = ref(false)
 
-/** 等公式字体与正文图片就绪，避免移动端/弱网导出时出现空白图 */
+/** 等公式字体与正文图片就绪，避免桌面端打印时出现空白图 */
 function waitForPrintAssets() {
     if (!detailBodyRef.value) return Promise.resolve()
 
@@ -1610,13 +1655,94 @@ function waitForPrintAssets() {
     ])
 }
 
+function closePdfExport() {
+    if (pdfExportUrl) {
+        URL.revokeObjectURL(pdfExportUrl)
+        pdfExportUrl = ''
+    }
+    pdfExport.value = null
+}
+
+function handlePdfSave() {
+    showToast('已开始保存，请在浏览器「下载 / 文件」中查看', 'success', 4000)
+}
+
+/** 把当前正文复制到隐藏的导出版面：单栏、无答题框、无交互控件 */
+function buildPdfStage() {
+    if (!detailBodyRef.value || !pdfStageBodyRef.value) return
+    const clone = detailBodyRef.value.cloneNode(true)
+    clone.classList.add('pdf-export-body')
+    clone.removeAttribute('id')
+    clone.querySelectorAll([
+        '.question-card',
+        '.question-slot',
+        '.question-group',
+        '.question-pill',
+        '.question-textarea',
+        '.question-card-footer',
+        '.question-reference-wrapper',
+        '.question-review-toolbar',
+        'textarea',
+        'input',
+        'select',
+        'button'
+    ].join(',')).forEach(node => node.remove())
+    clone.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'))
+    clone.querySelectorAll('img').forEach(img => {
+        img.loading = 'eager'
+        img.decoding = 'sync'
+        img.classList.add('loaded')
+    })
+    pdfStageBodyRef.value.replaceChildren(clone)
+}
+
+async function exportPdfFile() {
+    buildPdfStage()
+    if (!pdfStagePaperRef.value) throw new Error('导出版面尚未准备好')
+    await nextTick()
+    let dismissProgress = null
+    try {
+        dismissProgress = showToast('正在生成 PDF，请稍候…', 'info', 3000)
+        const result = await createCoursewarePdf({
+            element: pdfStagePaperRef.value,
+            title: blogTitle.value
+        })
+        closePdfExport()
+        pdfExportUrl = URL.createObjectURL(result.blob)
+        pdfExport.value = {
+            url: pdfExportUrl,
+            filename: result.filename,
+            pages: result.pages,
+            sizeLabel: formatFileSize(result.bytes)
+        }
+        await nextTick()
+        pdfModalRef.value?.querySelector('[data-pdf-save]')?.focus()
+    } finally {
+        if (typeof dismissProgress === 'function') dismissProgress()
+    }
+}
+
 async function printArticle() {
     if (printBusy.value || !renderedContent.value) return
     printBusy.value = true
     try {
+        if (prefersClientPdf() || !canUseBrowserPrint()) {
+            await exportPdfFile()
+            return
+        }
         await waitForPrintAssets()
         await nextTick()
         window.print()
+    } catch (error) {
+        console.error('导出 PDF 失败:', error)
+        const message = error?.code === 'content_too_long'
+            ? '这篇内容过长，手机端无法一次生成 PDF，请改用电脑导出'
+            : error?.code === 'empty_content'
+                ? '正文为空，无法导出 PDF'
+                : error?.code === 'render_failed'
+                    ? '正文渲染失败，请稍后重试；若仍失败，请用系统浏览器打开'
+                    : '生成 PDF 失败，请稍后重试；若仍失败，请用系统浏览器打开'
+        showToast(message, 'error', 6000)
     } finally {
         printBusy.value = false
     }
@@ -1688,6 +1814,7 @@ function handlePageHide() {
 watch(
     () => [route.params.id, route.query.mode, route.query.studentId],
     () => {
+        closePdfExport()
         loadContent()
     }
 )
@@ -1712,6 +1839,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
     disconnect()
+    closePdfExport()
     breakpointMql.removeEventListener('change', handleBreakpointChange)
     window.removeEventListener('pagehide', handlePageHide)
     window.removeEventListener('scroll', handleReaderScroll)
@@ -3321,6 +3449,281 @@ onUnmounted(() => {
     }
 }
 
+/* ---------- 客户端 PDF 导出：屏幕外版面 + 结果弹窗 ---------- */
+.pdf-export-stage {
+    position: fixed;
+    top: 0;
+    left: -10000px;
+    z-index: -1;
+    width: 682px;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    pointer-events: none;
+    font-family: var(--font-body);
+}
+
+.pdf-export-paper {
+    width: 682px;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #1c1a14;
+}
+
+.pdf-export-title {
+    margin: 0 0 22px;
+    padding: 0 0 12px;
+    border-bottom: 2px solid #1c1a14;
+    font-family: var(--font-display);
+    font-size: 27px;
+    font-weight: 800;
+    line-height: 1.32;
+    color: #1c1a14;
+}
+
+/* 导出版面固定单栏：不继承阅读器的双栏 / 仅答题区 / 专注布局 */
+.pdf-export-body {
+    width: 682px !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #1c1a14 !important;
+    font-size: 16px !important;
+    line-height: 1.75 !important;
+    overflow: visible !important;
+}
+
+.pdf-export-body :deep(.detail-section-two-column) {
+    display: block !important;
+    margin: 0 0 20px !important;
+    padding: 0 !important;
+    border-bottom: 0 !important;
+    gap: 0 !important;
+}
+
+.pdf-export-body :deep(.detail-main-column),
+.pdf-export-body :deep(.detail-sidebar-column) {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: none !important;
+    position: static !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+/* 双保险：答题框、作答控件一律不进 PDF */
+.pdf-export-body :deep(.question-card),
+.pdf-export-body :deep(.question-slot),
+.pdf-export-body :deep(.question-group),
+.pdf-export-body :deep(.question-pill),
+.pdf-export-body :deep(.question-textarea),
+.pdf-export-body :deep(.question-card-footer),
+.pdf-export-body :deep(.question-reference-wrapper),
+.pdf-export-body :deep(.question-review-toolbar),
+.pdf-export-body :deep(textarea),
+.pdf-export-body :deep(input),
+.pdf-export-body :deep(select),
+.pdf-export-body :deep(button) {
+    display: none !important;
+}
+
+.pdf-export-body :deep(table) {
+    display: table !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+    white-space: normal !important;
+    font-size: 13px;
+}
+
+.pdf-export-body :deep(th),
+.pdf-export-body :deep(td) {
+    padding: 7px 9px !important;
+    white-space: normal !important;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.pdf-export-body :deep(pre) {
+    white-space: pre-wrap;
+    overflow: visible !important;
+    padding: 14px 16px;
+    font-size: 13px;
+}
+
+.pdf-export-body :deep(img) {
+    max-width: 100% !important;
+    height: auto !important;
+    padding: 6px;
+    border: 1px solid #d8d2c2;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: none;
+}
+
+.pdf-export-body :deep(h1) {
+    margin: 26px 0 12px;
+    font-size: 24px;
+    line-height: 1.35;
+}
+
+.pdf-export-body :deep(h2) {
+    margin: 22px 0 10px;
+    font-size: 20px;
+    line-height: 1.4;
+}
+
+.pdf-export-body :deep(h3) {
+    margin: 18px 0 8px;
+    font-size: 17px;
+    line-height: 1.45;
+}
+
+.pdf-export-body :deep(p) {
+    margin: 0 0 12px;
+}
+
+.pdf-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(28, 26, 20, 0.52);
+}
+
+.pdf-modal {
+    width: min(440px, 100%);
+    padding: 22px;
+    border: 2px solid var(--ink);
+    border-radius: var(--r-md);
+    background: var(--paper-1);
+    box-shadow: 6px 6px 0 var(--ink);
+    color: var(--text-2);
+}
+
+.pdf-modal__head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.pdf-modal__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-xs);
+    background: var(--danger, #d94f4f);
+    box-shadow: 2px 2px 0 var(--ink);
+    color: #fff;
+    font-size: 1.1rem;
+}
+
+.pdf-modal__heading {
+    flex: 1;
+    min-width: 0;
+}
+
+.pdf-modal__title {
+    margin: 0 0 4px;
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--ink);
+}
+
+.pdf-modal__meta {
+    margin: 0;
+    color: var(--text-3);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+}
+
+.pdf-modal__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--r-xs);
+    background: var(--paper-1);
+    color: var(--ink);
+    font-size: 0.9rem;
+    box-shadow: 2px 2px 0 var(--ink);
+    cursor: pointer;
+}
+
+.pdf-modal__close:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0 var(--ink);
+}
+
+.pdf-modal__file {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 18px 0 12px;
+    padding: 12px 14px;
+    border: 1.5px dashed var(--line-strong);
+    border-radius: var(--r-xs);
+    background: var(--paper-0);
+    color: var(--ink);
+    font-size: 0.86rem;
+    overflow-wrap: anywhere;
+}
+
+.pdf-modal__file i {
+    color: var(--danger, #d94f4f);
+}
+
+.pdf-modal__hint {
+    margin: 0 0 18px;
+    color: var(--text-3);
+    font-size: 0.8rem;
+    line-height: 1.65;
+}
+
+.pdf-modal__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pdf-modal__actions .btn {
+    text-decoration: none;
+}
+
+@media (max-width: 720px) {
+    .pdf-modal-overlay {
+        align-items: flex-end;
+        padding: 12px;
+        padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    }
+
+    .pdf-modal {
+        padding: 18px;
+        box-shadow: 4px 4px 0 var(--ink);
+    }
+}
+
 /* ---------- 打印 / 导出 PDF：只保留正文 ---------- */
 @media print {
     @page {
@@ -3342,7 +3745,9 @@ onUnmounted(() => {
     .answer-sheet-overlay,
     .answer-sheet-sidebar,
     .toc-overlay,
-    .toc-sidebar {
+    .toc-sidebar,
+    .pdf-export-stage,
+    .pdf-modal-overlay {
         display: none !important;
     }
 

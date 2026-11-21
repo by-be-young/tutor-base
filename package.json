@@ -15,6 +15,8 @@
     "preview": "vite preview tutor-nest-vue"
   },
   "dependencies": {
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "marked": "^11.0.0",
     "pinia": "^2.1.7",
     "vue": "^3.4.0",
