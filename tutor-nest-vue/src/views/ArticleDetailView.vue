@@ -87,6 +87,13 @@
                     <i class="fas" :class="layoutToggleIcon"></i>
                     <span>布局</span>
                 </button>
+                <button type="button" class="reader-tool reader-tool--pdf"
+                    :class="{ 'is-busy': printBusy }" :disabled="printBusy"
+                    title="导出 PDF：在打印对话框里选择「另存为 PDF」" aria-label="导出 PDF"
+                    @click="printArticle">
+                    <i class="fas" :class="printBusy ? 'fa-circle-notch fa-spin' : 'fa-file-pdf'"></i>
+                    <span>PDF</span>
+                </button>
 
                 <span v-if="submittedCount > 0" class="reader-tools__hint mono">{{ submittedCount }} 题已提交</span>
 
@@ -1564,7 +1571,7 @@ async function loadContent() {
 
         // 10. 从编辑页「导出 PDF」跳转过来时自动打开打印（浏览器里选「另存为 PDF」）
         if (currentMode.value === 'preview' && route.query.print === '1') {
-            window.setTimeout(() => window.print(), 400)
+            window.setTimeout(() => { printArticle() }, 400)
         }
 
     } catch (e) {
@@ -1580,8 +1587,39 @@ async function loadContent() {
 }
 
 // 导出 PDF：走浏览器打印（打印样式只保留正文，页边距由 @page 控制）
-function printArticle() {
-    window.print()
+const PRINT_ASSET_TIMEOUT = 1200
+const printBusy = ref(false)
+
+/** 等公式字体与正文图片就绪，避免移动端/弱网导出时出现空白图 */
+function waitForPrintAssets() {
+    if (!detailBodyRef.value) return Promise.resolve()
+
+    const imageTasks = Array.from(detailBodyRef.value.querySelectorAll('img')).map(img => {
+        if (img.complete) return Promise.resolve()
+        return new Promise(resolve => {
+            img.addEventListener('load', resolve, { once: true })
+            img.addEventListener('error', resolve, { once: true })
+        })
+    })
+    const tasks = [document.fonts?.ready, ...imageTasks].filter(Boolean)
+    if (!tasks.length) return Promise.resolve()
+
+    return Promise.race([
+        Promise.all(tasks),
+        new Promise(resolve => window.setTimeout(resolve, PRINT_ASSET_TIMEOUT))
+    ])
+}
+
+async function printArticle() {
+    if (printBusy.value || !renderedContent.value) return
+    printBusy.value = true
+    try {
+        await waitForPrintAssets()
+        await nextTick()
+        window.print()
+    } finally {
+        printBusy.value = false
+    }
 }
 
 // ========== 布局切换 ==========
@@ -1925,6 +1963,24 @@ onUnmounted(() => {
 
 .reader-tool--end {
     margin-left: auto;
+}
+
+/* 导出 PDF：学习 / 批阅 / 答案设置 / 预览各模式常驻可用 */
+.reader-tool--pdf {
+    color: var(--ink);
+}
+
+.reader-tool--pdf i {
+    color: var(--vermilion);
+}
+
+.reader-tool--pdf:hover {
+    background: var(--butter);
+}
+
+.reader-tool--pdf.is-busy {
+    cursor: progress;
+    opacity: 0.7;
 }
 
 .reader-tools__hint {
@@ -3181,6 +3237,11 @@ onUnmounted(() => {
         display: none;
     }
 
+    /* 移动端保留 PDF 文字标签，导出入口一眼可见 */
+    .reader-tool--pdf span {
+        display: inline;
+    }
+
     .reader-tool--end {
         margin-left: 0;
     }
@@ -3274,19 +3335,25 @@ onUnmounted(() => {
     .reader-hero__halftone,
     .reader-meta,
     .answer-sheet-fab,
+    .toc-fab,
+    .layout-toggle-fab,
     .fab-container,
     .fab-right-group,
     .answer-sheet-overlay,
-    .answer-sheet-sidebar {
+    .answer-sheet-sidebar,
+    .toc-overlay,
+    .toc-sidebar {
         display: none !important;
     }
 
     .reader,
     .reader-shell {
+        display: block !important;
         background: #fff;
-        padding: 0;
-        margin: 0;
-        max-width: none;
+        padding: 0 !important;
+        margin: 0 !important;
+        max-width: none !important;
+        transition: none !important;
     }
 
     .reader-hero {
@@ -3308,6 +3375,60 @@ onUnmounted(() => {
         border-radius: 0;
         box-shadow: none;
         background: #fff;
+        max-width: none !important;
+        margin: 0 !important;
+        transition: none !important;
+    }
+
+    /* 布局归一：不论屏幕上是双栏 / 仅正文 / 仅答题区，导出时都展开为单栏 */
+    .detail-layout-wrapper,
+    .detail-layout-wrapper.layout-left,
+    .detail-layout-wrapper.layout-right,
+    .detail-layout-wrapper.has-sidebar-content,
+    .detail-layout-wrapper:not(.has-sidebar-content) {
+        display: block !important;
+        max-width: none !important;
+        margin: 0 !important;
+    }
+
+    .detail-body :deep(.detail-section-two-column) {
+        display: block !important;
+        margin: 0 0 14pt;
+        padding: 0;
+        border-bottom: 0;
+        gap: 0;
+    }
+
+    .detail-body :deep(.detail-main-column),
+    .detail-body :deep(.detail-sidebar-column) {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        flex: none !important;
+        position: static !important;
+        max-height: none !important;
+        overflow: visible !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+
+    .detail-body :deep(.detail-sidebar-column) {
+        margin-top: 4pt;
+    }
+
+    /* 答题框（作答卡片）在任何布局、任何模式下都不上纸 */
+    .detail-body :deep(.question-card),
+    .detail-body :deep(.question-slot),
+    .detail-body :deep(.question-group),
+    .detail-body :deep(.question-pill),
+    .detail-body :deep(.question-textarea),
+    .detail-body :deep(.question-card-footer),
+    .detail-body :deep(.question-reference-wrapper),
+    .detail-body :deep(.question-review-toolbar) {
+        display: none !important;
     }
 
     .detail-body {
@@ -3322,14 +3443,20 @@ onUnmounted(() => {
         page-break-after: avoid;
     }
 
-    .detail-body :deep(.detail-section-two-column) {
-        display: block;
+    /* 移动端打印：表格恢复为整页表格，不再横向滚动截断 */
+    .detail-body :deep(table) {
+        display: table !important;
+        width: 100% !important;
+        overflow: visible !important;
+        white-space: normal !important;
+        break-inside: auto;
+        page-break-inside: auto;
     }
 
-    .detail-body :deep(.question-slot),
-    .detail-body :deep(.question-card),
-    .detail-body :deep(.question-group),
-    .detail-body :deep(table),
+    .detail-body :deep(th) {
+        white-space: normal !important;
+    }
+
     .detail-body :deep(img) {
         break-inside: avoid;
         page-break-inside: avoid;
