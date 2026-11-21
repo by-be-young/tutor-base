@@ -221,6 +221,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useArticleStore } from '@/stores/blogStore'
 import { learningGateway } from '@/gateways/learningGateway'
+import { buildProgressMap, hasQuestions, pendingQuestionCount } from '@/utils/submissionStatus'
 
 // 子组件：目录文件夹节点 / 目录文件节点
 import FolderNode from '@/components/articles/FolderNode.vue'
@@ -571,11 +572,10 @@ onMounted(async () => {
     // 触发博客数据加载（异步操作）
     await blogStore.loadArticleData()
 
-    // 提取当前可见博客的 ID 列表
-    const blogIds = filteredArticles.value.map(b => b.id)
-    if (blogIds.length > 0) {
+    // 按当前可见课件判断提交状态（清单已带题目数）
+    if (filteredArticles.value.length > 0) {
       // 批量查询提交状态
-      submissionStatusMap.value = await loadSubmissionStatus(blogIds)
+      submissionStatusMap.value = await loadSubmissionStatus(filteredArticles.value)
     }
   }
 })
@@ -584,9 +584,8 @@ onMounted(async () => {
 watch(() => authStore.isLoggedIn, async (loggedIn) => {
   if (loggedIn) {
     await blogStore.loadArticleData()
-    const blogIds = filteredArticles.value.map(b => b.id)
-    if (blogIds.length > 0) {
-      submissionStatusMap.value = await loadSubmissionStatus(blogIds)
+    if (filteredArticles.value.length > 0) {
+      submissionStatusMap.value = await loadSubmissionStatus(filteredArticles.value)
     }
   }
 })
@@ -603,9 +602,8 @@ watch(() => route.query.subject, async (newSubject) => {
     // 重新加载提交状态
     if (authStore.isLoggedIn) {
       await blogStore.loadArticleData()
-      const blogIds = filteredArticles.value.map(b => b.id)
-      if (blogIds.length > 0) {
-        submissionStatusMap.value = await loadSubmissionStatus(blogIds)
+      if (filteredArticles.value.length > 0) {
+        submissionStatusMap.value = await loadSubmissionStatus(filteredArticles.value)
       }
     }
   }
@@ -616,13 +614,13 @@ watch(() => route.query.subject, async (newSubject) => {
 /**
  * 批量加载博客提交状态
  *
- * 加载该学生有答案但未提交的题目数（待提交数量）
+ * 与批阅中心同一口径：课件有题目即参与，没设答案也按一题未交算，没交齐同样算待提交。
  *
- * @param {Array<number|string>} blogIds - 需要查询的博客 ID 列表
+ * @param {Array<object>} articles - 需要判断的课件清单（含 questionCount）
  * @returns {Promise<Map<number, number>>} 返回 blogId → 待提交题数 的映射
  */
-async function loadSubmissionStatus(blogIds) {
-  if (!blogIds.length) return new Map()
+async function loadSubmissionStatus(articles) {
+  if (!articles.length) return new Map()
   let progress
   try {
     progress = await learningGateway.getLearnerProgress()
@@ -630,16 +628,17 @@ async function loadSubmissionStatus(blogIds) {
     console.error('加载提交记录失败:', error)
     return new Map()
   }
+  const progressMap = buildProgressMap(progress)
   const result = new Map()
-  const requested = new Set(blogIds.map(Number))
-  progress.forEach(item => {
-    const bid = Number(item.articleId)
-    if (!requested.has(bid)) return
-    const pending = item.totalQuestions - item.submittedQuestions
+  for (const article of articles) {
+    const blogId = Number(article.id)
+    const item = progressMap.get(blogId)
+    if (!hasQuestions(article, item)) continue
+    const pending = pendingQuestionCount(article, item)
     if (pending > 0) {
-      result.set(bid, pending)
+      result.set(blogId, pending)
     }
-  })
+  }
   return result
 }
 </script>

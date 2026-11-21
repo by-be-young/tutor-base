@@ -475,6 +475,7 @@ import { useTasksStore } from '@/stores/tasksStore'
 import { useCardCatalogStore } from '@/stores/cardCatalogStore'
 import { useUiStore } from '@/stores/uiStore'
 import { learningGateway } from '@/gateways/learningGateway'
+import { buildProgressMap, hasQuestions, pendingQuestionCount } from '@/utils/submissionStatus'
 import { levelFromPoints } from '@/utils/level'
 import BrandMark from '@/components/common/BrandMark.vue'
 import CountUp from '@/components/ui/CountUp.vue'
@@ -517,16 +518,16 @@ const publicStats = computed(() => {
   }
 })
 
+const permittedArticles = computed(() => {
+  const permissionIds = authStore.getPermissionIds().map(Number).filter(Number.isFinite)
+  return blogStore.blogData.filter(item => permissionIds.includes(Number(item.id)))
+})
+
 const subjects = computed(() => {
-  if (!authStore.isLoggedIn || !blogStore.blogData.length) return []
+  if (!authStore.isLoggedIn || !permittedArticles.value.length) return []
 
-  const permissionIds = authStore.getPermissionIds()
-    .map(Number)
-    .filter(Number.isFinite)
-
-  const allowedArticles = blogStore.blogData.filter(item => permissionIds.includes(Number(item.id)))
   const subjectMap = new Map()
-  allowedArticles.forEach(item => {
+  permittedArticles.value.forEach(item => {
     if (!subjectMap.has(item.series)) subjectMap.set(item.series, [])
     subjectMap.get(item.series).push(item)
   })
@@ -545,10 +546,15 @@ const unmasteredCount = computed(() => wrongQuestionsStore.questions.filter(ques
 
 const pendingByArticle = computed(() => {
   const map = new Map()
-  for (const item of progress.value) {
-    const pending = Math.max(0, Number(item.totalQuestions || 0) - Number(item.submittedQuestions || 0))
-    if (pending > 0) map.set(Number(item.articleId), pending)
-  }
+  if (!authStore.isLoggedIn) return map
+  const progressMap = buildProgressMap(progress.value)
+  permittedArticles.value.forEach(article => {
+    const articleId = Number(article.id)
+    const item = progressMap.get(articleId)
+    if (!hasQuestions(article, item)) return
+    const pending = pendingQuestionCount(article, item)
+    if (pending > 0) map.set(articleId, pending)
+  })
   return map
 })
 

@@ -117,6 +117,13 @@
                                 <div class="row row--wrap review-detail__meta">
                                     <span class="chip" :class="`chip--${currentTone}`">{{ selectedArticle.series }}</span>
                                     <span v-if="selectedArticle.date" class="tag">{{ selectedArticle.date }}</span>
+                                    <span v-if="selectedSubmission && selectedSubmission.total > 0 && selectedSubmission.pending > 0"
+                                        class="chip chip--coral">
+                                        <i aria-hidden="true" class="fas fa-inbox"></i>
+                                        已交 {{ selectedSubmission.submitted }}/{{ selectedSubmission.total }} 题
+                                    </span>
+                                    <span v-if="selectedSubmission && selectedSubmission.total > 0 && !selectedProgress"
+                                        class="tag">尚未设置答案</span>
                                     <span v-if="pendingOf(selectedArticle.id) > 0" class="chip chip--amber">
                                         <i aria-hidden="true" class="fas fa-hourglass-half"></i>
                                         {{ pendingOf(selectedArticle.id) }} 题待批阅
@@ -134,7 +141,8 @@
                         </header>
 
                         <EmptyState v-if="selectedArticle.questions.length === 0" icon="fas fa-inbox"
-                            title="这篇文章还没有可批阅的作答" text="学员提交作答后，题目会出现在这里。" />
+                            :title="selectedProgress ? '这篇文章还没有可批阅的作答' : '这篇课件还没有设置答案'"
+                            :text="selectedProgress ? '学员提交作答后，题目会出现在这里。' : '答案设置好后学员才能提交，作答会出现在这里。'" />
 
                         <div v-else class="review-questions">
                             <article v-for="question in selectedArticle.questions" :key="question.questionId"
@@ -193,6 +201,7 @@ import { useRouter } from 'vue-router'
 import { useArticleStore } from '@/stores/blogStore'
 import { useCoursewareStore } from '@/stores/coursewareStore'
 import { learningGateway } from '@/gateways/learningGateway'
+import { buildProgressMap, isPending as progressIsPending, isUnsubmitted as progressIsUnsubmitted, isReviewed as progressIsReviewed, pendingQuestionCount, questionCountOf, submittedCountOf } from '@/utils/submissionStatus'
 import { showToast } from '@/utils/toast'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ClickableTreeNode from './ClickableTreeNode.vue'
@@ -219,9 +228,8 @@ const highlightedQuestionId = ref('')
 const deepLinkArticleId = ref(Number(props.initialArticleId) || null)
 const deepLinkQuestionId = ref(props.initialQuestionId || '')
 
-const pendingCountMap = ref(new Map())
-const studentSubmissionStatus = ref(new Map())
-const answerKeysCache = ref(new Map())
+// 每篇文章的进度：总题数 / 已提交题数 / 待批阅题数；后端已按学员权限与我的课件范围下发。
+const articleProgress = ref(new Map())
 const loadingProgress = ref(false)
 const progressError = ref('')
 
@@ -291,10 +299,61 @@ function scopeByGrant(source) {
 }
 
 // progress 已按授权范围返回；权限变更或缓存残留时仍只保留授权文章，避免筛选项与列表不一致。
-const scopedPendingCountMap = computed(() => scopeByGrant(pendingCountMap.value))
-const scopedSubmissionStatus = computed(() => scopeByGrant(studentSubmissionStatus.value))
+const scopedProgress = computed(() => scopeByGrant(articleProgress.value))
+
+// 目录徽标只显示积压的待批阅题数。
+const scopedPendingCountMap = computed(() => {
+    const map = new Map()
+    scopedProgress.value.forEach((progress, articleId) => {
+        if (progress.pendingReviews > 0) map.set(articleId, progress.pendingReviews)
+    })
+    return map
+})
+
+// 提交状态以「课件题目数」为准：老师没设答案时后端 progress 没有这一行，按一题未交处理。
+function progressOf(blogId) {
+    return scopedProgress.value.get(Number(blogId))
+}
+
+// 待批阅：有已提交但还没批的题。
+function isPendingOf(blog) {
+    return progressIsPending(progressOf(blog.id))
+}
+
+// 未提交：有题目，但一题未交或没交齐。
+function isUnsubmittedOf(blog) {
+    return progressIsUnsubmitted(blog, progressOf(blog.id))
+}
+
+// 已批阅：题目全部交齐，且没有积压待批。
+function isReviewedOf(blog) {
+    return progressIsReviewed(blog, progressOf(blog.id))
+}
+
+function matchesFilter(blog, value) {
+    if (value === 'pending') return isPendingOf(blog)
+    if (value === 'reviewed') return isReviewedOf(blog)
+    if (value === 'unsubmitted') return isUnsubmittedOf(blog)
+    return true
+}
 
 const currentTone = computed(() => subjectTone(currentSubject.value))
+
+const selectedProgress = computed(() => {
+    const article = selectedArticle.value
+    return article ? scopedProgress.value.get(Number(article.id)) || null : null
+})
+
+const selectedSubmission = computed(() => {
+    const article = selectedArticle.value
+    if (!article) return null
+    const progress = selectedProgress.value
+    return {
+        submitted: submittedCountOf(article, progress),
+        total: questionCountOf(article, progress),
+        pending: pendingQuestionCount(article, progress)
+    }
+})
 
 const subjectArticles = computed(() => grantedArticles.value.filter(blog => blog.series === currentSubject.value))
 
@@ -302,25 +361,14 @@ const subjectStats = computed(() => props.allSubjects
     .filter(subject => grantedArticles.value.some(blog => blog.series === subject))
     .map(subject => {
         const articles = grantedArticles.value.filter(blog => blog.series === subject)
-        const pending = articles.filter(blog => scopedSubmissionStatus.value.get(Number(blog.id)) === 'pending').length
+        const pending = articles.filter(blog => isPendingOf(blog)).length
         return { subject, tone: subjectTone(subject), pending }
     }))
-
-const matchesStatus = (blog) => {
-    const blogId = Number(blog.id)
-    const status = scopedSubmissionStatus.value.get(blogId)
-    if (activeFilter.value === 'pending') return status === 'pending'
-    if (activeFilter.value === 'reviewed') return status === 'reviewed'
-    if (activeFilter.value === 'unsubmitted') {
-        return answerKeysCache.value.has(blogId) && !scopedSubmissionStatus.value.has(blogId)
-    }
-    return true
-}
 
 const filteredArticles = computed(() => {
     const search = keyword.value.trim().toLowerCase()
     return subjectArticles.value.filter(blog => {
-        if (!matchesStatus(blog)) return false
+        if (!matchesFilter(blog, activeFilter.value)) return false
         if (!search) return true
         return String(blog.title || '').toLowerCase().includes(search)
     })
@@ -329,16 +377,7 @@ const filteredArticles = computed(() => {
 // 筛选标签右侧保留数量（待批阅/已批阅/未提交/全部），只针对当前学科
 const filters = computed(() => {
     const articles = subjectArticles.value
-    const countBy = (value) => articles.filter(blog => {
-        const blogId = Number(blog.id)
-        const status = scopedSubmissionStatus.value.get(blogId)
-        if (value === 'pending') return status === 'pending'
-        if (value === 'reviewed') return status === 'reviewed'
-        if (value === 'unsubmitted') {
-            return answerKeysCache.value.has(blogId) && !scopedSubmissionStatus.value.has(blogId)
-        }
-        return true
-    }).length
+    const countBy = (value) => articles.filter(blog => matchesFilter(blog, value)).length
     return [
         { value: 'pending', label: '待批阅', count: countBy('pending') },
         { value: 'reviewed', label: '已批阅', count: countBy('reviewed') },
@@ -425,43 +464,20 @@ function statusIcon(question) {
 
 async function loadSubmissionStatus() {
     if (!props.selectedStudentId) {
-        pendingCountMap.value = new Map()
-        studentSubmissionStatus.value = new Map()
+        articleProgress.value = new Map()
         return
     }
     loadingProgress.value = true
     progressError.value = ''
     try {
         const data = await learningGateway.getAdministratorProgress(props.selectedStudentId)
-        const statusMap = new Map()
-        const countMap = new Map()
-        ;(data || []).forEach(item => {
-            const blogId = Number(item.articleId)
-            if (item.pendingReviews > 0) {
-                statusMap.set(blogId, 'pending')
-                countMap.set(blogId, item.pendingReviews)
-            } else if (item.submittedQuestions > 0) {
-                statusMap.set(blogId, 'reviewed')
-            }
-        })
-        studentSubmissionStatus.value = statusMap
-        pendingCountMap.value = countMap
+        articleProgress.value = buildProgressMap(data)
     } catch (error) {
         console.error('加载提交记录失败:', error)
+        articleProgress.value = new Map()
         progressError.value = '提交记录加载失败，请稍后刷新重试。'
     } finally {
         loadingProgress.value = false
-    }
-}
-
-async function loadAnswerKeysCache() {
-    try {
-        const articleIds = await learningGateway.getAnswerKeyArticleIds()
-        const cache = new Map()
-        articleIds.forEach(articleId => cache.set(Number(articleId), true))
-        answerKeysCache.value = cache
-    } catch (error) {
-        console.error('加载答案数据失败:', error)
     }
 }
 
@@ -592,7 +608,6 @@ watch([grantedIds, () => coursewareStore.visibleArticleIds], ([ids]) => {
 
 onMounted(() => {
     loadSubmissionStatus()
-    loadAnswerKeysCache()
 })
 </script>
 
