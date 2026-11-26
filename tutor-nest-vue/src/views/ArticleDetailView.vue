@@ -3323,6 +3323,12 @@ onUnmounted(() => {
         padding: 18px 14px calc(88px + env(safe-area-inset-bottom) + 56px);
     }
 
+    /* 底部提交栏必须盖过阅读页页脚，否则滚到文末时提交按钮会被页脚压住 */
+    :global(.site-footer) {
+        z-index: 1;
+        margin-bottom: calc(76px + env(safe-area-inset-bottom));
+    }
+
     .reader-hero {
         padding: 20px 16px 18px;
     }
