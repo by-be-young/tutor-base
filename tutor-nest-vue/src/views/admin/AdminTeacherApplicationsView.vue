@@ -612,7 +612,32 @@ onMounted(() => load('pending'))
   }
 
   .applications-refresh {
+    grid-column: 1 / -1;
+    justify-self: end;
+    height: 32px;
     margin-left: 0;
+    padding: 0 8px;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-2);
+    font-size: 0.72rem;
+  }
+
+  .applications-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    padding: 5px;
+  }
+
+  .applications-tabs .seg__btn {
+    width: 100%;
+    height: 38px;
+    justify-content: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    white-space: nowrap;
   }
 
   .application-row {

@@ -13,19 +13,19 @@
           <i class="fas fa-user-graduate" aria-hidden="true"></i>
           <span class="admin-current__text">当前学员 · 未选择</span>
         </span>
-        <button v-if="currentStudent && currentClaimState === 'unclaimed'" type="button"
+        <button v-if="activeTab === 'students' && currentStudent && currentClaimState === 'unclaimed'" type="button"
           class="btn btn--soft btn--sm admin-claim-btn" :disabled="claimBusy" @click="claimCurrentStudent">
           <i aria-hidden="true" class="fas" :class="claimBusy ? 'fa-circle-notch fa-spin' : 'fa-hand-pointer'"></i>
           {{ claimBusy ? '认领中…' : '认领' }}
         </button>
-        <button v-else-if="currentStudent && currentClaimState === 'mine'" type="button"
+        <button v-else-if="activeTab === 'students' && currentStudent && currentClaimState === 'mine'" type="button"
           class="btn btn--ghost btn--sm admin-claim-btn" :disabled="claimBusy" @click="releaseCurrentStudent">
           <i aria-hidden="true" class="fas fa-arrow-up-from-bracket"></i>
           {{ claimBusy ? '取消认领中…' : '取消认领' }}
         </button>
       </div>
 
-      <div class="admin-topbar__actions">
+      <div v-if="activeTab === 'students'" class="admin-topbar__actions">
         <span class="admin-save-state" :class="{ 'is-dirty': permissionDirty }">{{ saveStateText }}</span>
         <button type="button" class="btn btn--soft btn--sm" @click="addStudent"
           title="通过此入口新增的学员均为测试学员，不进入管理统计">

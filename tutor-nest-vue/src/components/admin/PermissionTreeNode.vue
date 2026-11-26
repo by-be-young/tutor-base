@@ -8,7 +8,7 @@
                 <span class="perm-file__name">{{ node.name }}</span>
                 <span class="perm-file__meta">
                     <span v-if="node.date" class="tag">{{ node.date }}</span>
-                    <span v-if="node.series" class="tag">{{ node.series }}</span>
+                    <span v-if="node.series" class="tag perm-file__series">{{ node.series }}</span>
                 </span>
             </span>
             <span class="perm-file__state" :class="isChecked ? 'is-on' : 'is-off'">
@@ -389,6 +389,11 @@ function onToggleAll(event) {
     }
 
     .perm-file__state {
+        display: none;
+    }
+
+    /* 当前面板已经按学科筛选，文件行不再重复学科标签 */
+    .perm-file__series {
         display: none;
     }
 

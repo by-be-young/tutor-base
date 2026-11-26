@@ -333,8 +333,18 @@ function toggleSubject(subject) {
 .is-tone-pink { --tone-color: var(--pink); --tone-text: var(--ink); }
 
 @media (max-width: 760px) {
+    /* 顶部切换器已经显示当前学员，面板头部不再重复姓名 */
+    .subject-head__student {
+        display: none;
+    }
+
+    /* 让保存条浮在底部导航上方，避免用户在列表底部找不到保存入口 */
+    .subject-panel {
+        overflow: visible;
+    }
+
     .subject-body {
-        padding: 18px;
+        padding: 18px 18px 100px;
     }
 
     .subject-grid {
@@ -342,11 +352,28 @@ function toggleSubject(subject) {
     }
 
     .subject-footer {
-        padding: 14px 18px;
+        position: sticky;
+        bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+        z-index: 8;
+        margin: 0 12px 12px;
+        padding: 12px 14px;
+        gap: 10px;
+        flex-wrap: nowrap;
+        border: 1.5px solid var(--ink);
+        border-radius: var(--r-md);
+        box-shadow: 4px 4px 0 var(--ink);
     }
 
     .subject-footer .btn {
-        width: 100%;
+        flex: 1 1 auto;
+        width: auto;
+        min-width: 0;
+        height: 40px;
+        padding: 0 12px;
+    }
+
+    .subject-footer__info {
+        flex: 0 0 auto;
     }
 }
 

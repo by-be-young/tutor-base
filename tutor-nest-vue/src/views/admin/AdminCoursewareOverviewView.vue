@@ -27,7 +27,7 @@
         </div>
       </div>
 
-      <section class="panel panel--pad">
+      <section class="panel panel--pad overview__storage">
         <header class="panel-head overview__head">
           <h2 class="panel-title">存储空间</h2>
           <span class="chip" :class="usageChipClass">{{ usageLabel }}</span>
@@ -801,6 +801,23 @@ onMounted(async () => {
 
   .stat-value {
     font-size: 1.45rem;
+  }
+
+  /* 存储用量是辅助信息，压缩上下留白，让目录更早进入首屏 */
+  .overview__storage {
+    padding: 0;
+  }
+
+  .overview__storage .panel-head {
+    padding: 13px 16px;
+  }
+
+  .overview__storage .panel-body {
+    padding: 12px 16px 14px;
+  }
+
+  .overview__usage {
+    gap: 8px;
   }
 
   .overview__tree-actions .btn {

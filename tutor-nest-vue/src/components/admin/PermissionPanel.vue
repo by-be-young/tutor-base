@@ -422,23 +422,53 @@ watch(() => props.selectedStudentId, () => {
         align-items: center;
     }
 
+    /* 学科切换在手机上并排，避免两个整宽按钮把目录推得太低 */
+    .perm-subjects {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .perm-subject {
+        width: 100%;
+        padding: 0 10px;
+        justify-content: center;
+    }
+
+    /* 让保存条浮在底部导航上方，避免用户滚到列表末尾才发现保存入口 */
+    .perm-panel {
+        overflow: visible;
+    }
+
     .perm-body {
-        padding: 18px;
+        padding: 18px 18px 100px;
     }
 
     .perm-footer {
-        padding: 14px 18px;
+        position: sticky;
+        bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+        z-index: 8;
+        margin: 0 12px 12px;
+        padding: 12px 14px;
+        gap: 10px;
+        flex-wrap: nowrap;
+        border: 1.5px solid var(--ink);
+        border-radius: var(--r-md);
+        box-shadow: 4px 4px 0 var(--ink);
     }
 
     .perm-footer .btn {
-        width: 100%;
+        flex: 1 1 auto;
+        width: auto;
+        min-width: 0;
+        height: 40px;
+        padding: 0 12px;
+    }
+
+    .perm-footer__info {
+        flex: 0 0 auto;
     }
 }
 
-@media (max-width: 420px) {
-    .perm-subject {
-        flex: 1 1 100%;
-        justify-content: center;
-    }
-}
+/* 旧版 420px 的整宽按钮已由 760px 的双列网格取代 */
 </style>

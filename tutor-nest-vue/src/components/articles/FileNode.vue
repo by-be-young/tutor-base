@@ -50,6 +50,22 @@
       <i class="fas fa-trash-can"></i>
       <span>删除</span>
     </button>
+
+    <details v-if="isAdmin" class="file-more">
+      <summary class="file-more__trigger" aria-label="更多课件操作">
+        <i class="fas fa-ellipsis" aria-hidden="true"></i>
+      </summary>
+      <div class="file-more__menu">
+        <button type="button" @click.stop="handleMenuAction('move', $event)">
+          <i class="fas fa-arrow-right-arrow-left" aria-hidden="true"></i>
+          移动
+        </button>
+        <button type="button" class="is-danger" @click.stop="handleMenuAction('delete', $event)">
+          <i class="fas fa-trash-can" aria-hidden="true"></i>
+          删除
+        </button>
+      </div>
+    </details>
   </div>
 </template>
 
@@ -81,7 +97,13 @@ const props = defineProps({
   }
 })
 
-defineEmits(['click', 'move', 'delete'])
+const emit = defineEmits(['click', 'move', 'delete'])
+
+function handleMenuAction(action, event) {
+  const details = event.currentTarget.closest('details')
+  if (details) details.open = false
+  emit(action, props.node.blogId)
+}
 
 const ACCENTS = ['cyan', 'violet', 'amber', 'coral', 'pink', 'lime']
 const accentClass = computed(() => `accent--${ACCENTS.includes(props.accent) ? props.accent : 'violet'}`)
@@ -288,6 +310,69 @@ const formattedDate = computed(() => {
   color: var(--paper-1);
 }
 
+/* 移动端更多操作菜单：桌面端仍使用并排的“移动 / 删除”按钮 */
+.file-more {
+  display: none;
+}
+
+.file-more__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 44px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-sm);
+  background: var(--paper-2);
+  color: var(--text-2);
+  cursor: pointer;
+  list-style: none;
+}
+
+.file-more__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.file-more__trigger i {
+  font-size: 0.8rem;
+}
+
+.file-more__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 24;
+  display: flex;
+  flex-direction: column;
+  width: 132px;
+  padding: 5px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-md);
+  background: var(--paper-1);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.file-more__menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+  color: var(--text-1);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.file-more__menu button:hover,
+.file-more__menu button:focus-visible {
+  background: var(--paper-2);
+}
+
+.file-more__menu button.is-danger {
+  color: var(--vermilion);
+}
+
 /* ---------- 学科印刷色：hover 时图标块取色 ---------- */
 .accent--cyan { --accent-fill: var(--sky); }
 .accent--violet { --accent-fill: var(--cobalt); }
@@ -302,6 +387,8 @@ const formattedDate = computed(() => {
 
 @media (max-width: 760px) {
   .file-wrap {
+    position: relative;
+    align-items: flex-start;
     gap: 4px;
   }
 
@@ -312,10 +399,9 @@ const formattedDate = computed(() => {
     font-size: 0.88rem;
   }
 
+  /* 标题是这一行的主信息；装饰性文件图标让位给标题宽度 */
   .file-row__icon {
-    width: 24px;
-    height: 24px;
-    font-size: 0.68rem;
+    display: none;
   }
 
   .file-row__body {
@@ -325,7 +411,6 @@ const formattedDate = computed(() => {
     width: 100%;
   }
 
-  /* 手机上完整展示课件标题，不再靠两行截断；长标题自然增高一行 */
   .file-row__name {
     display: block;
     overflow: visible;
@@ -336,6 +421,7 @@ const formattedDate = computed(() => {
     width: 100%;
     line-height: 1.4;
     font-size: 0.84rem;
+    color: var(--ink);
   }
 
   .file-row__meta {
@@ -359,16 +445,15 @@ const formattedDate = computed(() => {
     display: none;
   }
 
-  /* 移动 / 删除收成纯图标按钮，避免两个文字按钮挤掉标题宽度 */
+  /* 移动 / 删除收进三点菜单，标题不再长期被两个按钮挤窄 */
   .file-row__move {
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    justify-content: center;
+    display: none;
   }
 
-  .file-row__move span {
-    display: none;
+  .file-more {
+    display: block;
+    position: relative;
+    flex: 0 0 auto;
   }
 
   .file-row__date {
