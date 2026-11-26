@@ -132,7 +132,9 @@ body {
   letter-spacing: 0.008em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* clip 不会把 body 变成纵向滚动容器，移动端页面才能正常滚动 */
   overflow-x: hidden;
+  overflow-x: clip;
   text-rendering: optimizeLegibility;
 }
 
@@ -771,6 +773,7 @@ select option {
 }
 
 .stat-label {
+  display: block;
   margin-top: 8px;
   color: var(--text-2);
   font-size: 0.8rem;

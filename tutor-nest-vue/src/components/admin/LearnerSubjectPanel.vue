@@ -63,7 +63,7 @@
 
                 <p class="subject-tip">
                     <i aria-hidden="true" class="fas fa-circle-info"></i>
-                    点击科目卡片即可开通或取消科目；开通后不会自动授权文章，需要到「权限管理」逐篇勾选。取消科目会一并移除该科目下已授权的文章。
+                    开通科目不等于授权文章；取消科目会移除该科已授权文章。
                 </p>
             </template>
         </div>

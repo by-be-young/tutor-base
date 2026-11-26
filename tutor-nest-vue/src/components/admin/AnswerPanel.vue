@@ -64,9 +64,10 @@
                         </div>
                     </section>
 
-                    <section class="answer-editor" aria-live="polite">
+                    <section v-if="selectedArticle || filteredArticles.length > 0" class="answer-editor" aria-live="polite">
                         <EmptyState v-if="!selectedArticle" icon="fas fa-pen-to-square"
-                            title="选择一篇文章开始设置答案" />
+                            title="选择一篇文章开始设置答案"
+                            text="从文章列表选择后，这里会出现题目与答案编辑区。" />
 
                         <div v-else-if="selectedArticle.loading" class="answer-editor__loading">
                             <div class="answer-editor__loading-head">
@@ -869,6 +870,59 @@ onMounted(() => {
 @media (max-width: 760px) {
     .answer-body {
         padding: 18px;
+        gap: 12px;
+    }
+
+    /* 学科按钮并排等宽；390px 下不再变成三行大按钮 */
+    .answer-subjects {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+        gap: 6px;
+    }
+
+    .answer-subject {
+        width: 100%;
+        min-width: 0;
+        height: 38px;
+        padding: 0 7px;
+        justify-content: center;
+        gap: 6px;
+        font-size: 0.76rem;
+    }
+
+    .answer-toolbar {
+        gap: 8px;
+    }
+
+    /* 三个筛选在窄屏仍保持一行，文字与数字完整显示 */
+    .answer-toolbar .seg {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+        width: 100%;
+        padding: 5px;
+    }
+
+    .answer-toolbar .seg__btn {
+        min-width: 0;
+        height: 38px;
+        padding: 0 6px;
+        justify-content: center;
+        white-space: nowrap;
+        font-size: 0.74rem;
+    }
+
+    .answer-toolbar .seg__count {
+        margin-left: 3px;
+    }
+
+    .answer-search {
+        width: 100%;
+    }
+
+    .answer-editor {
+        padding: 16px;
+        min-height: 0;
     }
 
     .answer-editor__head-actions,
@@ -885,10 +939,9 @@ onMounted(() => {
     }
 }
 
-@media (max-width: 420px) {
-    .answer-subject {
-        flex: 1 1 100%;
-        justify-content: center;
+@media (max-width: 360px) {
+    .answer-subjects {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 </style>

@@ -840,19 +840,11 @@ async function confirmDeleteStudent() {
 @media (max-width: 760px) {
     .student-body {
         padding: 18px;
+        gap: 14px;
     }
 
-    .student-row {
-        align-items: flex-start;
-    }
-
-    .student-actions {
-        width: 100%;
-        margin-left: 0;
-    }
-
-    .student-actions .btn {
-        flex: 1 1 auto;
+    .student-toolbar {
+        gap: 8px;
     }
 
     .student-toolbar,
@@ -861,9 +853,94 @@ async function confirmDeleteStudent() {
         max-width: none;
     }
 
+    /* 四个筛选项在 390px 下改为 2×2，避免文字被压成竖排 */
     .student-toolbar .seg {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px;
         width: 100%;
-        justify-content: space-between;
+        padding: 5px;
+    }
+
+    .student-toolbar .seg__btn {
+        width: 100%;
+        min-width: 0;
+        height: 38px;
+        padding: 0 8px;
+        justify-content: center;
+        white-space: nowrap;
+        font-size: 0.78rem;
+    }
+
+    .student-toolbar .seg__count {
+        margin-left: 4px;
+    }
+
+    /* 卡片改为网格：头像／完整用户名／授权与状态／按钮四层，互不挤压 */
+    .student-row {
+        display: grid;
+        grid-template-columns: 38px minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 8px 10px;
+        padding: 12px;
+    }
+
+    .student-avatar {
+        grid-column: 1;
+        grid-row: 1;
+        align-self: center;
+    }
+
+    .student-id {
+        grid-column: 2 / -1;
+        grid-row: 1;
+        width: auto;
+        min-width: 0;
+    }
+
+    .student-name {
+        display: block;
+        width: 100%;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        line-height: 1.35;
+    }
+
+    .student-grants {
+        grid-column: 2;
+        grid-row: 2;
+        align-self: center;
+    }
+
+    .student-status {
+        grid-column: 3;
+        grid-row: 2;
+        align-self: center;
+    }
+
+    .student-actions {
+        grid-column: 1 / -1;
+        grid-row: 3;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .student-actions .btn {
+        width: 100%;
+        height: 40px;
+        padding: 0 8px;
+        justify-content: center;
+        white-space: nowrap;
+        font-size: 0.76rem;
+    }
+
+    .student-actions .btn--danger {
+        grid-column: 1 / -1;
     }
 }
 </style>

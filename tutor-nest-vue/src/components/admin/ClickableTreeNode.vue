@@ -406,4 +406,54 @@ const isMarked = computed(() => {
 .is-tone-amber { --tone-color: var(--butter); --tone-text: var(--ink); }
 .is-tone-pink { --tone-color: var(--pink); --tone-text: var(--ink); }
 .is-tone-lime { --tone-color: var(--lime); --tone-text: var(--ink); }
+
+@media (max-width: 760px) {
+    .click-file {
+        padding: 10px;
+        gap: 9px;
+        min-height: 48px;
+    }
+
+    /* 文件名完整换行，不再用省略号把标题截掉 */
+    .click-file__name {
+        display: block;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        font-size: 0.84rem;
+        line-height: 1.4;
+    }
+
+    .click-file__arrow {
+        display: none;
+    }
+
+    .click-folder__toggle {
+        gap: 8px;
+        padding: 10px 11px;
+    }
+
+    .click-folder__name {
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        font-size: 0.84rem;
+        line-height: 1.4;
+    }
+
+    .click-folder__count {
+        padding: 2px 7px;
+        font-size: 0.62rem;
+    }
+
+    .click-folder__children {
+        margin: 2px 8px 10px 14px;
+        padding-left: 8px;
+        gap: 6px;
+    }
+}
 </style>

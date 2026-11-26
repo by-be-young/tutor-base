@@ -3408,16 +3408,23 @@ onUnmounted(() => {
         box-shadow: 3px 3px 0 var(--ink);
     }
 
+    /* 手机端提交改为整条底部操作栏，避免悬浮按钮压住正文 */
     .fab-container {
-        right: 14px;
-        bottom: calc(88px + env(safe-area-inset-bottom));
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 8px 14px calc(10px + env(safe-area-inset-bottom));
+        border-top: 1.5px solid var(--ink);
+        background: var(--paper-0);
+        box-shadow: 0 -4px 0 rgba(28, 26, 20, 0.06);
     }
 
     .fab-btn {
-        min-width: 132px;
+        width: 100%;
+        min-width: 0;
         height: 50px;
         font-size: 0.95rem;
-        box-shadow: 4px 4px 0 var(--ink);
+        box-shadow: 3px 3px 0 var(--ink);
     }
 
     .answer-sheet-sidebar {

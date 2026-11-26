@@ -21,7 +21,7 @@
       </span>
 
       <span class="file-row__body">
-        <span class="file-row__name">{{ node.name }}</span>
+        <span class="file-row__name" :title="node.name">{{ node.name }}</span>
         <span v-if="isAdmin" class="file-row__meta">
           <span v-if="node.meta" class="file-row__meta-text">{{ node.meta }}</span>
           <span v-if="node.path" class="file-row__path mono">{{ node.path }}</span>
@@ -41,12 +41,12 @@
       </span>
     </button>
     <button v-if="isAdmin" type="button" class="file-row__move" title="移动到此课件到其他目录"
-      @click.stop="$emit('move', node.blogId)">
-      <i class="fas fa-folder-move"></i>
+      aria-label="移动课件" @click.stop="$emit('move', node.blogId)">
+      <i class="fas fa-arrow-right-arrow-left"></i>
       <span>移动</span>
     </button>
     <button v-if="isAdmin" type="button" class="file-row__move file-row__delete" title="删除这篇课件"
-      @click.stop="$emit('delete', node.blogId)">
+      aria-label="删除课件" @click.stop="$emit('delete', node.blogId)">
       <i class="fas fa-trash-can"></i>
       <span>删除</span>
     </button>
@@ -301,20 +301,74 @@ const formattedDate = computed(() => {
 }
 
 @media (max-width: 760px) {
+  .file-wrap {
+    gap: 4px;
+  }
+
   .file-row {
-    gap: 8px;
-    padding: 9px 10px 9px calc(var(--depth, 0) * 7px + 6px);
-    font-size: 0.9rem;
+    gap: 7px;
+    min-height: 44px;
+    padding: 8px 8px 8px calc(var(--depth, 0) * 4px + 6px);
+    font-size: 0.88rem;
+  }
+
+  .file-row__icon {
+    width: 24px;
+    height: 24px;
+    font-size: 0.68rem;
   }
 
   .file-row__body {
     flex-direction: column;
     align-items: flex-start;
-    gap: 2px;
+    gap: 3px;
+    width: 100%;
+  }
+
+  /* 手机上完整展示课件标题，不再靠两行截断；长标题自然增高一行 */
+  .file-row__name {
+    display: block;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    width: 100%;
+    line-height: 1.4;
+    font-size: 0.84rem;
   }
 
   .file-row__meta {
+    width: 100%;
     margin-left: 0;
+    gap: 6px;
+    font-size: 0.66rem;
+  }
+
+  /* 手机上层级已经在树里体现，路径不再重复占一行 */
+  .file-row__path {
+    display: none;
+  }
+
+  .file-row__meta-text {
+    font-size: 0.68rem;
+  }
+
+  /* 装饰箭头在窄屏没有意义，省下的空间全部留给标题 */
+  .file-row__arrow {
+    display: none;
+  }
+
+  /* 移动 / 删除收成纯图标按钮，避免两个文字按钮挤掉标题宽度 */
+  .file-row__move {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .file-row__move span {
+    display: none;
   }
 
   .file-row__date {

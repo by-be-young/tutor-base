@@ -1,7 +1,7 @@
 <!-- src/views/admin/AdminLearnersView.vue -->
 <template>
   <div class="admin-page">
-    <section class="panel admin-topbar">
+    <section v-if="activeTab !== 'applications'" class="panel admin-topbar">
       <div class="admin-topbar__meta">
         <StudentSwitcher class="admin-switcher" @select="handleSelectStudent" />
         <span v-if="currentStudent" class="chip chip--cyan admin-current"
@@ -31,7 +31,8 @@
           title="通过此入口新增的学员均为测试学员，不进入管理统计">
           <i aria-hidden="true" class="fas fa-user-plus"></i> 新增测试学员
         </button>
-        <button type="button" class="btn btn--primary btn--sm admin-save-btn"
+        <button v-if="permissionDirty || savingPermissions" type="button"
+          class="btn btn--primary btn--sm admin-save-btn"
           :disabled="!permissionDirty || savingPermissions" @click="savePermissions">
           <i aria-hidden="true" class="fas"
             :class="savingPermissions ? 'fa-circle-notch fa-spin' : permissionDirty ? 'fa-cloud-arrow-up' : 'fa-circle-check'"></i>
@@ -249,36 +250,69 @@ onMounted(loadWorkspace)
   }
 
   .admin-topbar {
-    padding: 12px;
-    gap: 10px;
+    padding: 10px 12px;
+    gap: 8px;
   }
 
   .admin-topbar__meta {
     flex-basis: 100%;
+    flex-wrap: nowrap;
+    gap: 8px;
   }
 
   .admin-switcher {
-    flex: 1 1 100%;
+    flex: 1 1 auto;
+    min-width: 0;
     max-width: none;
   }
 
+  /* 切换器本身已经显示当前学员，移动端不再重复一整行状态胶囊 */
   .admin-current {
-    max-width: 100%;
+    display: none;
+  }
+
+  .admin-claim-btn {
+    height: 38px;
+    padding: 0 10px;
+    font-size: 0.74rem;
   }
 
   .admin-topbar__actions {
     width: 100%;
     margin-left: 0;
-    justify-content: flex-end;
+    justify-content: flex-start;
+    gap: 7px;
   }
 
   .admin-save-state {
     margin-right: auto;
+    padding: 3px 8px;
+    font-size: 0.58rem;
   }
 
-  .admin-tabs__btn {
-    height: 36px;
-    padding: 0 13px;
+  .admin-topbar__actions .btn {
+    height: 38px;
+    padding: 0 11px;
+    font-size: 0.76rem;
+  }
+
+  .admin-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    width: 100%;
+    padding: 5px;
+    overflow: visible;
+  }
+
+  .admin-tabs .seg__btn {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+    padding: 0 8px;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
     font-size: 0.8rem;
   }
 }

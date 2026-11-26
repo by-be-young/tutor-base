@@ -93,7 +93,7 @@
 
                 <section class="review-detail" aria-live="polite">
                     <EmptyState v-if="!selectedArticle" icon="fas fa-hand-pointer" title="选择一篇文章开始批阅"
-                        text="左侧点击文章后，这里会显示学员作答与参考答案。" />
+                        text="点击文章后，这里会显示学员作答与参考答案。" />
 
                     <div v-else-if="selectedArticle.loading" class="review-detail__loading">
                         <div class="skeleton review-detail__skeleton"></div>
@@ -1191,5 +1191,52 @@ onMounted(() => {
 
 .review-search .input::-webkit-search-cancel-button {
     filter: none;
+}
+
+@media (max-width: 760px) {
+    .review-head {
+        gap: 10px;
+    }
+
+    /* 学员切换器已显示当前学员，这里不再重复一枚胶囊 */
+    .review-head__chips {
+        display: none;
+    }
+
+    .review-body-wrap {
+        padding: 16px 18px;
+        gap: 12px;
+    }
+
+    .review-toolbar {
+        gap: 8px;
+    }
+
+    /* 四个批阅筛选项在窄屏改为 2×2，文字完整展示 */
+    .review-toolbar .seg {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px;
+        width: 100%;
+        padding: 5px;
+    }
+
+    .review-toolbar .seg__btn {
+        width: 100%;
+        min-width: 0;
+        height: 38px;
+        padding: 0 8px;
+        justify-content: center;
+        white-space: nowrap;
+        font-size: 0.78rem;
+    }
+
+    .review-toolbar .seg__count {
+        margin-left: 4px;
+    }
+
+    .review-search {
+        width: 100%;
+    }
 }
 </style>

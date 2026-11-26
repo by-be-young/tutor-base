@@ -122,22 +122,29 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
+  .admin-page {
+    gap: 12px;
+  }
+
   .admin-topbar {
-    padding: 12px;
-    gap: 10px;
+    padding: 10px 12px;
+    gap: 8px;
   }
 
   .admin-topbar__meta {
     flex-basis: 100%;
+    flex-wrap: nowrap;
   }
 
   .admin-switcher {
-    flex: 1 1 100%;
+    flex: 1 1 auto;
+    min-width: 0;
     max-width: none;
   }
 
+  /* 当前学员已在切换器中显示，避免同一信息占两行 */
   .admin-current {
-    max-width: 100%;
+    display: none;
   }
 }
 </style>

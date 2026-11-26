@@ -2386,5 +2386,14 @@ defineExpose({
   .quick-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  /* 单列后标题会占满整行，限制两行避免一张卡片被超长讲义名拉长 */
+  .recent-card__title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    line-height: 1.4;
+  }
 }
 </style>

@@ -111,7 +111,7 @@
     <div v-if="moveDialog.open" class="move-overlay" @click.self="closeMoveDialog">
       <div class="move-dialog" role="dialog" aria-modal="true" aria-labelledby="move-dialog-title">
         <h3 class="move-dialog__title" id="move-dialog-title">
-          <i class="fas fa-folder-move" aria-hidden="true"></i>
+          <i class="fas fa-arrow-right-arrow-left" aria-hidden="true"></i>
           移动课件
         </h3>
         <p class="move-dialog__current">
@@ -776,8 +776,52 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
+  .overview {
+    gap: 12px;
+  }
+
+  /* 三个概览数字并排，避免长标签与数字挤在同一行 */
+  .stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .stat-card {
+    padding: 12px 10px;
+    min-height: 78px;
+  }
+
+  .stat-label {
+    margin-top: 0;
+    margin-bottom: 5px;
+    font-size: 0.66rem;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
+  }
+
+  .stat-value {
+    font-size: 1.45rem;
+  }
+
+  .overview__tree-actions .btn {
+    height: 34px;
+    padding: 0 10px;
+    font-size: 0.72rem;
+  }
+
+  /* 目录卡片内的新建菜单需要溢出卡片显示 */
+  .overview__tree {
+    overflow: visible;
+  }
+
+  .overview__tree-head {
+    gap: 8px;
+  }
+
   .overview__subject-meta {
-    margin-left: 6px;
+    gap: 6px;
+    margin-left: 4px;
+    font-size: 0.68rem;
   }
 }
 </style>

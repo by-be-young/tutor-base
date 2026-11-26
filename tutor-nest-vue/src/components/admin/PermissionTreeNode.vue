@@ -380,6 +380,14 @@ function onToggleAll(event) {
         min-height: 50px;
     }
 
+    .perm-file__name {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        line-height: 1.35;
+    }
+
     .perm-file__state {
         display: none;
     }
@@ -532,4 +540,27 @@ function onToggleAll(event) {
 .is-tone-amber { --tone-color: var(--butter); --tone-text: var(--ink); }
 .is-tone-pink { --tone-color: var(--pink); --tone-text: var(--ink); }
 .is-tone-lime { --tone-color: var(--lime); --tone-text: var(--ink); }
+
+@media (max-width: 600px) {
+    /* 权限文件名完整换行，避免最后几个字被省略 */
+    .perm-file__name {
+        display: block;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        line-height: 1.4;
+        font-size: 0.84rem;
+    }
+
+    .perm-folder__name {
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        line-height: 1.4;
+    }
+}
 </style>

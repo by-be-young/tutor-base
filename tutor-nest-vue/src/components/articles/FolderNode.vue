@@ -28,7 +28,7 @@
           <i :class="isExpanded ? 'fas fa-folder-open' : 'fas fa-folder'"></i>
         </span>
 
-        <span class="folder-card__name">{{ node.name }}</span>
+        <span class="folder-card__name" :title="node.name">{{ node.name }}</span>
 
         <span class="folder-card__meta">
           <span class="tag folder-card__count">{{ totalFileCount }} 篇</span>
@@ -50,6 +50,24 @@
         @click.stop="$emit('create-folder', node.path)">
         <i class="fas fa-folder-plus"></i>
       </button>
+
+      <!-- 手机端收纳新建动作，避免两个按钮把目录名挤成竖排 -->
+      <details v-if="mode === 'admin'" class="folder-more">
+        <summary class="folder-more__trigger" :title="`在「${node.name}」下新建`"
+          :aria-label="`在 ${node.name} 下新建`">
+          <i class="fas fa-plus" aria-hidden="true"></i>
+        </summary>
+        <div class="folder-more__menu">
+          <button type="button" @click.stop="$emit('create-file', node.path); closeActionMenu($event)">
+            <i class="fas fa-file-circle-plus" aria-hidden="true"></i>
+            新建课件
+          </button>
+          <button type="button" @click.stop="$emit('create-folder', node.path); closeActionMenu($event)">
+            <i class="fas fa-folder-plus" aria-hidden="true"></i>
+            新建子目录
+          </button>
+        </div>
+      </details>
     </div>
 
     <div v-show="isExpanded" class="tree-children">
@@ -156,6 +174,11 @@ function toggleExpand() {
   isExpanded.value = !isExpanded.value
   autoExpanded = false // 手动操作后，不再自动展开
 }
+
+function closeActionMenu(event) {
+  const menu = event.currentTarget.closest('details')
+  if (menu) menu.open = false
+}
 </script>
 
 <style scoped>
@@ -197,6 +220,79 @@ function toggleExpand() {
 .folder-add:active {
   transform: translate(1px, 1px);
   box-shadow: 1px 1px 0 var(--ink);
+}
+
+/* 桌面端保留两个直接新建按钮，手机端才启用收纳菜单 */
+.folder-more {
+  display: none;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.folder-more__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 100%;
+  min-height: 46px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-sm);
+  background: var(--paper-2);
+  color: var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  cursor: pointer;
+  list-style: none;
+}
+
+.folder-more__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.folder-more[open] .folder-more__trigger {
+  background: var(--lime);
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+.folder-more__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: 154px;
+  padding: 5px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-sm);
+  background: var(--paper-1);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.folder-more__menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 9px;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.folder-more__menu button:hover {
+  background: var(--paper-2);
+}
+
+.folder-more__menu i {
+  width: 16px;
+  color: var(--vermilion);
+  text-align: center;
 }
 
 .folder-card {
@@ -356,14 +452,31 @@ function toggleExpand() {
 
 @media (max-width: 760px) {
   .tree-branch {
-    padding-left: calc(var(--depth, 0) * 7px);
+    padding-left: calc(var(--depth, 0) * 4px);
+  }
+
+  .folder-head {
+    gap: 4px;
+  }
+
+  .folder-add {
+    display: none;
+  }
+
+  .folder-more {
+    display: block;
+  }
+
+  .folder-more__trigger {
+    width: 40px;
+    min-height: 46px;
   }
 
   .folder-card {
-    gap: 8px;
-    min-height: 50px;
-    padding: 9px 11px 9px 18px;
-    font-size: 0.92rem;
+    gap: 6px;
+    min-height: 46px;
+    padding: 8px 9px 8px 16px;
+    font-size: 0.9rem;
     box-shadow: 2px 2px 0 var(--ink);
   }
 
@@ -372,18 +485,39 @@ function toggleExpand() {
   }
 
   .folder-card__tab {
-    width: 9px;
+    width: 8px;
   }
 
   .folder-card__icon {
-    width: 26px;
-    height: 26px;
-    border-radius: 7px;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    font-size: 0.76rem;
+  }
+
+  /* 目录名完整换行，避免“初中英/语”式的硬折行或省略 */
+  .folder-card__name {
+    display: block;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.35;
+  }
+
+  .folder-card__meta {
+    gap: 4px;
+  }
+
+  .folder-card__count {
+    padding: 1px 6px;
+    font-size: 0.64rem;
   }
 
   .tree-children {
-    margin-left: 3px;
-    padding-left: 7px;
+    margin-left: 2px;
+    padding-left: 6px;
   }
 }
 </style>

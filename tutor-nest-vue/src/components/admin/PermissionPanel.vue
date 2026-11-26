@@ -59,7 +59,6 @@
                             <span class="seg__count">{{ filter.count }}</span>
                         </button>
                     </div>
-                    <span class="text-xs text-dim">按目录归档，逐篇勾选</span>
                 </div>
 
                 <EmptyState v-if="!currentSubject" icon="fas fa-folder-open" title="未选择学科"
